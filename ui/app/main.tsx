@@ -1,4 +1,5 @@
 import { clearAutoReloadGuard, getSkewMode, installVersionSkewListeners, subscribeSkew } from "@/lib/utils/versionSkew";
+import { installZhLocale } from "@/lib/zhLocale";
 import { RouterProvider, createRouter, parseSearchWith, stringifySearchWith } from "@tanstack/react-router";
 import { StrictMode, useEffect, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
@@ -12,6 +13,7 @@ import { UpdatingBanner, UpdatingScreen } from "./__updating";
 import { routeTree } from "./routeTree.gen";
 
 installVersionSkewListeners();
+installZhLocale();
 
 // Only JSON.parse structured values (objects/arrays). Plain strings and numbers
 // stay as-is so large numeric IDs don't lose precision through Number coercion.
