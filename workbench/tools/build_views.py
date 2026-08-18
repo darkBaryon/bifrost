@@ -350,12 +350,13 @@ def nav_model(docs, cases):
     if case_nodes:
         model.append(sec("过程文档", case_nodes))
     model.append(sec("规范", [page("规范主页", "规范.md"),
-                              page("职责与角色", "规范/职责与角色.md"),
-                              page("三档分级与分期模式", "规范/三档分级与分期模式.md"),
-                              page("方案要件与检查清单", "规范/方案要件与检查清单.md"),
-                              page("流程、自检与 Gate", "规范/流程、自检与Gate.md"),
-                              page("评审规则", "规范/评审规则.md"),
-                              page("实施纪律与终扫", "规范/实施纪律与终扫.md"),
+                              page("Change 模型", "规范/change/README.md"),
+                              page("风险分级与 Gate", "规范/change/risk-levels-and-gates.md"),
+                              page("收敛评审", "规范/change/convergence-review.md"),
+                              page("Finding 台账", "规范/change/findings.md"),
+                              page("开发规范", "规范/development/README.md"),
+                              page("重构规范", "规范/refactoring/README.md"),
+                              page("测试规范", "规范/testing/README.md"),
                               page("本仓操作规范", "规范/本仓操作规范.md"),
                               page("Schema", "SCHEMA.md")]))
     return model

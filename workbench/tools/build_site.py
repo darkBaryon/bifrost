@@ -266,7 +266,9 @@ def discover_pages() -> list[Path]:
     pages = []
     for path in ROOT.rglob("*.md"):
         rel = path.relative_to(ROOT)
-        if set(rel.parts) & SKIP_PARTS or rel.name in SKIP_NAMES:
+        # SKIP_NAMES 只对工作台根生效:根 README 被 index.md 顶替,
+        # 但 规范/*/README.md(playbook 四套规范的主页)必须渲染。
+        if set(rel.parts) & SKIP_PARTS or (rel.name in SKIP_NAMES and len(rel.parts) == 1):
             continue
         pages.append(path)
     return pages

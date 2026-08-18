@@ -1,17 +1,23 @@
 # Workbench 采纳记录
 
-- **工作台骨架来源**:darkBaryon/xhs-recon `workbench/` @ `1c0ad324`(2026-08-18 vendor)
-- **流程规范上游**:darkBaryon/engineering-playbook v1.1.0 @ `78d5a7ef`
-  (本工作台 `规范/` 是其在项目内的运行形态;两者演进以 Playbook 仓库为准,定期对齐)
-- 取代:先前根目录的 `playbook/`(9 份模板)与 `cases/`(2026-08-18 拆除,记录零迁移损失——当时尚无 case)
+本工作台 = **playbook 规范内核 + xhs-recon 工具外壳**。血缘:xhs-recon 的 workbench 是流程实践的中间产物,后被提炼升级为 engineering-playbook(更完整:Change 模型/风险 Gate/收敛评审/Finding/重构与测试规范);工具外壳(frontmatter 状态机/视图生成/预飞/本地站点)仍以 xhs-recon 版本为源。
 
-## vendor 时的本地适配(共 5 处)
+| 部件 | 来源 | 版本 |
+|---|---|---|
+| **规范内核**(`规范/` 四套 17 页 + 跨切模板 3 份) | darkBaryon/engineering-playbook | **v1.1.0 @ 78d5a7ef** |
+| **工具外壳**(tools/ SCHEMA/ AGENTS/ templates×7/ assets/ tests) | darkBaryon/xhs-recon `workbench/` | @ 1c0ad324 |
 
-1. `README.md` 首段:项目指向 bifrost fork
+取代:先前根目录的 `playbook/` 与 `cases/`(2026-08-18 拆除,当时尚无 case,零迁移损失)。
+
+## vendor 时的本地适配
+
+1. `README.md` 首段与规范引用:指向 bifrost fork、四套规范
 2. `SCHEMA.md` / `规范/本仓操作规范.md`:示例 case 名换为 `UI中文化层v1`
-3. `规范/评审规则.md`:评审提问示例换为 zhLocale 场景
-4. `templates/checklist.yaml`:必过命令换为本仓真实命令(go build / tsc,高风险补 make lint)
-5. 新增 `.gitignore`(排除生成的 `site/`)
+3. `templates/checklist.yaml`:必过命令换为本仓真实命令(go build / tsc,高风险补 make lint)
+4. `tools/build_views.py`:导航"规范"区改为 playbook 四套规范入口
+5. `tools/build_site.py`:`SKIP_NAMES` 只对工作台根生效(否则 `规范/*/README.md` 不渲染)
+6. `规范.md`:重写为四规范入口 + 工作台↔规范映射页
+7. 新增 `.gitignore`(排除生成的 `site/`)
 
 ## 命令速查(在 workbench/ 目录下)
 
@@ -26,6 +32,6 @@ python3 tools/preflight.py --config cases/<案子>/期<N>/checklist.yaml   # 预
 
 ## 升级方式
 
-1. 到两个上游仓库读变更(xhs-recon 的 workbench 工具/规范、engineering-playbook 的 CHANGELOG)
-2. 重新 vendor 变化的文件,复核上表 5 处本地适配是否被覆盖
-3. 跑 `build_views.py` + 工具自测,更新本文件的 commit 记录
+- **规范升级**:读 playbook 的 CHANGELOG → 重新 vendor `规范/` 与跨切模板 → 更新本表版本号
+- **外壳升级**:对照 xhs-recon workbench 的 tools/assets 变更 → 复核上表 7 处本地适配未被覆盖
+- 升级后必跑:`build_views.py` + 工具自测 + `build_site.py`
