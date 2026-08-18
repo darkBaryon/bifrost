@@ -1,0 +1,18 @@
+# 检查清单参数表（逻辑固定、参数每期换）——方案与评审之间的合同
+# 用法: python3 tools/preflight.py --config cases/<案子>/期<N>/checklist.yaml [--repo <项目根>]
+
+必过命令:                  # 退出码须 0；expect_empty=true 时 stdout 也须空（如 grep/diff 类）
+  - { name: go-build, run: "go build ./core/... ./framework/... ./transports/..." }
+  - { name: ui-typecheck, run: "cd ui && npx tsc --noEmit" }
+  # 高风险档补充: - { name: lint, run: "make lint" }
+  # 有相关单测时: - { name: tests, run: "go test ./<受影响模块>/..." }
+
+必存产物:                  # 实现完成后这些路径必须存在
+  - <相对项目根的产物路径>
+
+必含符号:                  # 本期新增接口/导出必须落地（grep 命中 ≥1）
+  - { grep: "<新函数/类型名>", in: "<模块目录>" }
+
+禁留标记:                  # 调试残留 / 越界功能，全仓须 0 命中
+  - { grep: "fmt.Println(\"DEBUG", in: "core" }
+  - { grep: "console.log(\"DEBUG", in: "ui/lib" }

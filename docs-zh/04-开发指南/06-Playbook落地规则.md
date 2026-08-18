@@ -1,50 +1,29 @@
-# Engineering Playbook 落地规则
+# 开发工作台(Workbench)
 
-> Playbook 规定"分支、环境、命令以业务项目自己的规则为准"——本文就是那份项目侧规则。
-> 采纳版本见 [playbook/ADOPTION.md](../../playbook/ADOPTION.md);规范正文读 Playbook 仓库,此处只写本项目的具体化。
+> 本仓的工程流程以 **[workbench/](../../workbench/)** 为运行载体——需求、方案、评审、验收全部以带 frontmatter 的文档在文件系统流转,并渲染成本地站点。规范全文读 [workbench/规范.md](../../workbench/规范.md);本页只做入口指引。
 
-## 基线与分支(对应:立案与定档)
+## 心智模型
 
-- **基线表述**:`develop @ <sha>`,并注明最近一次上游同步点(`upstream/dev @ <sha>`)
-- **隔离实施**:`feature/<slug>` 从 develop 切出;完成后合回 develop 推送 fork
-- 上游同步(水流②)本身按 [02-开发工作流](02-开发工作流.md) 执行,不占用 case 流程
+- **frontmatter 即数据库**:任何文档的现状只看 `status`/`verdict` 字段,不从正文猜
+- **文件永不移动**:生命周期靠改字段,归档不挪文件
+- **生成物禁止手改**:首行带 `<!-- generated` 哨兵的文件(index/SUMMARY/views/nav.js)只能由 `build_views.py` 重新生成
 
-## 风险定档默认值(对应:risk-levels-and-gates)
+## 日常动线
 
-| 改动类型 | 默认档位 | 理由 |
-|---|---|---|
-| 新增文件(插件/文档/翻译词条/工具脚本) | 低 | 零 merge 税,失败模式温和 |
-| 改 `ui/` 源码、`transports/handlers` | 中 | 有同步税,影响交付面 |
-| 改 `core/`、`framework/` 存储层、热路径 | 高 | 全局影响,需完整方案+复核 |
-| 拿不准 | **按高档准备**(Playbook 底线) | |
-
-## 机械检查清单(对应:预飞)
-
-```bash
-make lint                                    # Go + UI 静态检查
-go build ./core/... ./framework/... ./transports/...
-cd ui && npx tsc --noEmit                    # UI 类型检查
-go test ./<受影响模块>/...                    # 相关单测
-make build                                   # 高风险档:完整构建含 UI
+```
+起需求  → 从 workbench/templates/需求.md 起稿,落 workbench/reports/
+定档    → 蓝图级 / 标准级 / 轻量级(规范/三档分级);轻量级不建方案页
+做方案  → cases/<案子>/期<N>/方案v1.md + checklist.yaml → 方案评审 → Gate 1
+实施    → feature 分支;完成后方案尾部补实施记录三章节,status: 已实施
+预飞    → python3 tools/preflight.py --config cases/<案子>/期<N>/checklist.yaml,全绿才请评审
+代码评审 → 评审拿预飞事实表只做语义判断 → Gate 2 → 验收记录,方案归档
+提交前  → python3 tools/build_views.py 必须全绿
 ```
 
-全绿是事实证据的最低线;证据(命令+输出摘要)写进 case 的 acceptance.md。
+## 本仓专属约定(规范之外的项目事实)
 
-## Gate 实践
-
-- **Gate 1**(方案确认):中/高风险任务,方案落盘 `cases/<case>/plan.md` 后,在会话中向用户明示"范围/取舍/方向",获得明确确认再动代码;低风险任务口头确认即可
-- **Gate 2**(交付放行):展示测试与证据,用户明确同意后才合入 develop 并推送
-- 实施偏离已确认范围时:**先停、记录进 case、请用户裁决**(Playbook 底线,不例外)
-
-## 收敛评审与 Finding
-
-- 收敛评审用 `.claude/skills/convergence-review`(已安装,按比例原则:成本与改动规模成比例)
-- 看到但暂不修的结构问题 → 记入 case 的 findings 段落,并汇总到 `cases/README.md` 台账,不许"记在脑子里"
-
-## 与既有实践的衔接
-
-本仓已运行的约定不变,Playbook 是在其上加流程骨架:
-
-- 提交规范:英文 conventional commits(与上游一致)
-- 文档沉淀:读代码产出进 `docs-zh/03-源码精读`,任务经验进 `04-开发指南`
-- 扩展原则:数据面→插件;管理面/UI→最小侵入(见 [03-接线指南](03-接线指南.md))
+- 基线表述:`develop @ <sha>`,注明最近上游同步点;上游同步本身走 [02-开发工作流](02-开发工作流.md),不占 case
+- checklist 必过命令的本仓默认值已写在 [模板](../../workbench/templates/checklist.yaml):`go build 三模块 + ui tsc`,高风险档补 `make lint` 与相关 `go test`
+- 扩展位置的判断(插件 vs 改源码)见 [03-接线指南](03-接线指南.md)
+- 收敛评审:`.claude/skills/convergence-review`(大改动在 Gate 2 前跑)
+- 采纳来源与升级方式:[workbench/ADOPTION.md](../../workbench/ADOPTION.md)
