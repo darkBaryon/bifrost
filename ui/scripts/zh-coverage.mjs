@@ -61,6 +61,8 @@ export function parseZhLocale(src) {
   return { dict, rules };
 }
 const unesc = (s) => s.replace(/\\(.)/g, "$1");
+export const decodeEnt = (s) => s.replace(/&amp;/g, "&").replace(/&apos;/g, "'").replace(/&quot;/g, '"')
+  .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n");
 
 // 运行时同口径判定:精确 → 小写兜底 → RULES(评审2-3.1.1 对账=骨架逐字符相等在别处)
 export function makeTranslate(dict, rules) {
@@ -121,7 +123,7 @@ export function extractFromSource(src, file) {
       if (!t.includes(" ") && m[2] !== "/") continue;
       if (/^[^A-Za-z0-9"'(]/.test(t) || t.includes("&&") || t.includes("=>")) continue; // 代码碎片
       if (/^\(\w+:/.test(t) || /^extends /.test(t)) continue; // TS 类型标注碎片
-      found.push({ text: t, loc, cat: 1 });
+      found.push({ text: decodeEnt(t), loc, cat: 1 });
     }
     // ①b 独立文本行(上下皆标签的多行 JSX children,保守:≥2 英文词)
     if (/^\s+[A-Z][A-Za-z0-9 ,.'’&/():%+-]*[.?!:]?\s*$/.test(line) && passesFormFence(line.trim())
@@ -131,7 +133,7 @@ export function extractFromSource(src, file) {
     // ② 六 prop 字面量
     for (const p of PROPS) {
       for (const m of line.matchAll(new RegExp(`${p}\\s*=\\s*(?:\\{\\s*)?"([^"]+)"`, "g"))) {
-        if (/[A-Za-z]{2}/.test(m[1])) found.push({ text: m[1], loc, cat: 2 });
+        if (/[A-Za-z]{2}/.test(m[1])) found.push({ text: decodeEnt(m[1]), loc, cat: 2 });
       }
     }
     // ③ toast 字符串字面量
