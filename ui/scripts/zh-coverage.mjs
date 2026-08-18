@@ -120,6 +120,7 @@ export function extractFromSource(src, file) {
       // 单词候选须终止于 </(闭合标签),否则是 TS 泛型(>Promise<void>)误报
       if (!t.includes(" ") && m[2] !== "/") continue;
       if (/^[^A-Za-z0-9"'(]/.test(t) || t.includes("&&") || t.includes("=>")) continue; // 代码碎片
+      if (/^\(\w+:/.test(t) || /^extends /.test(t)) continue; // TS 类型标注碎片
       found.push({ text: t, loc, cat: 1 });
     }
     // ①b 独立文本行(上下皆标签的多行 JSX children,保守:≥2 英文词)
