@@ -60,9 +60,9 @@ const DICT: Record<string, string> = {
 	"Proxy": "代理",
 	"License Info": "许可证信息",
 	"Cluster Config": "集群配置",
-	"Edge Control": "边缘控制",
-	"Edge Settings": "边缘设置",
-	"Feature Flags": "特性开关",
+	"Edge Control": "Edge 管控",
+	"Edge Settings": "Edge 设置",
+	"Feature Flags": "功能开关",
 	"Connectors": "连接器",
 	"API Keys": "API 密钥",
 
