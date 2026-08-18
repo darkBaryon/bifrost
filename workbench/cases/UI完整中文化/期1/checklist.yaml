@@ -1,0 +1,20 @@
+# UI完整中文化 期1 —— 方案与评审之间的合同(随方案 v2 修订)
+# 用法: python3 tools/preflight.py --config cases/UI完整中文化/期1/checklist.yaml
+
+必过命令:
+  - { name: ui-typecheck, run: "cd ui && npx tsc --noEmit" }
+  - { name: ui-build, run: "cd ui && npm run build" }
+  - { name: scanner-selftest, run: "cd ui && node scripts/zh-coverage.mjs --self-test" }
+  - { name: coverage-check, run: "cd ui && node scripts/zh-coverage.mjs --check" }
+
+必存产物:
+  - ui/scripts/zh-coverage.mjs
+  - ui/scripts/zh-coverage-whitelist.txt
+
+必含符号:
+  - { grep: "const RULES", in: "ui/lib" }
+
+禁留标记:
+  - { grep: "console.log(\"DEBUG", in: "ui/lib" }
+  - { grep: "console.log(\"DEBUG", in: "ui/scripts" }
+  - { grep: "^/\\.[*+]/", in: "ui/scripts" }   # 白名单禁止全匹配行(评审1-4.2 护栏)
