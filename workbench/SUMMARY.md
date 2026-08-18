@@ -10,13 +10,15 @@
     - UI完整中文化
         - [主页](cases/UI完整中文化/index.md)
         - 期1
-            - [方案 v3（当前）](cases/UI完整中文化/期1/方案v3.md)
+            - [方案 v4（当前）](cases/UI完整中文化/期1/方案v4.md)
             - 评审过程
                 - [方案评审 1](cases/UI完整中文化/期1/方案评审1.md)
                 - [方案评审 2](cases/UI完整中文化/期1/方案评审2.md)
+                - [方案评审 3](cases/UI完整中文化/期1/方案评审3.md)
             - 历史版本
                 - [方案 v1](cases/UI完整中文化/期1/方案v1.md)
                 - [方案 v2](cases/UI完整中文化/期1/方案v2.md)
+                - [方案 v3](cases/UI完整中文化/期1/方案v3.md)
 - 规范
     - [规范主页](规范.md)
     - [Change 模型](规范/change/README.md)
