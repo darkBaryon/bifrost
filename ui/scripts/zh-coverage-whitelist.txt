@@ -1,0 +1,9 @@
+# zh-coverage 白名单 —— 每行一条,字面文本或 /regex/,可跟 " # 理由"
+# 字面文本含 # 须转义 \#;正则不得命中金丝雀(self-test 强制)
+Bifrost # 品牌名
+MCP # 协议名
+API # 技术缩写
+URL # 技术缩写
+JSON # 技术缩写
+OAuth # 协议名
+Webhook # 产品概念,保留英文
