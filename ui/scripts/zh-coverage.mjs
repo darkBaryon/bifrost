@@ -113,6 +113,8 @@ export function extractFromSource(src, file) {
   const bypass = [];  // 行级旁路(形态围栏内但位置/上下文围栏外)
   const excluded = { position: 0, form: 0, context: 0 };
   const lines = src.split("\n");
+  // ①c 跨行聚合已消费的行号(避免与①同行匹配重复处理同一段落时产生误导性行号)
+  const consumedByMultiline = new Set();
   lines.forEach((line, i) => {
     const loc = `${file}:${i + 1}`;
     // ① JSX 文本节点(同行 >text<)
@@ -125,10 +127,25 @@ export function extractFromSource(src, file) {
       if (/^\(\w+:/.test(t) || /^extends /.test(t)) continue; // TS 类型标注碎片
       found.push({ text: decodeEnt(t), loc, cat: 1 });
     }
-    // ①b 独立文本行(上下皆标签的多行 JSX children,保守:≥2 英文词)
-    if (/^\s+[A-Z][A-Za-z0-9 ,.'’&/():%+-]*[.?!:]?\s*$/.test(line) && passesFormFence(line.trim())
-        && i > 0 && />$/.test(lines[i - 1].trim())) {
-      found.push({ text: line.trim(), loc, cat: 1 });
+    // ①c JSX 独立文本 children,按 JSX 空白折叠规则跨行聚合(修复:原①b只取紧邻单行,
+    // 漏掉"多行纯文本、最终被闭合标签终止"这一常见写法,截断后的 key 永远命中不上
+    // 真实 DOM 完整文本节点)。起点:上一行以 '>' 收尾;逐行累积直到遇到含 <{` 的行
+    // (取该行标签前的残余文本后停止)或空行。
+    if (!consumedByMultiline.has(i) && i > 0 && /(?<!=)>$/.test(lines[i - 1].trim())) {
+      const parts = [];
+      let j = i;
+      while (j < lines.length) {
+        const t = lines[j].trim();
+        if (t === "") break;
+        const boundary = t.search(/[<{}`]/); // 遇标签/表达式起止符/反引号即止(圆括号在自然语言文案中常见,不作边界)
+        if (boundary === 0) break; // 本行本身是标签/表达式开头,不属于文本
+        if (boundary > 0) { parts.push(t.slice(0, boundary).trim()); consumedByMultiline.add(j); j++; break; }
+        parts.push(t); consumedByMultiline.add(j); j++;
+      }
+      const text = parts.join(" ").trim();
+      if (text && passesFormFence(text) && /^[A-Z0-9"']/.test(text)) {
+        found.push({ text: decodeEnt(text), loc, cat: 1 });
+      }
     }
     // ② 六 prop 字面量
     for (const p of PROPS) {
@@ -199,7 +216,26 @@ function selfTest() {
   const fx = (src) => extractFromSource(src, "fx.tsx");
 
   ok(fx(`<b>Save</b>`).found.some((f) => f.text === "Save" && f.cat === 1), "①同行文本节点");
-  ok(fx(`<p>\n  No results found here\n</p>`).found.some((f) => f.text === "No results found here"), "①b 独立文本行");
+  ok(fx(`<p>\n  No results found here\n</p>`).found.some((f) => f.text === "No results found here"), "①c 单行独立文本");
+  { // ①c 多行聚合(修复代码复核发现的截断缺陷:纯文本 JSX children 跨行书写时,
+    // 真实 DOM 折叠为单个文本节点,scanner 必须按同一规则聚合,否则字典 key 系统性截断)
+    const src = `<AlertDescription>\n\tThese settings require a restart to take effect. Current connections continue until\n\trestart.\n</AlertDescription>`;
+    const r = fx(src);
+    ok(r.found.some((f) => f.text === "These settings require a restart to take effect. Current connections continue until restart."),
+      "①c 多行聚合(跨行纯文本折叠为单节点)");
+  }
+  { // 多行聚合遇到同行文本+闭合标签(无换行结束)也要正确截断
+    const src = `<span>\n\tPartial text ends here.</span>`;
+    const r = fx(src);
+    ok(r.found.some((f) => f.text === "Partial text ends here."), "①c 多行聚合在同行闭合标签处正确截断");
+  }
+  { // 回归防护:箭头函数 `=>` 末尾的 '>' 不是 JSX 标签闭合符,不得触发跨行聚合
+    // (曾误吞多行 JS 表达式,见代码复核发现)
+    const src = `<CollapsibleBox\n\tonCopy={() =>\n\t\tJSON.stringify({ a: 1 })\n\t}\n/>`;
+    const r = fx(src);
+    ok(!r.found.some((f) => f.cat === 1 && f.text.includes("JSON.stringify")),
+      "①c 箭头函数 => 不误判为 JSX 闭合(回归防护)");
+  }
   ok(fx(`<input placeholder="Search models" />`).found.some((f) => f.text === "Search models" && f.cat === 2), "②prop 字面量");
   ok(fx(`toast.error("Failed to save")`).found.some((f) => f.text === "Failed to save" && f.cat === 3), "③toast");
   ok(fx("x = `${n} keys found`").found.some((f) => f.text === "⟨x⟩ keys found" && f.cat === 4), "④赋值位模板(F1 第四通道)");
@@ -211,20 +247,35 @@ function selfTest() {
     ok(r.found.some((f) => f.text === "⟨x⟩ rows loaded"), "④同行 className 不连坐 children(F3)"); }
   ok(normalize("${fn({a:1})} x") !== null, "④嵌套花括号不崩溃(F4 响失败进清单)");
 
-  const rules = [{ re: /^(\d+) model budgets?$/, out: "$1 个模型预算", skeleton: "⟨x⟩ model budget⟨x⟩", sample: "3 model budgets" }];
-  const translate = makeTranslate(new Map([["Save", "保存"]]), rules);
-  ok(rules.filter((r) => r.re.test(rules[0].sample)).length === 1, "规则 sample 恰中一条");
-  ok(translate(translate(rules[0].sample)) === null, "固定点:输出再入必 null");
-  ok(sampleInstantiatesSkeleton(rules[0].sample, rules[0].skeleton) && rules[0].re.test(rules[0].sample), "互证:sample 是 skeleton 代入实例(F2)");
+  // 代码复核发现:以下三项此前只测孤立的硬编码样板规则,从未触达 zhLocale.ts 里的真实
+  // RULES——改规则忘改 skeleton/sample、或新增规则违反契约,self-test 之前不会报错。
+  // 现在对解析出的全部生产 RULES 做 .every() 遍历,才是真正的机械互证防线。
+  {
+    const { dict, rules } = parseZhLocale(readFileSync(ZH_LOCALE, "utf8"));
+    ok(dict.size > 200, "线上 DICT 解析+对账通过");
+    ok(rules.length > 0 && rules.length <= 100, `线上 RULES 解析+对账通过(${rules.length} 条,上限100)`);
+    const translate = makeTranslate(dict, rules);
+    ok(rules.every((r) => rules.filter((r2) => r2.re.test(r.sample)).length === 1),
+      `全部 ${rules.length} 条生产规则:sample 恰中一条(无重叠捕获)`);
+    ok(rules.every((r) => translate(translate(r.sample)) === null),
+      `全部 ${rules.length} 条生产规则:固定点(输出再入必 null)`);
+    ok(rules.every((r) => sampleInstantiatesSkeleton(r.sample, r.skeleton) && r.re.test(r.sample)),
+      `全部 ${rules.length} 条生产规则:互证(sample 是 skeleton 代入实例,F2)`);
+    const skeletons = new Set(rules.map((r) => r.skeleton));
+    ok(skeletons.size === rules.length, "生产规则 skeleton 无重复");
+  }
   let threw = false; try { parseWhitelist("/.*/"); } catch { threw = true; } ok(threw, "白名单金丝雀拒绝 /.*/");
   ok(parseWhitelist("Issue \\#1 tracker").literals.has("Issue #1 tracker"), "白名单 \\# 转义");
-  { const { dict } = parseZhLocale(readFileSync(ZH_LOCALE, "utf8")); ok(dict.size > 200, "线上 DICT 解析+对账通过"); }
   console.log(`\nself-test 全绿(${n} 项)`);
 }
 
 // ───────────────────────── CLI ─────────────────────────
+// import 守卫:仅当此文件作为脚本直接执行时才跑 CLI 逻辑,避免其他脚本
+// import 本文件的导出函数(如复核/验证用途)时意外触发一次完整扫描。
+const isMain = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
 const mode = process.argv[2] ?? "";
-if (mode === "--self-test") selfTest();
+if (!isMain) { /* 被 import,不执行 CLI */ }
+else if (mode === "--self-test") selfTest();
 else {
   const { miss, allBypass, totals } = scan();
   const sorted = [...miss.entries()].sort((a, b) => b[1].n - a[1].n);
