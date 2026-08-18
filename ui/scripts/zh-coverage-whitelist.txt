@@ -1,12 +1,12 @@
 # zh-coverage 白名单 —— 每行一条,字面文本或 /regex/,可跟 " # 理由"
 # 字面文本含 # 须转义 \#;正则不得命中金丝雀(self-test 强制)
-Bifrost # 品牌名
-MCP # 协议名
-API # 技术缩写
-URL # 技术缩写
-JSON # 技术缩写
-OAuth # 协议名
-Webhook # 产品概念,保留英文
+Bifrost # [品牌名]
+MCP # [协议名]
+API # [技术缩写]
+URL # [技术缩写]
+JSON # [技术缩写]
+OAuth # [协议名]
+Webhook # [产品概念-保留英文]
 
 # ── 动态句处置通道(方案 v4 §4;Finding: 非数值插值待元素级方案) ──
 "⟨x⟩" is a reserved name used by the skills serving layer # [动态-非数值]

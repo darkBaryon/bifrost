@@ -1,0 +1,18 @@
+# 预飞事实表
+
+- 目标仓库: `/Users/xinyue/VSCode/ws_2026/bifrost`
+- 参数表: `cases/UI完整中文化/期1/checklist.yaml`
+- 结论: **全绿**
+
+| 检查项 | 命令 | 实际 | 备注 |
+|---|---|---|---|
+| 命令 ui-typecheck | `cd ui && npx tsc --noEmit` | 通过 |  |
+| 命令 ui-build | `cd ui && npm run build` | 通过 |  |
+| 命令 scanner-selftest | `cd ui && node scripts/zh-coverage.mjs --self-test` | 通过 |  |
+| 命令 coverage-check | `cd ui && node scripts/zh-coverage.mjs --check` | 通过 |  |
+| 产物 ui/scripts/zh-coverage.mjs | `test -e ui/scripts/zh-coverage.mjs` | 存在 |  |
+| 产物 ui/scripts/zh-coverage-whitelist.txt | `test -e ui/scripts/zh-coverage-whitelist.txt` | 存在 |  |
+| 必含 const RULES | `grep -rIn --exclude-dir=__pycache__ -- 'const RULES' ui/lib` | 命中 1 |  |
+| 禁留 console.log("DEBUG | `grep -rIn --exclude-dir=__pycache__ -- 'console.log("DEBUG' ui/lib` | 0 处 |  |
+| 禁留 console.log("DEBUG | `grep -rIn --exclude-dir=__pycache__ -- 'console.log("DEBUG' ui/scripts` | 0 处 |  |
+| 禁留 ^/\.[*+]/ | `grep -rIn --exclude-dir=__pycache__ -- '^/\.[*+]/' ui/scripts/zh-coverage-whitelist.txt` | 0 处 |  |
