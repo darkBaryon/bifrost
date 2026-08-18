@@ -76,8 +76,15 @@
 - `codex plugin marketplace add ⟨x⟩/skills/serve/codex` — app/workspace/skills-repo/components/skillListView.tsx:78
 
 ## 已验证运行时正确(规则覆盖)(2 条)
-- `⟨x⟩ model budget⟨x⟩` — components/ui/providerConfigCard.tsx:186
-- `⟨x⟩ model budget⟨x⟩` — components/ui/providerConfigCard.tsx:326
+
+⚠️ **本节结论历史上出过错,已订正**:阶段A(方案v4 §4类别①c以④类模板字面量bypass报告为
+基础的首次分流)曾声称这2条"已验证运行时正确",但当时 RULES 数组里实际没有覆盖对应骨架
+的规则,该结论是未经复验的错误陈述。经独立代码复核指出后,已在阶段B补齐规则并用
+`parseZhLocale`+`makeTranslate` 对生产代码程序化验证通过(见方案v4实施记录阶段B):
+
+- `⟨x⟩ model budget⟨x⟩` — components/ui/providerConfigCard.tsx:186,326
+  规则:`{ re: /^(\d+) model budgets?$/, out: "$1 个模型预算" }`
+  验证:`translate("3 model budgets")` → `"3 个模型预算"` ✅(程序化验证,非猜测)
 
 ## 真实文案候选(Finding,留待后续期次)(88 条)
 - `⟨x⟩ cannot be empty` — app/workspace/complexity-router/page.tsx:482
@@ -168,3 +175,25 @@
 - `MultiSelect: Duplicate option values ⟨x⟩: ⟨x⟩.` — components/ui/multiSelect.tsx:471
 - `MultiSelect: Option with value "⟨x⟩" not found in options list` — components/ui/multiSelect.tsx:486
 - `Must be in the format <host>:<port> for gRPC (e.g. ⟨x⟩)` — lib/types/schemas.ts:955
+
+---
+
+# 附录:channel①c 多行聚合修复后新增分流(独立代码复核触发,阶段B)
+
+> 与上文④类模板字面量的 bypass 报告是**独立的两条数据线**——上文针对模板字面量位置/上下文
+> 围栏排除,本节针对①类(JSX纯文本)跨行聚合修复后新暴露的 224 条候选(基线`aae659b`→`b1ebd61`)。
+> 详细技术分析见方案v4实施记录阶段B。
+
+## 真正完整(闭合标签终止,已批量入字典)(107 条)
+
+回源码精确判定:聚合终止于 `</...` 闭合标签,证明这是完整独立的 DOM 文本节点。全部107条
+已翻译入 `ui/lib/zhLocale.ts` 的"步骤4-补丁"区块。
+
+## 跨节点碎片(开标签/插值打断,方案§3既定非目标)(115 条)
+
+- 62 条被同行内联开标签打断(如 `Enabling calendar alignment will reset budget usage to <span>$0.00</span> and token/request` 这类"文本-元素-文本"混合段落,`<span>`前的片段单独翻译会导致中文语序错乱)
+- 53 条被 JSX `{expr}` 插值打断(如 `Are you sure you want to delete "{name}"?`)
+
+处置:保守策略,即使部分看似语义完整的短标题也不做主观完整性判断(无浏览器可视化核验条件),
+统一记入白名单(理由标签 `[跨节点碎片-方案非目标]`),留待后续期次视需要人工核实处理。
+完整清单见 `ui/scripts/zh-coverage-whitelist.txt` 中该标签段。
