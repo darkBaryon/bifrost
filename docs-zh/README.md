@@ -1,7 +1,7 @@
 # Bifrost 中文说明文档
 
 > 本文件夹是对 Bifrost 仓库（`maximhq/bifrost`）的完整中文导读，基于 `dev` 分支实际代码整理。
-> 未纳入 git 版本管理（如需保留请自行提交或移出仓库）。
+> 已提交在 fork（darkBaryon/bifrost）的 develop 分支上，随二次开发持续扩充。
 
 ## Bifrost 是什么
 
@@ -26,6 +26,7 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | [08-部署与运维.md](08-部署与运维.md) | Docker、Helm、Terraform、一键部署配方 |
 | [09-测试体系.md](09-测试体系.md) | 各层测试套件与运行方式 |
 | [10-开发指南.md](10-开发指南.md) | 本地开发环境搭建（go.work！）、常用 make 命令、常见开发任务、IDE 报错排查 |
+| [11-入口与依赖注入.md](11-入口与依赖注入.md) | 全部 main 入口清单、Bootstrap 装配时序、为什么不用 DI 框架、二次开发接线指南 |
 
 ## 5 分钟上手
 
