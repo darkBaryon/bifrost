@@ -24,7 +24,7 @@ import build_views as bv  # noqa: E402
 ROOT = bv.ROOT
 SITE = ROOT / "site"
 ASSETS = ROOT / "assets"
-SITE_NAME = "XHS 开发工作台"
+SITE_NAME = "Bifrost 开发工作台"
 
 # 不作为页面渲染的路径片段
 SKIP_PARTS = {"templates", "tools", "assets", "site", ".git"}

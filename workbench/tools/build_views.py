@@ -174,6 +174,23 @@ def phase_groups(items):
     return cur, reviews, acc, olds
 
 
+def phase_flat(items):
+    """一期之内按时间线摊平:方案v1→评审1→方案v2→评审2→…→代码评审→验收。
+    (用户裁决 2026-08-18:不设「评审过程/历史版本」子分组,全部按时间摊开)"""
+    def key(d):
+        t = d["type"]
+        if t == "方案":
+            return (d.get("version") or 0, 0)
+        if t == "方案评审":
+            return (d.get("round") or 0, 1)
+        if t == "代码评审":
+            return (900 + (d.get("round") or 0), 0)
+        if t == "验收记录":
+            return (999, 0)
+        return (500, 0)
+    return sorted(items, key=key)
+
+
 def group_cases(docs):
     case_docs = [d for d in docs if d["type"] != "需求"]
     cases = {}
@@ -287,30 +304,21 @@ def render_case_index(case, items, requests, base):
         if d["type"] != "开发蓝图":
             phases.setdefault(d.get("phase"), []).append(d)
     for phase in sorted(phases, key=str):
-        cur, reviews, acc, olds = phase_groups(phases[phase])
+        cur, _, _, _ = phase_groups(phases[phase])
         lines += [f"## 期{phase}", ""]
-        if cur:
-            lines += [f"**当前方案**：{link(cur, base, short_label(cur))}"
-                      f"——{cur.get('status', '')}", ""]
-        if reviews:
-            lines += ["**评审过程**（按轮次读）", ""]
-            for i, d in enumerate(reviews, 1):
-                lines.append(f"{i}. {link(d, base, short_label(d))}——{d.get('verdict', '')}")
-            lines.append("")
-        for d in acc:
-            lines += [f"**验收**：{link(d, base, short_label(d))}", ""]
-        if olds:
-            lines += ["**历史版本**（仅考古）：" + "、".join(
-                link(d, base, short_label(d)) for d in olds), ""]
+        for d in phase_flat(phases[phase]):
+            mark = "（当前）" if d is cur else ""
+            note = d.get("verdict") or d.get("status") or ""
+            lines.append(f"- {link(d, base, short_label(d))}{mark}——{note}")
+        lines.append("")
     lines += ["---", "",
-              "阅读协议：先读当前方案，再按轮读评审，最后验收；历史版本仅考古；"
-              "判断现状只看 frontmatter 的 status/verdict。"]
+              "阅读协议：按时间线自上而下读；判断现状只看 frontmatter 的 status/verdict。"]
     return "\n".join(lines) + "\n"
 
 
 def nav_model(docs, cases):
     """统一导航模型：SUMMARY.md（侧栏）与 assets/nav.js（顶部下拉）共用。
-    固定四个顶层分区（工作台/需求/过程文档/规范），期内按 当前方案/评审过程/验收/历史版本 分组。"""
+    固定四个顶层分区（工作台/需求/过程文档/规范），期内按时间线摊平。"""
     def page(label, path):
         return {"label": label, "path": path}
 
@@ -334,17 +342,9 @@ def nav_model(docs, cases):
             if d["type"] != "开发蓝图":
                 phases.setdefault(d.get("phase"), []).append(d)
         for phase in sorted(phases, key=str):
-            cur, reviews, acc, olds = phase_groups(phases[phase])
-            pchildren = []
-            if cur:
-                pchildren.append(page(f"{short_label(cur)}（当前）", cur["_path"]))
-            if reviews:
-                pchildren.append(sec("评审过程",
-                                     [page(short_label(d), d["_path"]) for d in reviews]))
-            pchildren += [page(short_label(d), d["_path"]) for d in acc]
-            if olds:
-                pchildren.append(sec("历史版本",
-                                     [page(short_label(d), d["_path"]) for d in olds]))
+            cur, _, _, _ = phase_groups(phases[phase])
+            pchildren = [page(short_label(d) + ("（当前）" if d is cur else ""), d["_path"])
+                         for d in phase_flat(phases[phase])]
             children.append(sec(f"期{phase}", pchildren))
         case_nodes.append(sec(case, children))
     if case_nodes:

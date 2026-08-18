@@ -18,6 +18,8 @@
 5. `tools/build_site.py`:`SKIP_NAMES` 只对工作台根生效(否则 `规范/*/README.md` 不渲染)
 6. `规范.md`:重写为四规范入口 + 工作台↔规范映射页
 7. 新增 `.gitignore`(排除生成的 `site/`)
+8. `tools/build_views.py`:期内导航/主页**按时间线摊平**,取消「评审过程/历史版本」子分组(用户裁决 2026-08-18)
+9. `tools/build_site.py` + `assets/styles.css`:站点名 XHS → Bifrost 开发工作台
 
 ## 命令速查(在 workbench/ 目录下)
 
