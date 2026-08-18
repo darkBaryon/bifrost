@@ -17,4 +17,4 @@
 禁留标记:
   - { grep: "console.log(\"DEBUG", in: "ui/lib" }
   - { grep: "console.log(\"DEBUG", in: "ui/scripts" }
-  - { grep: "^/\\.[*+]/", in: "ui/scripts" }   # 白名单禁止全匹配行(评审1-4.2 护栏)
+  - { grep: "^/\\.[*+]/", in: "ui/scripts/zh-coverage-whitelist.txt" }   # 全匹配行 tripwire(主防线=金丝雀 self-test, 评审2-N3)
