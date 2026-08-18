@@ -4,6 +4,8 @@
     - [过程文档全景](views/by-case.md)
     - [全量索引](views/all.md)
     - [需求报告](需求报告.md)
+- 需求
+    - [UI 完整中文化](reports/UI完整中文化.md)
 - 规范
     - [规范主页](规范.md)
     - [Change 模型](规范/change/README.md)
