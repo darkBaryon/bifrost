@@ -43,7 +43,7 @@ providers、keys、models、governance（虚拟 Key/客户/团队/预算/限流/
 ## Web UI 的托管方式
 
 `ui/` 前端构建产物被复制到 `transports/bifrost-http/ui/`，由 `//go:embed all:ui` 打进二进制，`handlers/ui.go` 托管 `/` 与所有静态路径；开发模式下代理到本地 Vite（localhost:3000）。
-（⚠️ 本地首次编译如果没有这个目录会报 embed 错误，`make dev` 会自动建占位目录，详见 [10-开发指南.md](10-开发指南.md)。）
+（⚠️ 本地首次编译如果没有这个目录会报 embed 错误，`make dev` 会自动建占位目录，详见 [环境搭建与排错](../04-开发指南/01-环境搭建与排错.md)。）
 
 ## 中间件与实时通道
 
