@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 const UI_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCAN_DIRS = ["app", "components", "hooks", "lib"];
 const ZH_LOCALE = join(UI_ROOT, "lib", "zhLocale.ts");
+const ZH_DICT = join(UI_ROOT, "lib", "zhDict.json");
 const WHITELIST = join(UI_ROOT, "scripts", "zh-coverage-whitelist.txt");
 const TOPBAR_UTILS = join(UI_ROOT, "components", "topbar.utils.ts");
 const CANARY = "XQ7#鑫W9-zk";
@@ -35,20 +36,22 @@ export function passesFormFence(skeleton) {
   return words.length >= 2;
 }
 
-// ───────────────────────── zhLocale.ts 解析(带对账自检, 评审2-N2 行锚定) ─────────────────────────
-export function parseZhLocale(src) {
-  const dictBlock = src.match(/const DICT[^=]*=\s*\{([\s\S]*?)\n\};/);
-  if (!dictBlock) throw new Error("对账失败: 未找到 DICT 块");
-  const dictLines = dictBlock[1].split("\n");
-  const anchored = dictLines.filter((l) => /^\s*"/.test(l)).length;
-  const dict = new Map();
-  for (const l of dictLines) {
-    const m = l.match(/^\s*"((?:[^"\\]|\\.)*)":\s*"((?:[^"\\]|\\.)*)",?\s*$/);
-    if (m) dict.set(unesc(m[1]), unesc(m[2]));
-  }
+// ───────────────────────── 词条/规则解析(带对账自检) ─────────────────────────
+// 词条在 zhDict.json(纯数据,一键一行):JSON.parse 即语义解析,语法错误直接炸;
+// 重复键 JSON.parse 会静默取后者,故用"条目行数 = 解析条数"对账兜住(评审2-N2 行锚定的简化版)。
+export function parseZhDict(jsonSrc) {
+  const obj = JSON.parse(jsonSrc);
+  const anchored = jsonSrc.split("\n").filter((l) => /^\s*"/.test(l)).length;
+  const dict = new Map(Object.entries(obj));
   if (dict.size !== anchored)
-    throw new Error(`对账失败: DICT 解析 ${dict.size} 条 ≠ 行锚定计数 ${anchored}`);
+    throw new Error(`对账失败: zhDict.json 解析 ${dict.size} 条 ≠ 条目行计数 ${anchored}(疑似重复键或一行多条)`);
+  for (const [k, v] of dict)
+    if (typeof v !== "string") throw new Error(`对账失败: 键 ${JSON.stringify(k)} 的值非字符串`);
+  return dict;
+}
 
+// RULES 含正则对象,须留在 TS 里,仍按行锚定对账解析。
+export function parseZhLocale(src) {
   const rules = [];
   const rulesBlock = src.match(/const RULES[^=]*=\s*\[([\s\S]*?)\n\];/);
   if (rulesBlock) {
@@ -62,7 +65,7 @@ export function parseZhLocale(src) {
     if (rules.length !== headCount)
       throw new Error(`对账失败: RULES 解析 ${rules.length} 条 ≠ 行锚定计数 ${headCount}`);
   }
-  return { dict, rules };
+  return { rules };
 }
 const unesc = (s) => s.replace(/\\(.)/g, "$1");
 export const decodeEnt = (s) => s.replace(/&amp;/g, "&").replace(/&apos;/g, "'").replace(/&quot;/g, '"')
@@ -278,7 +281,8 @@ function* slugTitleCandidates() {
 }
 
 function scan() {
-  const { dict, rules } = parseZhLocale(readFileSync(ZH_LOCALE, "utf8"));
+  const dict = parseZhDict(readFileSync(ZH_DICT, "utf8"));
+  const { rules } = parseZhLocale(readFileSync(ZH_LOCALE, "utf8"));
   const translate = makeTranslate(dict, rules);
   const wl = parseWhitelist(readFileSync(WHITELIST, "utf8"));
   const skeletons = new Set(rules.map((r) => r.skeleton));
@@ -347,8 +351,9 @@ function selfTest() {
   // RULES——改规则忘改 skeleton/sample、或新增规则违反契约,self-test 之前不会报错。
   // 现在对解析出的全部生产 RULES 做 .every() 遍历,才是真正的机械互证防线。
   {
-    const { dict, rules } = parseZhLocale(readFileSync(ZH_LOCALE, "utf8"));
-    ok(dict.size > 200, "线上 DICT 解析+对账通过");
+    const dict = parseZhDict(readFileSync(ZH_DICT, "utf8"));
+    const { rules } = parseZhLocale(readFileSync(ZH_LOCALE, "utf8"));
+    ok(dict.size > 200, "线上 DICT(zhDict.json)解析+对账通过");
     ok(rules.length > 0 && rules.length <= 100, `线上 RULES 解析+对账通过(${rules.length} 条,上限100)`);
     const translate = makeTranslate(dict, rules);
     ok(rules.every((r) => rules.filter((r2) => r2.re.test(r.sample)).length === 1),
@@ -360,6 +365,10 @@ function selfTest() {
     const skeletons = new Set(rules.map((r) => r.skeleton));
     ok(skeletons.size === rules.length, "生产规则 skeleton 无重复");
   }
+  { let threw = false; try { parseZhDict('{\n\t"a": "甲",\n\t"a": "乙"\n}'); } catch { threw = true; }
+    ok(threw, "zhDict 重复键被对账拒绝(JSON.parse 静默取后者的护栏)"); }
+  { let threw = false; try { parseZhDict('{\n\t"a": 1\n}'); } catch { threw = true; }
+    ok(threw, "zhDict 非字符串值被拒绝"); }
   let threw = false; try { parseWhitelist("/.*/"); } catch { threw = true; } ok(threw, "白名单金丝雀拒绝 /.*/");
   ok(parseWhitelist("Issue \\#1 tracker").literals.has("Issue #1 tracker"), "白名单 \\# 转义");
 
