@@ -32,6 +32,8 @@
             - [方案评审](cases/workbench外壳重设计/期1/方案评审2.md)
             - [方案 v3（当前）](cases/workbench外壳重设计/期1/方案v3.md)
             - [方案评审](cases/workbench外壳重设计/期1/方案评审3.md)
+            - [代码评审](cases/workbench外壳重设计/期1/代码评审1.md)
+            - [收敛评审](cases/workbench外壳重设计/期1/收敛评审1.md)
 - 规范
     - [规范主页](规范.md)
     - [Change 模型](规范/change/README.md)

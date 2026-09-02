@@ -76,6 +76,22 @@ evidence: "⑧slug 合成算法在 zh-coverage.mjs:273-276 与 topbar.utils.ts:2
 convert_when: "REF 需求『zh中文化层TS-mjs孪生收敛』落地即消(见 reports/,triggered_by 本案)"
 ```
 
+```yaml
+id: FIND-010
+status: 观察中
+triggered_by: [workbench外壳重设计]
+evidence: "执行序以同等粒度写在 AGENTS.md 流程锚点与 规范.md 单线图两处,出生即分叉一处(/convergence-review skill 仅 规范.md 提及);流程变更须两处手改,漂移无护栏;来源:workbench外壳重设计 期1 收敛评审1 挂账1"
+convert_when: "下次流程锚点变更时一并收敛:AGENTS 为正典,规范.md 降为链接或粗粒度示意(±15 行);或用户裁定刻意双写则转豁免"
+```
+
+```yaml
+id: FIND-011
+status: 观察中
+triggered_by: [workbench外壳重设计]
+evidence: "findings.md 台账(id 唯一性/status 枚举/triggered_by 指向)与需求 triggered_by 字段均无机械校验,与铁律3『悬空即拦』不对称;findings-count 检查仅在本案 checklist 非常驻;来源:workbench外壳重设计 期1 收敛评审1 挂账2"
+convert_when: "台账超 30 条或出现一次实际漂移事故时,build_views 加约 25 行校验 + 2 条测试;或用户确认手维护定位则转豁免"
+```
+
 ---
 
 **不立账说明**:方案v4 实施偏差记录1 的遗留动作「建可复用浏览器巡检驱动脚本」属工具便利项而非结构债,不入台账;需要时按一次性任务处理。
