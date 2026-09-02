@@ -4,7 +4,7 @@ bifrost fork（darkBaryon/bifrost）的本地功能开发工作台：在文件�
 
 - **流程规范**（Playbook v1.1.0：Change 模型 / 开发 / 重构 / 测试）：[规范.md](规范.md) + [规范/](规范/) 四套规范
 - **frontmatter schema**：[SCHEMA.md](SCHEMA.md)
-- **本仓怎么操作**（铁律 / 目录 / 跑一个过程文档）：[规范/本仓操作规范.md](规范/本仓操作规范.md)
+- **本仓怎么操作**（铁律 / 目录 / 读写协议 / 流程锚点）：[AGENTS.md](AGENTS.md)（唯一操作页）
 - **日常入口**：[index.md](index.md)（活跃工作台，生成文件）
 
 ## 命令

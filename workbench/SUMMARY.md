@@ -41,5 +41,6 @@
     - [开发规范](规范/development/README.md)
     - [重构规范](规范/refactoring/README.md)
     - [测试规范](规范/testing/README.md)
-    - [本仓操作规范](规范/本仓操作规范.md)
+    - [操作约定](AGENTS.md)
+    - [Finding 台账(本仓)](findings.md)
     - [Schema](SCHEMA.md)

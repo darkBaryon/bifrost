@@ -331,7 +331,8 @@ def nav_model(docs, cases):
                               page("开发规范", "规范/development/README.md"),
                               page("重构规范", "规范/refactoring/README.md"),
                               page("测试规范", "规范/testing/README.md"),
-                              page("本仓操作规范", "规范/本仓操作规范.md"),
+                              page("操作约定", "AGENTS.md"),
+                              page("Finding 台账(本仓)", "findings.md"),
                               page("Schema", "SCHEMA.md")]))
     return model
 
