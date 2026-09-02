@@ -34,10 +34,12 @@
             - [方案评审](cases/workbench外壳重设计/期1/方案评审3.md)
             - [代码评审](cases/workbench外壳重设计/期1/代码评审1.md)
             - [收敛评审](cases/workbench外壳重设计/期1/收敛评审1.md)
+            - [验收记录](cases/workbench外壳重设计/期1/验收记录.md)
         - 期2
             - [方案 v1（当前）](cases/workbench外壳重设计/期2/方案v1.md)
             - [代码评审](cases/workbench外壳重设计/期2/代码评审1.md)
             - [收敛评审](cases/workbench外壳重设计/期2/收敛评审1.md)
+            - [验收记录](cases/workbench外壳重设计/期2/验收记录.md)
 - 规范
     - [规范主页](规范.md)
     - [流程](规范/流程.md)

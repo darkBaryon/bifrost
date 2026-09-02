@@ -20,12 +20,14 @@
 | [workbench外壳重设计 期1 收敛评审](../cases/workbench外壳重设计/期1/收敛评审1.md) | 收敛评审 | workbench外壳重设计 | 仅立债挂账 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案 v1](../cases/workbench外壳重设计/期1/方案v1.md) | 方案 | workbench外壳重设计 | 需修改 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案 v2](../cases/workbench外壳重设计/期1/方案v2.md) | 方案 | workbench外壳重设计 | 需修改 | 2026-09-02 |
-| [workbench外壳重设计 期1 方案 v3](../cases/workbench外壳重设计/期1/方案v3.md) | 方案 | workbench外壳重设计 | 已实施 | 2026-09-02 |
+| [workbench外壳重设计 期1 方案 v3](../cases/workbench外壳重设计/期1/方案v3.md) | 方案 | workbench外壳重设计 | 已归档 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案评审](../cases/workbench外壳重设计/期1/方案评审1.md) | 方案评审 | workbench外壳重设计 | 需修改 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案评审](../cases/workbench外壳重设计/期1/方案评审2.md) | 方案评审 | workbench外壳重设计 | 需修改 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案评审](../cases/workbench外壳重设计/期1/方案评审3.md) | 方案评审 | workbench外壳重设计 | 通过 | 2026-09-02 |
+| [workbench外壳重设计 期1 验收记录](../cases/workbench外壳重设计/期1/验收记录.md) | 验收记录 | workbench外壳重设计 |  | 2026-09-02 |
 | [workbench外壳重设计 期2 代码评审](../cases/workbench外壳重设计/期2/代码评审1.md) | 代码评审 | workbench外壳重设计 | 通过 | 2026-09-02 |
 | [workbench外壳重设计 期2 收敛评审](../cases/workbench外壳重设计/期2/收敛评审1.md) | 收敛评审 | workbench外壳重设计 | 仅立债挂账 | 2026-09-02 |
-| [workbench外壳重设计 期2 方案 v1](../cases/workbench外壳重设计/期2/方案v1.md) | 方案 | workbench外壳重设计 | 已实施 | 2026-09-02 |
-| [workbench 外壳重设计](../reports/workbench外壳重设计.md) | 需求 | workbench外壳重设计 | 开发中 | 2026-09-02 |
+| [workbench外壳重设计 期2 方案 v1](../cases/workbench外壳重设计/期2/方案v1.md) | 方案 | workbench外壳重设计 | 已归档 | 2026-09-02 |
+| [workbench外壳重设计 期2 验收记录](../cases/workbench外壳重设计/期2/验收记录.md) | 验收记录 | workbench外壳重设计 |  | 2026-09-02 |
+| [workbench 外壳重设计](../reports/workbench外壳重设计.md) | 需求 | workbench外壳重设计 | 已交付 | 2026-09-02 |
 | [zh 中文化层 TS/mjs 孪生实现收敛](../reports/zh中文化层TS-mjs孪生收敛.md) | 需求 | zh中文化层TS-mjs孪生收敛 | 观察中 | 2026-09-02 |
