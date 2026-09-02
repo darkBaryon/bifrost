@@ -4,7 +4,7 @@
 
 ## 铁律
 
-1. **文件永不移动**：生命周期只在 frontmatter 的 `status` 字段，归档 = 改字段，不挪文件。
+1. **文件永不移动**：生命周期只在 frontmatter 的 `status` 字段，归档 = 改字段，不挪文件。（约束对象是 `reports/`、`cases/`、`evidence/` 的过程文档；规范/工具/模板页面的重组不在此列，走正常 Change 流程即可。）
 2. **首行带 `<!-- generated` 哨兵的文件禁止手改**（`index.md`、`SUMMARY.md`、`需求报告.md`、`views/*`、`cases/*/index.md`、`assets/nav.js`）——视图与导航是查询结果，不是手工目录页。改完源文档跑 `python3 tools/build_views.py` 重新生成。
 3. **提交前 `build_views.py` 必须全绿**（拦：frontmatter 缺字段 / 枚举非法 / relates 悬空 / 视图漂移）。
 
