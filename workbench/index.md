@@ -9,6 +9,15 @@
 | [UI完整中文化 期1 方案 v2](cases/UI完整中文化/期1/方案v2.md) | 方案 | 需修改 |
 | [UI完整中文化 期1 方案 v3](cases/UI完整中文化/期1/方案v3.md) | 方案 | 需修改 |
 
+## workbench外壳重设计
+
+| 文档 | 类型 | 状态 |
+|---|---|---|
+| [workbench 外壳重设计](reports/workbench外壳重设计.md) | 需求 | 开发中 |
+| [workbench外壳重设计 期1 方案 v1](cases/workbench外壳重设计/期1/方案v1.md) | 方案 | 需修改 |
+| [workbench外壳重设计 期1 方案 v2](cases/workbench外壳重设计/期1/方案v2.md) | 方案 | 需修改 |
+| [workbench外壳重设计 期1 方案 v3](cases/workbench外壳重设计/期1/方案v3.md) | 方案 | 已通过 |
+
 ---
 
 怎么读：过程文档主页（`cases/<case>/index.md`）给出阅读顺序；全景与索引见左侧「工作台」。

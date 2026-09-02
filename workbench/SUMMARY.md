@@ -6,6 +6,7 @@
     - [需求报告](需求报告.md)
 - 需求
     - [UI 完整中文化](reports/UI完整中文化.md)
+    - [workbench 外壳重设计](reports/workbench外壳重设计.md)
 - 过程文档
     - UI完整中文化
         - [主页](cases/UI完整中文化/index.md)
@@ -22,6 +23,15 @@
             - [代码评审](cases/UI完整中文化/期1/代码评审3.md)
             - [收敛评审](cases/UI完整中文化/期1/收敛评审1.md)
             - [验收记录](cases/UI完整中文化/期1/验收记录.md)
+    - workbench外壳重设计
+        - [主页](cases/workbench外壳重设计/index.md)
+        - 期1
+            - [方案 v1](cases/workbench外壳重设计/期1/方案v1.md)
+            - [方案评审](cases/workbench外壳重设计/期1/方案评审1.md)
+            - [方案 v2](cases/workbench外壳重设计/期1/方案v2.md)
+            - [方案评审](cases/workbench外壳重设计/期1/方案评审2.md)
+            - [方案 v3（当前）](cases/workbench外壳重设计/期1/方案v3.md)
+            - [方案评审](cases/workbench外壳重设计/期1/方案评审3.md)
 - 规范
     - [规范主页](规范.md)
     - [Change 模型](规范/change/README.md)
