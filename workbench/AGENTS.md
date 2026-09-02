@@ -58,7 +58,7 @@ SCHEMA.md                     # frontmatter 字段、状态机、风险分级定
 ```bash
 python3 tools/build_views.py            # 校验 + 重新生成视图/导航
 python3 tools/build_views.py --check    # 仅校验（钩子/CI 用，含视图漂移检测）
-python3 tools/build_site.py             # 生成 site/ 静态站点
+python3 tools/build_site.py             # 生成 site/ 静态站点（build_views 只更新 md；看站点效果前必跑本命令）
 python3 tools/serve_site.py --port 8767 # 本地起站点
 python3 tools/preflight.py --config <checklist.yaml> [--repo <项目根>] [--out facts.md]
 PYTHONPATH=. python3 -m pytest workbench/tests -q   # 工具自测（在仓库根）
