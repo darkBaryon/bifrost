@@ -1,0 +1,24 @@
+# workbench外壳重设计 期1 —— 方案v3 与评审之间的合同(§5 同源)
+# 用法: python3 tools/preflight.py --config cases/workbench外壳重设计/期1/checklist.yaml --repo ..
+
+必过命令:
+  - { name: views-check, run: "cd workbench && python3 tools/build_views.py --check" }
+  - { name: shell-tests, run: "PYTHONPATH=. python3 -m pytest workbench/tests -q" }
+  - { name: site-build, run: "cd workbench && python3 tools/build_site.py" }
+  - { name: no-active-view, run: "test ! -e workbench/views/active.md" }
+  - { name: no-bycase-view, run: "test ! -e workbench/views/by-case.md" }
+  - { name: no-gate-card, run: "test ! -e workbench/templates/gate-card.md" }
+  - { name: no-preflight-facts, run: "test ! -e workbench/templates/preflight-facts.md" }
+  - { name: findings-count, run: "test $(grep -c '^id: FIND-' workbench/findings.md) -ge 9" }
+  - { name: no-dead-links, run: "! grep -rq 'href=\"[^\"]*\\(active\\|by-case\\)\\.html' workbench/site --include='*.html'" }
+
+必存产物:
+  - workbench/findings.md
+  - workbench/templates/收敛评审.md
+
+必含符号:
+  - { grep: "收敛评审", in: "workbench/SCHEMA.md" }
+  - { grep: "收敛评审", in: "workbench/AGENTS.md" }
+
+禁留标记:
+  - { grep: "暂借", in: "workbench/AGENTS.md" }

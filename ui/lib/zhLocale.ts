@@ -2,275 +2,11 @@
 // 替换为中文。未收录的词条保持英文显示,补充 DICT 即可,永不影响功能。
 // 关闭方式:localStorage.setItem("bf-lang", "en") 后刷新。
 
-const DICT: Record<string, string> = {
-	// ===== 侧边栏导航 =====
-	"Dashboard": "仪表盘",
-	"Observability": "可观测性",
-	"LLM Logs": "LLM 日志",
-	"Logs": "日志",
-	"Evals": "评测",
-	"Alerting": "告警",
-	"Rules": "规则",
-	"Channels": "通知渠道",
-	"History": "历史记录",
-	"Governance": "治理",
-	"Virtual Keys": "虚拟密钥",
-	"Budgets & Limits": "预算与限额",
-	"Teams": "团队",
-	"Customers": "客户",
-	"Business Units": "业务单元",
-	"Approvals": "审批",
-	"Model Providers": "模型供应商",
-	"Providers": "供应商",
-	"Model Catalog": "模型目录",
-	"Models": "模型",
-	"Model Settings": "模型设置",
-	"Pricing Overrides": "定价覆盖",
-	"Routing Rules": "路由规则",
-	"Adaptive Routing": "自适应路由",
-	"Complexity Router": "复杂度路由",
-	"Circuit Breaker": "熔断器",
-	"Caching": "缓存",
-	"Plugins": "插件",
-	"Guardrails": "护栏",
-	"MCP Gateway": "MCP 网关",
-	"MCP Catalog": "MCP 目录",
-	"MCP Library": "MCP 库",
-	"MCP Logs": "MCP 日志",
-	"MCP Settings": "MCP 设置",
-	"Tool Groups": "工具组",
-	"Prompt Repository": "提示词仓库",
-	"Skills Repository": "技能仓库",
-	"Webhooks": "Webhook",
-	"Users": "用户",
-	"Roles & Permissions": "角色与权限",
-	"User Provisioning": "用户同步",
-	"Access Profiles": "访问档案",
-	"Audit Logs": "审计日志",
-	"Auth Sessions": "认证会话",
-	"OAuth Grants": "OAuth 授权",
-	"Devices": "设备",
-	"Settings": "设置",
-	"Security": "安全",
-	"Branding": "品牌定制",
-	"Client Settings": "客户端设置",
-	"Logs Settings": "日志设置",
-	"Performance Tuning": "性能调优",
-	"Compatibility": "兼容性",
-	"Proxy": "代理",
-	"License Info": "许可证信息",
-	"Cluster Config": "集群配置",
-	"Edge Control": "Edge 管控",
-	"Edge Settings": "Edge 设置",
-	"Feature Flags": "功能开关",
-	"Connectors": "连接器",
-	"API Keys": "API 密钥",
+import DICT_JSON from "./zhDict.json";
 
-	// ===== 通用操作 =====
-	"Save": "保存",
-	"Cancel": "取消",
-	"Delete": "删除",
-	"Edit": "编辑",
-	"Add": "添加",
-	"Create": "创建",
-	"Update": "更新",
-	"Search": "搜索",
-	"Filter": "筛选",
-	"Refresh": "刷新",
-	"Close": "关闭",
-	"Confirm": "确认",
-	"Apply": "应用",
-	"Copy": "复制",
-	"Copied": "已复制",
-	"Download": "下载",
-	"Export": "导出",
-	"Import": "导入",
-	"Submit": "提交",
-	"Reset": "重置",
-	"Back": "返回",
-	"Next": "下一步",
-	"Previous": "上一步",
-	"Done": "完成",
-	"View": "查看",
-	"Details": "详情",
-	"Retry": "重试",
-	"Remove": "移除",
-	"Duplicate": "复制副本",
-	"Enable": "启用",
-	"Disable": "禁用",
-	"Test": "测试",
-	"Connect": "连接",
-	"Disconnect": "断开连接",
-	"Learn more": "了解更多",
-	"Documentation": "文档",
-	"Docs": "文档",
-	"Get Started": "开始使用",
-	"Save Changes": "保存更改",
-	"Discard": "放弃",
-	"Continue": "继续",
-	"Loading...": "加载中…",
-	"Saving...": "保存中…",
-	"Show more": "展开更多",
-	"Show less": "收起",
-	"Select all": "全选",
-	"Clear": "清空",
-	"Clear all": "全部清空",
-	"Sign out": "退出登录",
-	"Sign in": "登录",
-	"Log in": "登录",
-	"Log out": "退出登录",
-	"Login": "登录",
-
-	// ===== 表格 / 分页 =====
-	"Name": "名称",
-	"Description": "描述",
-	"Status": "状态",
-	"Actions": "操作",
-	"Type": "类型",
-	"Value": "值",
-	"Key": "密钥",
-	"Model": "模型",
-	"Provider": "供应商",
-	"Created": "创建时间",
-	"Created At": "创建时间",
-	"Updated": "更新时间",
-	"Updated At": "更新时间",
-	"Last Updated": "最近更新",
-	"Rows per page": "每页行数",
-	"No results": "暂无数据",
-	"No results found": "未找到结果",
-	"No data": "暂无数据",
-	"of": "共",
-	"Page": "页",
-	"per page": "条/页",
-	"Total": "总计",
-	"Weight": "权重",
-	"Priority": "优先级",
-	"Enabled": "已启用",
-	"Disabled": "已禁用",
-	"Active": "活跃",
-	"Inactive": "未激活",
-	"Never": "从不",
-	"None": "无",
-	"All": "全部",
-	"Yes": "是",
-	"No": "否",
-	"Unknown": "未知",
-	"Optional": "可选",
-	"Required": "必填",
-	"Default": "默认",
-	"Custom": "自定义",
-	"Advanced": "高级",
-	"General": "常规",
-	"Overview": "概览",
-
-	// ===== 状态与提示 =====
-	"Success": "成功",
-	"Error": "错误",
-	"Warning": "警告",
-	"Failed": "失败",
-	"Pending": "等待中",
-	"Running": "运行中",
-	"Completed": "已完成",
-	"Cancelled": "已取消",
-	"Expired": "已过期",
-	"Healthy": "健康",
-	"Degraded": "降级",
-	"Restart Required": "需要重启",
-	"Setup checklist incomplete": "初始化清单未完成",
-	"Need help with production setup?": "需要生产环境部署帮助?",
-	"Are you sure?": "确定要执行此操作吗?",
-	"This action cannot be undone.": "此操作无法撤销。",
-
-	// ===== 仪表盘 / 日志 =====
-	"Requests": "请求数",
-	"Total Requests": "总请求数",
-	"Error Rate": "错误率",
-	"Success Rate": "成功率",
-	"Latency": "延迟",
-	"Avg Latency": "平均延迟",
-	"Cost": "成本",
-	"Total Cost": "总成本",
-	"Tokens": "Token 数",
-	"Input Tokens": "输入 Token",
-	"Output Tokens": "输出 Token",
-	"Cache Hit": "缓存命中",
-	"Cached": "已缓存",
-	"Timestamp": "时间",
-	"Duration": "耗时",
-	"Request": "请求",
-	"Response": "响应",
-	"Stream": "流式",
-	"Object": "对象",
-	"Endpoint": "端点",
-	"Last 24 hours": "最近 24 小时",
-	"Last 7 days": "最近 7 天",
-	"Last 30 days": "最近 30 天",
-
-	// ===== 供应商 / 密钥管理 =====
-	"Add Provider": "添加供应商",
-	"Add Key": "添加密钥",
-	"Add API Key": "添加 API 密钥",
-	"New Key": "新建密钥",
-	"Base URL": "Base URL",
-	"API Key": "API 密钥",
-	"Keys": "密钥",
-	"Models Allowed": "允许的模型",
-	"Allowed Models": "允许的模型",
-	"Add Model": "添加模型",
-	"Refresh Models": "刷新模型列表",
-	"Network Config": "网络配置",
-	"Concurrency": "并发数",
-	"Buffer Size": "缓冲区大小",
-	"Max Retries": "最大重试次数",
-	"Timeout": "超时",
-	"Add Virtual Key": "添加虚拟密钥",
-	"Budget": "预算",
-	"Rate Limit": "限流",
-	"Rate Limits": "限流",
-	"Usage": "用量",
-	"Quota": "配额",
-	"Expires": "过期时间",
-	"Configuration": "配置",
-	"Config": "配置",
-
-	// ===== 仪表盘标签页与图卡 =====
-	"Provider Usage": "供应商用量",
-	"Model Rankings": "模型排行",
-	"MCP usage": "MCP 用量",
-	"MCP Usage": "MCP 用量",
-	"Team Rankings": "团队排行",
-	"User Rankings": "用户排行",
-	"Virtual Key Rankings": "虚拟密钥排行",
-	"Customer Rankings": "客户排行",
-	"Request Volume": "请求量",
-	"Token Usage": "Token 用量",
-	"External Cache Hit Rate": "外部缓存命中率",
-	"Local Cache Hit Rate": "本地缓存命中率",
-	"Model Usage": "模型用量",
-	"Throughput": "吞吐量",
-	"No data available": "暂无数据",
-	"All Models": "全部模型",
-	"All Providers": "全部供应商",
-	"Input": "输入",
-	"Output": "输出",
-	"Last hour": "最近 1 小时",
-	"Last Hour": "最近 1 小时",
-	"Last 6 hours": "最近 6 小时",
-	"Last 12 hours": "最近 12 小时",
-
-	// ===== 筛选侧栏 =====
-	"Filters": "筛选",
-	"Processing": "处理中",
-	"Selected Keys": "已选密钥",
-	"App": "应用",
-	"Aliases": "别名",
-	"Routing Engines": "路由引擎",
-	"Local Caching": "本地缓存",
-	"User": "用户",
-	"Search or add a model": "搜索或添加模型",
-	"Search...": "搜索…",
-};
+// 词条字典:纯数据,一行一条,键按字母排序,存放于 zhDict.json(新增/修改词条直接编辑该文件)。
+// 动态句进 RULES(见下),两者由 scripts/zh-coverage.mjs 机械对账。
+const DICT: Record<string, string> = DICT_JSON;
 
 const SKIP_TAGS = new Set(["SCRIPT", "STYLE", "CODE", "PRE", "TEXTAREA", "NOSCRIPT"]);
 const ATTRS = ["placeholder", "title", "aria-label"];
@@ -288,12 +24,97 @@ function lookup(s: string): string | undefined {
 	return LOOKUP.get(s) ?? LOOKUP.get(s.toLowerCase());
 }
 
+
+// 动态句规则层(方案 v4 §4):四字段契约,skeleton/sample 供 zh-coverage 与 self-test 机械互证。
+// 纪律:re 必须 ^…$ 锚定;禁止 (.+) 级全泛化捕获;out 不得保留可再匹配的英文锚;上限 100 条。
+type ZhRule = { re: RegExp; out: string; skeleton: string; sample: string };
+const RULES: ZhRule[] = [
+	{ re: /^(\d+) model budgets?$/, out: "$1 个模型预算",
+		skeleton: "⟨x⟩ model budget⟨x⟩", sample: "3 model budgets" },
+	{ re: /^in (\d+) minutes?$/, out: "$1 分钟后",
+		skeleton: "in ⟨x⟩ minutes", sample: "in 5 minutes" },
+	{ re: /^in (\d+) min$/, out: "$1 分钟后",
+		skeleton: "in ⟨x⟩ min", sample: "in 5 min" },
+	{ re: /^in (\d+) hours?$/, out: "$1 小时后",
+		skeleton: "in ⟨x⟩ hours", sample: "in 2 hours" },
+	{ re: /^in (\d+) days?$/, out: "$1 天后",
+		skeleton: "in ⟨x⟩ days", sample: "in 3 days" },
+	{ re: /^(\d+) min ago$/, out: "$1 分钟前",
+		skeleton: "⟨x⟩ min ago", sample: "5 min ago" },
+	{ re: /^Exported (\d+) virtual keys?$/, out: "已导出 $1 个虚拟密钥",
+		skeleton: "Exported ⟨x⟩ virtual keys", sample: "Exported 3 virtual keys" },
+	{ re: /^Rotated (\d+) virtual keys?$/, out: "已轮换 $1 个虚拟密钥",
+		skeleton: "Rotated ⟨x⟩ virtual keys", sample: "Rotated 3 virtual keys" },
+	{ re: /^Rotated (\d+) virtual keys?\. (\d+) failed\.$/, out: "已轮换 $1 个虚拟密钥,$2 个失败。",
+		skeleton: "Rotated ⟨x⟩ virtual keys. ⟨x⟩ failed.", sample: "Rotated 3 virtual keys. 1 failed." },
+	{ re: /^HTTP error! status: (\d+)$/, out: "HTTP 错误,状态码 $1",
+		skeleton: "HTTP error! status: ⟨x⟩", sample: "HTTP error! status: 500" },
+	{ re: /^Must be at least (\d+)$/, out: "不得小于 $1",
+		skeleton: "Must be at least ⟨x⟩", sample: "Must be at least 1" },
+	{ re: /^Must be at most (\d+)$/, out: "不得大于 $1",
+		skeleton: "Must be at most ⟨x⟩", sample: "Must be at most 10" },
+	{ re: /^Must be at least (\d+) characters?$/, out: "至少 $1 个字符",
+		skeleton: "Must be at least ⟨x⟩ characters", sample: "Must be at least 8 characters" },
+	{ re: /^Must be at most (\d+) characters?$/, out: "至多 $1 个字符",
+		skeleton: "Must be at most ⟨x⟩ characters", sample: "Must be at most 64 characters" },
+	{ re: /^Must have at least (\d+) items?$/, out: "至少 $1 项",
+		skeleton: "Must have at least ⟨x⟩ items", sample: "Must have at least 1 items" },
+	{ re: /^Must have at most (\d+) items?$/, out: "至多 $1 项",
+		skeleton: "Must have at most ⟨x⟩ items", sample: "Must have at most 5 items" },
+	{ re: /^Attempt Trail \((\d+) attempts?\)$/, out: "尝试轨迹($1 次)",
+		skeleton: "Attempt Trail (⟨x⟩ attempts)", sample: "Attempt Trail (3 attempts)" },
+	{ re: /^Available Tools \((\d+)\)$/, out: "可用工具($1)",
+		skeleton: "Available Tools (⟨x⟩)", sample: "Available Tools (5)" },
+	{ re: /^Caching Details \((\d+)\)$/, out: "缓存详情($1)",
+		skeleton: "Caching Details (⟨x⟩)", sample: "Caching Details (2)" },
+	{ re: /^List Models Output \((\d+)\)$/, out: "模型列表输出($1)",
+		skeleton: "List Models Output (⟨x⟩)", sample: "List Models Output (12)" },
+	{ re: /^Rerank Output \((\d+)\)$/, out: "重排序输出($1)",
+		skeleton: "Rerank Output (⟨x⟩)", sample: "Rerank Output (10)" },
+	{ re: /^Video List Output \((\d+)\)$/, out: "视频列表输出($1)",
+		skeleton: "Video List Output (⟨x⟩)", sample: "Video List Output (4)" },
+	{ re: /^Description exceeds 1024 character limit \((\d+)\/1024\)$/, out: "描述超出 1024 字符上限($1/1024)",
+		skeleton: "Description exceeds 1024 character limit (⟨x⟩/1024)", sample: "Description exceeds 1024 character limit (1100/1024)" },
+	{ re: /^Dropdown opened\. (\d+) options available\. Use arrow keys to navigate\.$/, out: "下拉已打开,$1 个选项可用,方向键导航。",
+		skeleton: "Dropdown opened. ⟨x⟩ options available. Use arrow keys to navigate.", sample: "Dropdown opened. 8 options available. Use arrow keys to navigate." },
+	{ re: /^Option removed\. (\d+) of (\d+) options selected\.$/, out: "已移除选项,已选 $1/$2。",
+		skeleton: "Option removed. ⟨x⟩ of ⟨x⟩ options selected.", sample: "Option removed. 2 of 5 options selected." },
+	{ re: /^(\d+) of (\d+) tool executions failed$/, out: "$1/$2 个工具执行失败",
+		skeleton: "⟨x⟩ of ⟨x⟩ tool executions failed", sample: "1 of 4 tool executions failed" },
+	{ re: /^(\d+) budget overrides?$/, out: "$1 条预算覆盖",
+		skeleton: "⟨x⟩ budget overrides", sample: "3 budget overrides" },
+	{ re: /^(\d+) options selected\. (\d+) of (\d+) total selected\.$/, out: "已选 $1 项($2/$3)。",
+		skeleton: "⟨x⟩ options selected. ⟨x⟩ of ⟨x⟩ total selected.", sample: "2 options selected. 2 of 9 total selected." },
+	{ re: /^Select all (\d+) options?$/, out: "全选 $1 项",
+		skeleton: "Select all ⟨x⟩ options", sample: "Select all 5 options" },
+	{ re: /^Clear all (\d+) selected options?$/, out: "清除全部 $1 个已选项",
+		skeleton: "Clear all ⟨x⟩ selected options", sample: "Clear all 3 selected options" },
+	{ re: /^Interval must be 0 \(disabled\) or at least (\d+) minutes?$/, out: "间隔须为 0(禁用)或至少 $1 分钟",
+		skeleton: "Interval must be 0 (disabled) or at least ⟨x⟩ minute", sample: "Interval must be 0 (disabled) or at least 1 minute" },
+	{ re: /^Target weights must sum to 1, current total: (\d+(?:\.\d+)?)$/, out: "目标权重之和须为 1,当前合计 $1",
+		skeleton: "Target weights must sum to 1, current total: ⟨x⟩", sample: "Target weights must sum to 1, current total: 0.8" },
+	{ re: /^Budget #(\d+): Maximum Spend \(USD\)$/, out: "预算 #$1:最大花费(USD)",
+		skeleton: "Budget #⟨x⟩: Maximum Spend (USD)", sample: "Budget #1: Maximum Spend (USD)" },
+	{ re: /^(v[\d.]+) is now available\.$/, out: "$1 现已发布。",
+		skeleton: "⟨x⟩ is now available.", sample: "v2.0.0 is now available." },
+];
+
 function translateRaw(raw: string): string | null {
 	const trimmed = raw.trim();
 	if (!trimmed) return null;
 	const hit = lookup(trimmed);
-	if (hit === undefined || hit === trimmed) return null;
-	return raw.replace(trimmed, hit);
+	if (hit !== undefined) {
+		if (hit === trimmed) return null; // 收敛契约①
+		return raw.replace(trimmed, hit);
+	}
+	for (const r of RULES) {
+		if (r.re.test(trimmed)) {
+			const out = trimmed.replace(r.re, r.out);
+			if (out === trimmed) return null; // 收敛契约①
+			return raw.replace(trimmed, out);
+		}
+	}
+	return null;
 }
 
 function walk(node: Node): void {
@@ -310,8 +131,8 @@ function walk(node: Node): void {
 	for (const attr of ATTRS) {
 		const v = el.getAttribute(attr);
 		if (v) {
-			const hit = DICT[v.trim()];
-			if (hit) el.setAttribute(attr, hit);
+			const t = translateRaw(v); // 与文本通道同管线(评审1-2.2)
+			if (t !== null) el.setAttribute(attr, t);
 		}
 	}
 	for (let i = 0; i < el.childNodes.length; i++) walk(el.childNodes[i]);
@@ -329,11 +150,20 @@ export function installZhLocale(): void {
 				if (m.type === "characterData") {
 					const t = translateRaw(m.target.nodeValue ?? "");
 					if (t !== null) m.target.nodeValue = t;
+					continue;
+				}
+				if (m.type === "attributes" && m.target instanceof Element && m.attributeName) {
+					const v = m.target.getAttribute(m.attributeName);
+					if (v) {
+						const t = translateRaw(v); // 契约①防回写环(评审2-N1)
+						if (t !== null) m.target.setAttribute(m.attributeName, t);
+					}
+					continue;
 				}
 				m.addedNodes.forEach((n) => walk(n));
 			}
 		});
-		observer.observe(document.body, { childList: true, subtree: true, characterData: true });
+		observer.observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: [...ATTRS] });
 	};
 
 	if (document.readyState === "loading") {

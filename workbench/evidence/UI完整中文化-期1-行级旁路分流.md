@@ -1,0 +1,199 @@
+# 行级旁路报告人工分流(方案 v4 §4;基线 aae659b→a236ec5)
+总计 160 行(位置围栏 97 + 上下文围栏 63),分流如下:
+
+## 技术性非文案(CSS/SVG/calc)(65 条)
+- `mt-1 text-2xl font-semibold ⟨x⟩` — app/pprof/page.tsx:253
+- `border-b border-zinc-800/50 hover:bg-zinc-800/30 ⟨x⟩` — app/pprof/page.tsx:334
+- `font-mono text-sm ⟨x⟩` — app/pprof/page.tsx:354
+- `rounded border px-2 py-0.5 text-xs uppercase ⟨x⟩` — app/pprof/page.tsx:454
+- `font-mono text-sm ⟨x⟩` — app/pprof/page.tsx:470
+- `rounded border px-2 py-0.5 text-xs ⟨x⟩` — app/pprof/page.tsx:565
+- `text-2xl font-semibold ⟨x⟩` — app/pprof/page.tsx:1173
+- `bg-muted sticky right-0 z-30 w-[50px] text-right font-semibold ⟨x⟩` — app/workspace/custom-pricing/overrides/scopedPricingOverridesView.tsx:403
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-20 bg-white text-right ⟨x⟩` — app/workspace/custom-pricing/overrides/scopedPricingOverridesView.tsx:437
+- `inline-flex items-center gap-0.5 text-xs font-medium ⟨x⟩` — app/workspace/dashboard/components/rankingsShared.tsx:30
+- `bg-muted sticky right-0 z-10 w-[56px] text-right ⟨x⟩` — app/workspace/governance/views/teamsTable.tsx:258
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-10 bg-white text-right ⟨x⟩` — app/workspace/governance/views/teamsTable.tsx:448
+- `flex items-center justify-between px-4 transition-opacity duration-200 ⟨x⟩` — app/workspace/logs/page.tsx:781
+- `block min-w-0 cursor-pointer text-sm font-normal break-all text-blue-600 underline-offset-2 hover:underline dark:text-blue-400⟨x⟩` — app/workspace/logs/sheets/logDetailView.tsx:1250
+- `h-full min-h-[24px] w-1 rounded-sm ⟨x⟩` — app/workspace/logs/views/columns.tsx:315
+- `text-muted-foreground h-4 w-4 transition-transform duration-200 ⟨x⟩` — app/workspace/logs/views/logsVolumeChart.tsx:375
+- `shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ⟨x⟩` — app/workspace/logs/views/pluginLogsView.tsx:78
+- `flex items-center justify-between px-4 transition-opacity duration-200 ⟨x⟩` — app/workspace/mcp-logs/page.tsx:468
+- `h-full min-h-[24px] w-1 rounded-sm ⟨x⟩` — app/workspace/mcp-logs/views/columns.tsx:32
+- `bg-muted sticky right-0 z-10 w-14 text-right ⟨x⟩` — app/workspace/mcp-registry/views/mcpClientsTable.tsx:961
+- `bg-card group-hover:bg-muted/50 sticky right-0 z-10 text-right ⟨x⟩` — app/workspace/mcp-registry/views/mcpClientsTable.tsx:1086
+- `flex flex-col gap-2 ⟨x⟩` — app/workspace/mcp-registry/views/tokenExchangeFields.tsx:126
+- `text-right text-sm ⟨x⟩` — app/workspace/mcp-sessions/auth/page.tsx:416
+- `mb-2 grow overflow-auto rounded-sm border ⟨x⟩` — app/workspace/mcp-sessions/views/sessionsTable.tsx:157
+- `bg-muted sticky right-0 z-10 w-[56px] text-right ⟨x⟩` — app/workspace/mcp-sessions/views/sessionsTable.tsx:187
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-10 bg-white text-right ⟨x⟩` — app/workspace/mcp-sessions/views/sessionsTable.tsx:225
+- `bg-muted sticky right-0 z-30 w-[50px] text-right ⟨x⟩` — app/workspace/model-limits/views/modelLimitsTable.tsx:350
+- `mb-2 grow overflow-hidden rounded-sm border ⟨x⟩` — app/workspace/oauth-grants/views/grantsTable.tsx:41
+- `bg-muted relative sticky right-0 z-10 w-[56px] text-right ⟨x⟩` — app/workspace/oauth-grants/views/grantsTable.tsx:65
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted relative sticky right-0 z-10 bg-white text-right ⟨x⟩` — app/workspace/oauth-grants/views/grantsTable.tsx:92
+- `size-4 shrink-0 transition-transform ⟨x⟩` — app/workspace/observability/fragments/otelFormFragment.tsx:357
+- `flex flex-row items-center justify-between rounded-lg border p-3 ⟨x⟩` — app/workspace/providers/fragments/allowedRequestsFields.tsx:131
+- `flex items-center gap-1.5 rounded-t-[6px] px-3 py-1.5 ⟨x⟩` — app/workspace/routing-rules/tree/views/node/rfRuleNode.tsx:45
+- `translate(⟨x⟩, ⟨x⟩) rotate(⟨x⟩)` — app/workspace/routing-rules/tree/views/rfChainEdge.tsx:63
+- `flex items-center justify-end gap-2 text-xs font-medium ⟨x⟩` — app/workspace/routing-rules/views/routingRuleSheet.tsx:534
+- `bg-muted sticky right-0 z-30 w-[50px] text-right font-semibold ⟨x⟩` — app/workspace/routing-rules/views/routingRulesTable.tsx:205
+- `inline-block rounded px-2.5 py-1 text-xs font-medium ⟨x⟩` — app/workspace/routing-rules/views/routingRulesTable.tsx:241
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-20 bg-white text-right ⟨x⟩` — app/workspace/routing-rules/views/routingRulesTable.tsx:272
+- `bg-muted sticky right-0 z-30 w-14 text-right ⟨x⟩` — app/workspace/skills-repo/components/skillListView.tsx:562
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-20 bg-white text-right ⟨x⟩` — app/workspace/skills-repo/components/skillListView.tsx:623
+- `bg-muted sticky right-0 z-30 w-[56px] text-right ⟨x⟩` — app/workspace/virtual-keys/views/virtualKeysTable.tsx:904
+- `group-hover:bg-muted dark:bg-card dark:group-hover:bg-muted sticky right-0 z-20 bg-white text-right ⟨x⟩` — app/workspace/virtual-keys/views/virtualKeysTable.tsx:982
+- `font-mono text-xs ⟨x⟩` — app/workspace/webhooks/views/webhookDetailsSheet.tsx:81
+- `overflow-auto rounded-sm border ⟨x⟩` — app/workspace/webhooks/views/webhooksView.tsx:350
+- `bg-muted/50 sticky right-0 z-10 w-14 text-right ⟨x⟩` — app/workspace/webhooks/views/webhooksView.tsx:358
+- `bg-card group-hover:bg-muted/50 sticky right-0 z-10 text-right ⟨x⟩` — app/workspace/webhooks/views/webhooksView.tsx:398
+- `rounded px-1 py-0.5 ⟨x⟩` — components/devProfiler.tsx:267
+- `text-sm group-data-[collapsible=icon]:hidden ⟨x⟩` — components/sidebar.tsx:268
+- `flex h-7 items-center rounded-sm px-2 ⟨x⟩` — components/sidebar.tsx:391
+- `w-[360px] font-mono text-sm ⟨x⟩` — components/ui/custom/celBuilder/valueEditor.tsx:272
+- `calc(100vh - ⟨x⟩px)` — components/ui/custom/richTextarea.tsx:656
+- `calc(100vh - ⟨x⟩px - 8px)` — components/ui/custom/richTextarea.tsx:669
+- `calc(⟨x⟩px - 8px)` — components/ui/custom/richTextarea.tsx:669
+- `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="none" stroke="⟨x⟩" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="m6 9 6 6 6-6" /></svg>` — components/ui/icons.tsx:1622
+- `<svg width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="-2 -4 10 20"><path d="M5.5 11.5C5.77614 11.5 6 11.2761 6 11C6 10.7239 5.77614 10.5 5.5 10.5V11.5ZM3 9H2.5H3ZM3 3H3.5H3ZM5 1V0.5V1ZM5.5 1.5C5.77614 1.5 6 1.27614 6 1C6 0.723858 5.77614 0.5 5.5 0.5V1.5ZM0.5 10.5C0.223858 10.5 0 10.7239 0 11C0 11.2761 0.223858 11.5 0.5 11.5V10.5ZM3.5 8.5C3.5 8.22386 3.27614 8 3 8C2.72386 8 2.5 8.22386 2.5 8.5H3.5ZM0.5 0.5C0.223858 0.5 0 0.723858 0 1C0 1.27614 0.223858 1.5 0.5 1.5V0.5ZM2.5 3.5C2.5 3.77614 2.72386 4 3 4C3.27614 4 3.5 3.77614 3.5 3.5H2.5ZM5.5 10.5H5V11.5H5.5V10.5ZM5 10.5C4.60218 10.5 4.22064 10.342 3.93934 10.0607L3.23223 10.7678C3.70107 11.2366 4.33696 11.5 5 11.5V10.5ZM3.93934 10.0607C3.65804 9.77936 3.5 9.39782 3.5 9H2.5C2.5 9.66304 2.76339 10.2989 3.23223 10.7678L3.93934 10.0607ZM3.5 9V3H2.5V9H3.5ZM3.5 3C3.5 2.60218 3.65804 2.22064 3.93934 1.93934L3.23223 1.23223C2.76339 1.70107 2.5 2.33696 2.5 3H3.5ZM3.93934 1.93934C4.22064 1.65804 4.60218 1.5 5 1.5V0.5C4.33696 0.5 3.70107 0.763392 3.23223 1.23223L3.93934 1.93934ZM5 1.5H5.5V0.5H5V1.5ZM0.5 11.5H1V10.5H0.5V11.5ZM1 11.5C1.66304 11.5 2.29893 11.2366 2.76777 10.7678L2.06066 10.0607C1.77936 10.342 1.39782 10.5 1 10.5V11.5ZM2.76777 10.7678C3.23661 10.2989 3.5 9.66304 3.5 9H2.5C2.5 9.39782 2.34196 9.77936 2.06066 10.0607L2.76777 10.7678ZM3.5 9V8.5H2.5V9H3.5ZM0.5 1.5H1V0.5H0.5V1.5ZM1 1.5C1.39782 1.5 1.77936 1.65804 2.06066 1.93934L2.76777 1.23223C2.29893 0.763392 1.66304 0.5 1 0.5V1.5ZM2.06066 1.93934C2.34196 2.22064 2.5 2.60218 2.5 3H3.5C3.5 2.33696 3.23661 1.70107 2.76777 1.23223L2.06066 1.93934ZM2.5 3V3.5H3.5V3H2.5Z" fill="⟨x⟩"/></svg>` — components/ui/icons.tsx:1624
+- `<svg width="20" height="20" viewBox="-3 -3 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.5 6C10.5 8.48528 8.48528 10.5 6 10.5V11.5C9.03757 11.5 11.5 9.03757 11.5 6H10.5ZM6 10.5C3.51472 10.5 1.5 8.48528 1.5 6H0.5C0.5 9.03757 2.96243 11.5 6 11.5V10.5ZM1.5 6C1.5 3.51472 3.51472 1.5 6 1.5V0.5C2.96243 0.5 0.5 2.96243 0.5 6H1.5ZM6 1.5C8.48528 1.5 10.5 3.51472 10.5 6H11.5C11.5 2.96243 9.03757 0.5 6 0.5V1.5ZM8.5 6C8.5 7.38071 7.38071 8.5 6 8.5V9.5C7.933 9.5 9.5 7.933 9.5 6H8.5ZM6 8.5C4.61929 8.5 3.5 7.38071 3.5 6H2.5C2.5 7.933 4.067 9.5 6 9.5V8.5ZM3.5 6C3.5 4.61929 4.61929 3.5 6 3.5V2.5C4.067 2.5 2.5 4.067 2.5 6H3.5ZM6 3.5C7.38071 3.5 8.5 4.61929 8.5 6H9.5C9.5 4.067 7.933 2.5 6 2.5V3.5ZM6.5 6C6.5 6.27614 6.27614 6.5 6 6.5V7.5C6.82843 7.5 7.5 6.82843 7.5 6H6.5ZM6 6.5C5.72386 6.5 5.5 6.27614 5.5 6H4.5C4.5 6.82843 5.17157 7.5 6 7.5V6.5ZM5.5 6C5.5 5.72386 5.72386 5.5 6 5.5V4.5C5.17157 4.5 4.5 5.17157 4.5 6H5.5ZM6 5.5C6.27614 5.5 6.5 5.72386 6.5 6H7.5C7.5 5.17157 6.82843 4.5 6 4.5V5.5Z" fill="⟨x⟩"/></svg>` — components/ui/icons.tsx:1626
+- `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="-2 -2 28 28" fill="none" stroke="⟨x⟩" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="m12 16 4-4-4-4"/></svg>` — components/ui/icons.tsx:1628
+- `<svg width="20" height="20" viewBox="-3 -3 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M4 2C4.27614 2 4.5 1.77614 4.5 1.5C4.5 1.22386 4.27614 1 4 1V2ZM3.5 1.5V1V1.5ZM2.5 2.5H2H2.5ZM2.5 5H3H2.5ZM1.5 5.5C1.22386 5.5 1 5.72386 1 6C1 6.27614 1.22386 6.5 1.5 6.5V5.5ZM2.5 7H3H2.5ZM4 11C4.27614 11 4.5 10.7761 4.5 10.5C4.5 10.2239 4.27614 10 4 10V11ZM8 10C7.72386 10 7.5 10.2239 7.5 10.5C7.5 10.7761 7.72386 11 8 11V10ZM10.5 6.5C10.7761 6.5 11 6.27614 11 6C11 5.72386 10.7761 5.5 10.5 5.5V6.5ZM8.5 1.5V1V1.5ZM8 1C7.72386 1 7.5 1.22386 7.5 1.5C7.5 1.77614 7.72386 2 8 2V1ZM4 1H3.5V2H4V1ZM3.5 1C3.10218 1 2.72064 1.15804 2.43934 1.43934L3.14645 2.14645C3.24021 2.05268 3.36739 2 3.5 2V1ZM2.43934 1.43934C2.15804 1.72064 2 2.10218 2 2.5H3C3 2.36739 3.05268 2.24021 3.14645 2.14645L2.43934 1.43934ZM2 2.5V5H3V2.5H2ZM2 5C2 5.13261 1.94732 5.25978 1.85355 5.35355L2.56066 6.06066C2.84196 5.77936 3 5.39782 3 5H2ZM1.85355 5.35355C1.75979 5.44732 1.63261 5.5 1.5 5.5V6.5C1.89782 6.5 2.27936 6.34196 2.56066 6.06066L1.85355 5.35355ZM1.5 6.5C1.63261 6.5 1.75979 6.55268 1.85355 6.64645L2.56066 5.93934C2.27936 5.65804 1.89782 5.5 1.5 5.5V6.5ZM1.85355 6.64645C1.94732 6.74021 2 6.86739 2 7H3C3 6.60218 2.84196 6.22064 2.56066 5.93934L1.85355 6.64645ZM2 7V9.5H3V7H2ZM2 9.5C2 10.3261 2.67386 11 3.5 11V10C3.22614 10 3 9.77386 3 9.5H2ZM3.5 11H4V10H3.5V11ZM8 11H8.5V10H8V11ZM8.5 11C8.89783 11 9.27936 10.842 9.56066 10.5607L8.85355 9.85355C8.75978 9.94732 8.63261 10 8.5 10V11ZM9.56066 10.5607C9.84196 10.2794 10 9.89783 10 9.5H9C9 9.63261 8.94732 9.75978 8.85355 9.85355L9.56066 10.5607ZM10 9.5V7H9V9.5H10ZM10 7C10 6.72614 10.2261 6.5 10.5 6.5V5.5C9.67386 5.5 9 6.17386 9 7H10ZM10.5 5.5C10.3674 5.5 10.2402 5.44732 10.1464 5.35355L9.43934 6.06066C9.72064 6.34196 10.1022 6.5 10.5 6.5V5.5ZM10.1464 5.35355C10.0527 5.25978 10 5.13261 10 5H9C9 5.39783 9.15804 5.77936 9.43934 6.06066L10.1464 5.35355ZM10 5V2.5H9V5H10ZM10 2.5C10 2.10218 9.84196 1.72064 9.56066 1.43934L8.85355 2.14645C8.94732 2.24021 9 2.36739 9 2.5H10ZM9.56066 1.43934C9.27936 1.15804 8.89782 1 8.5 1V2C8.63261 2 8.75979 2.05268 8.85355 2.14645L9.56066 1.43934ZM8.5 1H8V2H8.5V1Z" fill="⟨x⟩"/></svg>` — components/ui/icons.tsx:1630
+- `<svg width="20" height="20" viewBox="-3 -3 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3.7 10.9C3.92091 11.0657 4.23431 11.0209 4.4 10.8C4.56569 10.5791 4.52091 10.2657 4.3 10.1L3.7 10.9ZM4.3 1.9C4.52091 1.73431 4.56569 1.42091 4.4 1.2C4.23431 0.979086 3.92091 0.934315 3.7 1.1L4.3 1.9ZM8.3 1.1C8.07909 0.934315 7.76569 0.979086 7.6 1.2C7.43431 1.42091 7.47909 1.73431 7.7 1.9L8.3 1.1ZM7.7 10.1C7.47909 10.2657 7.43431 10.5791 7.6 10.8C7.76569 11.0209 8.07909 11.0657 8.3 10.9L7.7 10.1ZM7.85355 4.85355C8.04882 4.65829 8.04882 4.34171 7.85355 4.14645C7.65829 3.95118 7.34171 3.95118 7.14645 4.14645L7.85355 4.85355ZM4.14645 7.14645C3.95118 7.34171 3.95118 7.65829 4.14645 7.85355C4.34171 8.04882 4.65829 8.04882 4.85355 7.85355L4.14645 7.14645ZM4.85355 4.14645C4.65829 3.95118 4.34171 3.95118 4.14645 4.14645C3.95118 4.34171 3.95118 4.65829 4.14645 4.85355L4.85355 4.14645ZM7.14645 7.85355C7.34171 8.04882 7.65829 8.04882 7.85355 7.85355C8.04882 7.65829 8.04882 7.34171 7.85355 7.14645L7.14645 7.85355ZM4 10.5C4.3 10.1 4.30018 10.1001 4.30035 10.1003C4.3004 10.1003 4.30057 10.1004 4.30066 10.1005C4.30085 10.1006 4.30101 10.1008 4.30114 10.1009C4.3014 10.1011 4.30155 10.1012 4.30157 10.1012C4.30163 10.1012 4.30121 10.1009 4.30035 10.1002C4.29862 10.0989 4.2951 10.0962 4.28989 10.092C4.27947 10.0837 4.26234 10.0697 4.23946 10.0501C4.19366 10.0108 4.12502 9.94916 4.04105 9.8652C3.87287 9.69702 3.6449 9.44096 3.41603 9.09765C2.95957 8.41297 2.5 7.38285 2.5 6H1.5C1.5 7.61715 2.04043 8.83703 2.58397 9.65235C2.8551 10.059 3.12713 10.3655 3.33395 10.5723C3.43748 10.6758 3.52509 10.7548 3.58867 10.8093C3.62047 10.8366 3.64632 10.8578 3.66519 10.8729C3.67463 10.8804 3.68233 10.8864 3.68818 10.891C3.6911 10.8932 3.69355 10.8951 3.69553 10.8966C3.69652 10.8974 3.69738 10.898 3.69813 10.8986C3.6985 10.8989 3.69885 10.8991 3.69916 10.8994C3.69931 10.8995 3.69952 10.8996 3.6996 10.8997C3.6998 10.8999 3.7 10.9 4 10.5ZM2.5 6C2.5 4.61715 2.95957 3.58703 3.41603 2.90235C3.6449 2.55904 3.87287 2.30298 4.04105 2.1348C4.12502 2.05084 4.19366 1.98919 4.23946 1.94994C4.26234 1.93033 4.27947 1.91635 4.28989 1.90801C4.2951 1.90385 4.29862 1.90109 4.30035 1.89976C4.30121 1.89909 4.30163 1.89877 4.30157 1.89881C4.30155 1.89883 4.3014 1.89894 4.30114 1.89914C4.30101 1.89924 4.30085 1.89936 4.30066 1.8995C4.30057 1.89958 4.3004 1.8997 4.30035 1.89974C4.30018 1.89986 4.3 1.9 4 1.5C3.7 1.1 3.6998 1.10015 3.6996 1.1003C3.69952 1.10036 3.69931 1.10052 3.69916 1.10063C3.69885 1.10087 3.6985 1.10113 3.69813 1.10141C3.69738 1.10197 3.69652 1.10263 3.69553 1.10338C3.69355 1.10489 3.6911 1.10677 3.68818 1.10903C3.68233 1.11356 3.67463 1.11959 3.66519 1.12714C3.64632 1.14224 3.62047 1.16342 3.58867 1.19068C3.52509 1.24518 3.43748 1.32416 3.33395 1.4277C3.12713 1.63452 2.8551 1.94096 2.58397 2.34765C2.04043 3.16297 1.5 4.38285 1.5 6H2.5ZM8 1.5C7.7 1.9 7.69982 1.89986 7.69965 1.89974C7.6996 1.8997 7.69943 1.89958 7.69934 1.8995C7.69915 1.89936 7.69899 1.89924 7.69886 1.89914C7.6986 1.89894 7.69845 1.89883 7.69843 1.89881C7.69837 1.89877 7.69879 1.89909 7.69965 1.89976C7.70138 1.90109 7.70491 1.90385 7.71011 1.90801C7.72053 1.91635 7.73766 1.93033 7.76054 1.94994C7.80634 1.98919 7.87498 2.05084 7.95895 2.1348C8.12713 2.30298 8.3551 2.55904 8.58397 2.90235C9.04043 3.58703 9.5 4.61715 9.5 6H10.5C10.5 4.38285 9.95957 3.16297 9.41603 2.34765C9.1449 1.94096 8.87287 1.63452 8.66605 1.4277C8.56252 1.32416 8.47491 1.24518 8.41133 1.19068C8.37953 1.16342 8.35368 1.14224 8.33481 1.12714C8.32537 1.11959 8.31767 1.11356 8.31182 1.10903C8.3089 1.10677 8.30645 1.10489 8.30447 1.10338C8.30348 1.10263 8.30262 1.10197 8.30187 1.10141C8.3015 1.10113 8.30115 1.10087 8.30084 1.10063C8.30069 1.10052 8.30048 1.10036 8.3004 1.1003C8.3002 1.10015 8.3 1.1 8 1.5ZM9.5 6C9.5 7.38285 9.04043 8.41297 8.58397 9.09765C8.3551 9.44096 8.12713 9.69702 7.95895 9.8652C7.87498 9.94916 7.80634 10.0108 7.76054 10.0501C7.73766 10.0697 7.72053 10.0837 7.71011 10.092C7.70491 10.0962 7.70138 10.0989 7.69965 10.1002C7.69879 10.1009 7.69837 10.1012 7.69843 10.1012C7.69845 10.1012 7.6986 10.1011 7.69886 10.1009C7.69899 10.1008 7.69915 10.1006 7.69934 10.1005C7.69943 10.1004 7.6996 10.1003 7.69965 10.1003C7.69982 10.1001 7.7 10.1 8 10.5C8.3 10.9 8.3002 10.8999 8.3004 10.8997C8.30048 10.8996 8.30069 10.8995 8.30084 10.8994C8.30115 10.8991 8.3015 10.8989 8.30187 10.8986C8.30262 10.898 8.30348 10.8974 8.30447 10.8966C8.30645 10.8951 8.3089 10.8932 8.31182 10.891C8.31767 10.8864 8.32537 10.8804 8.33481 10.8729C8.35368 10.8578 8.37953 10.8366 8.41133 10.8093C8.47491 10.7548 8.56252 10.6758 8.66605 10.5723C8.87287 10.3655 9.1449 10.059 9.41603 9.65235C9.95957 8.83703 10.5 7.61715 10.5 6H9.5ZM7.14645 4.14645L4.14645 7.14645L4.85355 7.85355L7.85355 4.85355L7.14645 4.14645ZM4.14645 4.85355L7.14645 7.85355L7.85355 7.14645L4.85355 4.14645L4.14645 4.85355Z" fill="⟨x⟩"/></svg>` — components/ui/icons.tsx:1632
+- `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="⟨x⟩" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" class="lucide lucide-file-stack-icon lucide-file-stack"><path d="M20 7h-3a2 2 0 0 1-2-2V2"/><path d="M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z"/><path d="M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8"/></svg>` — components/ui/icons.tsx:1634
+- `<svg width="20" height="20" viewBox="-3 -3 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 6C2 5.72386 1.77614 5.5 1.5 5.5C1.22386 5.5 1 5.72386 1 6H2ZM6 1.5V0.999996L5.99812 1L6 1.5ZM2.63 2.87L2.28243 2.51046L2.27645 2.51645L2.63 2.87ZM1.5 4H1C1 4.27614 1.22386 4.5 1.5 4.5V4ZM2 1.5C2 1.22386 1.77614 1 1.5 1C1.22386 1 1 1.22386 1 1.5H2ZM4 4.5C4.27614 4.5 4.5 4.27614 4.5 4C4.5 3.72386 4.27614 3.5 4 3.5V4.5ZM6.5 3.5C6.5 3.22386 6.27614 3 6 3C5.72386 3 5.5 3.22386 5.5 3.5H6.5ZM6 6H5.5C5.5 6.18939 5.607 6.36252 5.77639 6.44721L6 6ZM7.77639 7.44721C8.02338 7.57071 8.32372 7.4706 8.44721 7.22361C8.57071 6.97662 8.4706 6.67628 8.22361 6.55279L7.77639 7.44721ZM1 6C1 6.98891 1.29325 7.95561 1.84265 8.77785L2.67412 8.22228C2.2346 7.56448 2 6.79113 2 6H1ZM1.84265 8.77785C2.39206 9.6001 3.17295 10.241 4.08658 10.6194L4.46927 9.69552C3.73836 9.39277 3.11365 8.88008 2.67412 8.22228L1.84265 8.77785ZM4.08658 10.6194C5.00021 10.9978 6.00555 11.0969 6.97545 10.9039L6.78036 9.92314C6.00444 10.0775 5.20017 9.99827 4.46927 9.69552L4.08658 10.6194ZM6.97545 10.9039C7.94536 10.711 8.83627 10.2348 9.53553 9.53553L8.82843 8.82843C8.26902 9.38784 7.55628 9.7688 6.78036 9.92314L6.97545 10.9039ZM9.53553 9.53553C10.2348 8.83627 10.711 7.94536 10.9039 6.97545L9.92314 6.78036C9.7688 7.55628 9.38784 8.26902 8.82843 8.82843L9.53553 9.53553ZM10.9039 6.97545C11.0969 6.00555 10.9978 5.00021 10.6194 4.08658L9.69552 4.46927C9.99827 5.20017 10.0775 6.00444 9.92314 6.78036L10.9039 6.97545ZM10.6194 4.08658C10.241 3.17295 9.6001 2.39206 8.77785 1.84265L8.22228 2.67412C8.88008 3.11365 9.39277 3.73836 9.69552 4.46927L10.6194 4.08658ZM8.77785 1.84265C7.95561 1.29325 6.98891 1 6 1V2C6.79113 2 7.56448 2.2346 8.22228 2.67412L8.77785 1.84265ZM5.99812 1C4.61107 1.00522 3.27973 1.54645 2.28248 2.51052L2.97752 3.22948C3.78924 2.44478 4.87288 2.00424 6.00188 2L5.99812 1ZM2.27645 2.51645L1.14645 3.64645L1.85355 4.35355L2.98355 3.22355L2.27645 2.51645ZM1 1.5V4H2V1.5H1ZM1.5 4.5H4V3.5H1.5V4.5ZM5.5 3.5V6H6.5V3.5H5.5ZM5.77639 6.44721L7.77639 7.44721L8.22361 6.55279L6.22361 5.55279L5.77639 6.44721Z" fill="⟨x⟩"/></svg>` — components/ui/icons.tsx:1636
+- `<svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="⟨x⟩" xmlns="http://www.w3.org/2000/svg"><path d="M2 4.07408H4.07408" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 6.14816H4.07408" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 8.22223H4.07408" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M2 10.2963H4.07408" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M10.2963 2H4.07408C3.50134 2 3.03704 2.4643 3.03704 3.03704V11.3333C3.03704 11.9061 3.50134 12.3704 4.07408 12.3704H10.2963C10.8691 12.3704 11.3333 11.9061 11.3333 11.3333V3.03704C11.3333 2.4643 10.8691 2 10.2963 2Z" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.88889 5.11111H8.48149" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.88889 7.18519H9.25929" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/><path d="M5.88889 9.25929H8.22222" strokeWidth="0.777778" strokeLinecap="round" strokeLinejoin="round"/></svg>` — components/ui/icons.tsx:1638
+- `<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" stroke="⟨x⟩" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" fill="none"><path d="M11 18H3" /><path d="m15 18 2 2 4-4" /><path d="M16 12H3" /><path d="M16 6H3" /></svg>` — components/ui/icons.tsx:1640
+- `flex w-full items-center justify-between gap-2 py-2 text-sm select-none ⟨x⟩` — components/ui/toggle.tsx:21
+- `(max-width: ⟨x⟩px)` — hooks/use-mobile.ts:9
+
+## CLI命令示例(保留英文合理)(5 条)
+- `claude mcp add --transport http ⟨x⟩ --scope ⟨x⟩ ⟨x⟩ \\` — app/workspace/mcp-registry/views/mcpUsageGuide/commandBuilders.ts:24
+- `--header ${quoteShellValue(` — app/workspace/mcp-registry/views/mcpUsageGuide/commandBuilders.ts:25
+- `--header ${quoteShellValue(` — app/workspace/mcp-registry/views/mcpUsageGuide/commandBuilders.ts:31
+- `claude plugin marketplace add ⟨x⟩/skills/serve/claude-code/.claude-plugin/marketplace.json` — app/workspace/skills-repo/components/skillListView.tsx:73
+- `codex plugin marketplace add ⟨x⟩/skills/serve/codex` — app/workspace/skills-repo/components/skillListView.tsx:78
+
+## 已验证运行时正确(规则覆盖)(2 条)
+
+⚠️ **本节结论历史上出过错,已订正**:阶段A(方案v4 §4类别①c以④类模板字面量bypass报告为
+基础的首次分流)曾声称这2条"已验证运行时正确",但当时 RULES 数组里实际没有覆盖对应骨架
+的规则,该结论是未经复验的错误陈述。经独立代码复核指出后,已在阶段B补齐规则并用
+`parseZhLocale`+`makeTranslate` 对生产代码程序化验证通过(见方案v4实施记录阶段B):
+
+- `⟨x⟩ model budget⟨x⟩` — components/ui/providerConfigCard.tsx:186,326
+  规则:`{ re: /^(\d+) model budgets?$/, out: "$1 个模型预算" }`
+  验证:`translate("3 model budgets")` → `"3 个模型预算"` ✅(程序化验证,非猜测)
+
+## 真实文案候选(Finding,留待后续期次)(88 条)
+- `⟨x⟩ cannot be empty` — app/workspace/complexity-router/page.tsx:482
+- `Password must include ⟨x⟩.` — app/workspace/config/views/securityView.tsx:172
+- `Invalid origins: ⟨x⟩. Origins must be valid URLs like https://example.com, wildcard patterns like https://*.example.com, or "*" to allow all origins` — app/workspace/config/views/securityView.tsx:183
+- `Password must include ⟨x⟩.` — app/workspace/config/views/securityView.tsx:195
+- `⟨x⟩ resolved to unexpected unit ⟨x⟩` — app/workspace/custom-pricing/overrides/pricingFields.test.ts:79
+- `Unknown field: ⟨x⟩` — app/workspace/custom-pricing/overrides/pricingOverrideSheet.tsx:446
+- `⟨x⟩ must be a non-negative number` — app/workspace/custom-pricing/overrides/pricingOverrideSheet.tsx:450
+- `max-w-[140px] truncate text-zinc-600 dark:text-zinc-400⟨x⟩` — app/workspace/dashboard/components/modelRankingsTab.tsx:60
+- `${latencyAvg.toLocaleString("en-US", { maximumFractionDigits: 6 })}ms` — app/workspace/dashboard/components/overviewTab.tsx:436
+- `${throughputAvg.toLocaleString("en-US", { maximumFractionDigits: 2 })} tokens/sec` — app/workspace/dashboard/components/overviewTab.tsx:474
+- `${providerLatencyAvg.toLocaleString("en-US", { maximumFractionDigits: 6 })}ms` — app/workspace/dashboard/components/providerUsageTab.tsx:367
+- `${providerThroughputAvg.toLocaleString("en-US", { maximumFractionDigits: 2 })} tokens/sec` — app/workspace/dashboard/components/providerUsageTab.tsx:468
+- `⟨x⟩ Avg (ms)` — app/workspace/dashboard/utils/exportUtils.ts:95
+- `Budget #⟨x⟩ max limit must be greater than $0.01` — app/workspace/governance/views/teamSheet.tsx:201
+- `Budget #⟨x⟩ reset duration is required` — app/workspace/governance/views/teamSheet.tsx:202
+- `Show ⟨x⟩ more lines` — app/workspace/logs/sheets/logDetailView.tsx:566
+- `⟨x⟩ rounded-sm px-3 py-1` — app/workspace/logs/sheets/logDetailView.tsx:1066
+- `⟨x⟩ line⟨x⟩ · ~⟨x⟩ tokens` — app/workspace/logs/sheets/logDetailView.tsx:2010
+- `⟨x⟩ tool call⟨x⟩` — app/workspace/logs/sheets/logDetailView.tsx:2013
+- `⟨x⟩ tool call⟨x⟩` — app/workspace/logs/sheets/logDetailView.tsx:2085
+- `⟨x⟩ · ⟨x⟩ line⟨x⟩ · ~⟨x⟩ tokens` — app/workspace/logs/sheets/logDetailView.tsx:2231
+- `⟨x⟩ line⟨x⟩ · ~⟨x⟩ tokens` — app/workspace/logs/sheets/logDetailView.tsx:2232
+- `⟨x⟩ · ⟨x⟩ declarations · ⟨x⟩ callable tools` — app/workspace/logs/sheets/logDetailView.tsx:2242
+- `Tool Result: ⟨x⟩` — app/workspace/logs/views/columns.tsx:124
+- `Assistant Tool Call: ⟨x⟩` — app/workspace/logs/views/columns.tsx:126
+- `Large payload ⟨x⟩` — app/workspace/logs/views/columns.tsx:212
+- `Expand fallback chain (⟨x⟩ attempts)` — app/workspace/logs/views/columns.tsx:286
+- `Input image ⟨x⟩` — app/workspace/logs/views/imageView.tsx:100
+- `Stopped after ⟨x⟩ updated, ⟨x⟩ skipped` — app/workspace/logs/views/logsHeaderView.tsx:210
+- `⟨x⟩ updated, ⟨x⟩ skipped` — app/workspace/logs/views/logsHeaderView.tsx:216
+- `⟨x⟩/⟨x⟩ checked, ⟨x⟩ updated, ⟨x⟩ skipped` — app/workspace/logs/views/logsHeaderView.tsx:239
+- `⟨x⟩ checked, ⟨x⟩ updated, ⟨x⟩ skipped` — app/workspace/logs/views/logsHeaderView.tsx:240
+- `Failed to recalculate costs (⟨x⟩)` — app/workspace/logs/views/logsHeaderView.tsx:444
+- `⟨x⟩ MCP server installed.` — app/workspace/mcp-registry/library/views/mcpLibraryInstallSheet.tsx:366
+- `⟨x⟩ MCP server connected with OAuth.` — app/workspace/mcp-registry/library/views/mcpLibraryInstallSheet.tsx:891
+- `⟨x⟩ MCP server connected with per-user headers.` — app/workspace/mcp-registry/library/views/mcpLibraryInstallSheet.tsx:926
+- `Enable all tools (⟨x⟩)` — app/workspace/mcp-registry/views/mcpClientSheet.tsx:1307
+- `Auto-execute all tools (⟨x⟩)` — app/workspace/mcp-registry/views/mcpClientSheet.tsx:1364
+- `Client ⟨x⟩ reconnected successfully.` — app/workspace/mcp-registry/views/mcpClientsTable.tsx:339
+- `Client ⟨x⟩ removed successfully.` — app/workspace/mcp-registry/views/mcpClientsTable.tsx:457
+- `Server ⟨x⟩ successfully` — app/workspace/mcp-registry/views/mcpClientsTable.tsx:1069
+- `Update credentials for ⟨x⟩` — app/workspace/mcp-sessions/auth/page.tsx:303
+- `Submit credentials for ⟨x⟩` — app/workspace/mcp-sessions/auth/page.tsx:303
+- `The OAuth credential for ⟨x⟩ is already stored. You can close this tab.` — app/workspace/mcp-sessions/auth/page.tsx:395
+- `Overridden by "⟨x⟩"` — app/workspace/model-catalog/views/overriddenPrice.tsx:49
+- `Add new ⟨x⟩` — app/workspace/providers/dialogs/addNewKeySheet.tsx:22
+- `⟨x⟩ updated successfully` — app/workspace/providers/dialogs/addNewKeySheet.tsx:23
+- `⟨x⟩ added successfully` — app/workspace/providers/dialogs/addNewKeySheet.tsx:23
+- `We encountered an error while getting provider config: ⟨x⟩` — app/workspace/providers/page.tsx:99
+- `Re-checked every enabled ⟨x⟩ for ⟨x⟩.` — app/workspace/providers/views/modelProviderKeysTableView.tsx:124
+- `Refresh model list for this ⟨x⟩` — app/workspace/providers/views/modelProviderKeysTableView.tsx:407
+- `Enable this ⟨x⟩ to refresh its model list` — app/workspace/providers/views/modelProviderKeysTableView.tsx:408
+- `⟨x⟩ is required` — app/workspace/routing-rules/views/routingRuleSheet.tsx:222
+- `⟨x⟩: a file already exists at that path` — app/workspace/skills-repo/components/fileManagerView.tsx:756
+- `Versions for ⟨x⟩` — app/workspace/skills-repo/components/skillDetailsView.tsx:214
+- `Full path: ⟨x⟩` — app/workspace/skills-repo/forms/skillEditForm.tsx:623
+- `Full path: ⟨x⟩` — app/workspace/skills-repo/forms/skillEditForm.tsx:635
+- `· ⟨x⟩ cycles remaining` — app/workspace/virtual-keys/views/virtualKeyDetailsSheet.tsx:599
+- `This key expires ${formatDistanceToNow(new Date(value), { addSuffix: true })}.` — app/workspace/virtual-keys/views/virtualKeySheet.tsx:249
+- `⟨x⟩ ⟨x⟩ budget has ⟨x⟩ usage, which meets or exceeds the new ⟨x⟩ limit.` — app/workspace/virtual-keys/views/virtualKeySheet.tsx:723
+- `⟨x⟩ quarterly budget has ⟨x⟩ of usage. Changing the fiscal quarter moves the reset date and carries that spend into the new quarter.` — app/workspace/virtual-keys/views/virtualKeySheet.tsx:733
+- `⟨x⟩ ⟨x⟩ budget will inherit ⟨x⟩ from the ⟨x⟩ budget, which meets or exceeds the new ⟨x⟩ limit.` — app/workspace/virtual-keys/views/virtualKeySheet.tsx:756
+- `⟨x⟩ You can preserve usage anyway, or reset usage to 0.` — app/workspace/virtual-keys/views/virtualKeySheet.tsx:1927
+- `Header "⟨x⟩" must have a value` — app/workspace/webhooks/views/webhookSheet.tsx:156
+- `+⟨x⟩ override · effective ⟨x⟩` — components/budgetOverrideManagerDialog.tsx:134
+- `⟨x⟩ long-waiting and ⟨x⟩ stuck goroutines (background workers filtered)` — components/devProfiler.tsx:315
+- `⟨x⟩ long-waiting goroutines (background workers filtered)` — components/devProfiler.tsx:317
+- `⟨x⟩ stuck goroutines (background workers filtered)` — components/devProfiler.tsx:318
+- `No matching ⟨x⟩` — components/entitySelectors/entitySelector.tsx:266
+- `No ⟨x⟩ found` — components/entitySelectors/entitySelector.tsx:266
+- `Value for ⟨x⟩` — components/headersForm.tsx:169
+- `Notifications, ⟨x⟩ unread` — components/notificationCenter.tsx:66
+- `All ⟨x⟩ results ready` — components/prompts/components/messagesView/toolCallView.tsx:532
+- `⟨x⟩ of ⟨x⟩ results collected` — components/prompts/components/messagesView/toolCallView.tsx:533
+- `⟨x⟩ and ⟨x⟩ more` — components/prompts/context.tsx:745
+- `⟨x⟩. Successful results were kept; fill the rest manually.` — components/prompts/context.tsx:747
+- `Ignoring custom header "⟨x⟩" — reserved by the playground.` — components/prompts/utils/executor.ts:38
+- `h-4 w-4 transition-transform duration-200 group-data-[collapsible=icon]:hidden ⟨x⟩` — components/sidebar.tsx:279
+- `⟨x⟩ is now available.` — components/sidebar.tsx:1376
+- `Value cannot be less than ⟨x⟩` — components/ui/custom/number.tsx:86
+- `Value cannot be less than ⟨x⟩` — components/ui/custom/number.tsx:87
+- `Value cannot be greater than ⟨x⟩` — components/ui/custom/number.tsx:92
+- `Value cannot be greater than ⟨x⟩` — components/ui/custom/number.tsx:93
+- `Value cannot be empty, replaced with ⟨x⟩` — components/ui/custom/number.tsx:134
+- `Value cannot be empty, replaced with ⟨x⟩` — components/ui/custom/number.tsx:143
+- `MultiSelect: Duplicate option values ⟨x⟩: ⟨x⟩.` — components/ui/multiSelect.tsx:471
+- `MultiSelect: Option with value "⟨x⟩" not found in options list` — components/ui/multiSelect.tsx:486
+- `Must be in the format <host>:<port> for gRPC (e.g. ⟨x⟩)` — lib/types/schemas.ts:955
+
+---
+
+# 附录:channel①c 多行聚合修复后新增分流(独立代码复核触发,阶段B)
+
+> 与上文④类模板字面量的 bypass 报告是**独立的两条数据线**——上文针对模板字面量位置/上下文
+> 围栏排除,本节针对①类(JSX纯文本)跨行聚合修复后新暴露的 224 条候选(基线`aae659b`→`b1ebd61`)。
+> 详细技术分析见方案v4实施记录阶段B。
+
+## 真正完整(闭合标签终止,已批量入字典)(107 条)
+
+回源码精确判定:聚合终止于 `</...` 闭合标签,证明这是完整独立的 DOM 文本节点。全部107条
+已翻译入 `ui/lib/zhLocale.ts` 的"步骤4-补丁"区块。
+
+## 跨节点碎片(开标签/插值打断,方案§3既定非目标)(115 条)
+
+- 62 条被同行内联开标签打断(如 `Enabling calendar alignment will reset budget usage to <span>$0.00</span> and token/request` 这类"文本-元素-文本"混合段落,`<span>`前的片段单独翻译会导致中文语序错乱)
+- 53 条被 JSX `{expr}` 插值打断(如 `Are you sure you want to delete "{name}"?`)
+
+处置:保守策略,即使部分看似语义完整的短标题也不做主观完整性判断(无浏览器可视化核验条件),
+统一记入白名单(理由标签 `[跨节点碎片-方案非目标]`),留待后续期次视需要人工核实处理。
+完整清单见 `ui/scripts/zh-coverage-whitelist.txt` 中该标签段。
