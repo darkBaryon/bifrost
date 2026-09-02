@@ -18,7 +18,7 @@
 | [UI完整中文化 期1 验收记录](../cases/UI完整中文化/期1/验收记录.md) | 验收记录 | UI完整中文化 |  | 2026-09-02 |
 | [workbench外壳重设计 期1 方案 v1](../cases/workbench外壳重设计/期1/方案v1.md) | 方案 | workbench外壳重设计 | 需修改 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案 v2](../cases/workbench外壳重设计/期1/方案v2.md) | 方案 | workbench外壳重设计 | 需修改 | 2026-09-02 |
-| [workbench外壳重设计 期1 方案 v3](../cases/workbench外壳重设计/期1/方案v3.md) | 方案 | workbench外壳重设计 | 已通过 | 2026-09-02 |
+| [workbench外壳重设计 期1 方案 v3](../cases/workbench外壳重设计/期1/方案v3.md) | 方案 | workbench外壳重设计 | 已实施 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案评审](../cases/workbench外壳重设计/期1/方案评审1.md) | 方案评审 | workbench外壳重设计 | 需修改 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案评审](../cases/workbench外壳重设计/期1/方案评审2.md) | 方案评审 | workbench外壳重设计 | 需修改 | 2026-09-02 |
 | [workbench外壳重设计 期1 方案评审](../cases/workbench外壳重设计/期1/方案评审3.md) | 方案评审 | workbench外壳重设计 | 通过 | 2026-09-02 |
