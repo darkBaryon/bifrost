@@ -18,6 +18,12 @@
 | [workbench外壳重设计 期1 方案 v2](cases/workbench外壳重设计/期1/方案v2.md) | 方案 | 需修改 |
 | [workbench外壳重设计 期1 方案 v3](cases/workbench外壳重设计/期1/方案v3.md) | 方案 | 已通过 |
 
+## zh中文化层TS-mjs孪生收敛
+
+| 文档 | 类型 | 状态 |
+|---|---|---|
+| [zh 中文化层 TS/mjs 孪生实现收敛](reports/zh中文化层TS-mjs孪生收敛.md) | 需求 | 观察中 |
+
 ---
 
 怎么读：过程文档主页（`cases/<case>/index.md`）给出阅读顺序；全景与索引见左侧「工作台」。

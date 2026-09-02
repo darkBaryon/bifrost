@@ -6,6 +6,7 @@
 - 需求
     - [UI 完整中文化](reports/UI完整中文化.md)
     - [workbench 外壳重设计](reports/workbench外壳重设计.md)
+    - [zh 中文化层 TS/mjs 孪生实现收敛](reports/zh中文化层TS-mjs孪生收敛.md)
 - 过程文档
     - UI完整中文化
         - [主页](cases/UI完整中文化/index.md)
