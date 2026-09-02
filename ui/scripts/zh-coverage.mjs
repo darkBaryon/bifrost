@@ -20,6 +20,9 @@ const CANARY = "XQ7#鑫W9-zk";
 const PROPS = ["placeholder", "title", "label", "description", "aria-label", "tooltip"];
 // ⑤ 对象属性位可扫键(阶段C 盲区A):与 PROPS 同名但语法位不同(冒号 vs 等号),aria-label 不作对象键
 const OBJ_KEYS = ["placeholder", "title", "label", "description", "tooltip", "message", "required", "required_error", "invalid_type_error"];
+// ⑤/② 语义后缀键(验收抽查盲区):copySuccessMessage/clientSecretHelperText/buttonText/emptyMessage…
+// 任意前缀 + 语义后缀的 camelCase 键,值侧须大写开头+含小写(同⑦守卫),压制技术值误报。
+const KEY_SUFFIX = "[A-Za-z_]\\w*(?:Label|Title|Description|Tooltip|Placeholder|Message|Text)";
 const ZOD_MESSAGE_METHODS = ["min", "max", "length", "email", "url", "uuid", "regex", "nonempty"];
 
 // ───────────────────────── 归一化(F4: 嵌套花括号朴素切割,错切进清单=响的失败) ─────────────────────────
@@ -169,6 +172,10 @@ export function extractFromSource(src, file) {
         if (/[A-Za-z]{2}/.test(m[1])) found.push({ text: decodeEnt(m[1]), loc, cat: 2 });
       }
     }
+    // ②b 语义后缀 prop(验收抽查盲区):`emptyMessage="No active virtual keys found."`。守卫同⑤c。
+    for (const m of line.matchAll(new RegExp(`\\b${KEY_SUFFIX}\\s*=\\s*(?:\\{\\s*)?"([A-Z][^"]*)"`, "g"))) {
+      if (/[a-z]/.test(m[1]) && /[A-Za-z]{2}/.test(m[1])) found.push({ text: decodeEnt(m[1]), loc, cat: 2 });
+    }
     // ③ toast 字符串字面量
     for (const m of line.matchAll(/toast(?:\.\w+)?\(\s*"([^"]+)"/g)) {
       found.push({ text: m[1], loc, cat: 3 });
@@ -177,6 +184,10 @@ export function extractFromSource(src, file) {
     // 通道②只认 JSX 等号位;对象字面量冒号位此前不可见。抽样 18/18 全为真实 UI 文案(巡检证据)。
     for (const m of line.matchAll(new RegExp(`(?:^\\s*|[{,(]\\s*)(?:${OBJ_KEYS.join("|")})\\s*:\\s*(["'])((?:\\\\.|(?!\\1).)*)\\1`, "g"))) {
       if (/[A-Za-z]{2}/.test(m[2])) found.push({ text: decodeEnt(m[2]), loc, cat: 5 });
+    }
+    // ⑤c 语义后缀键(验收抽查盲区):`copySuccessMessage: "Config copied"`。守卫:大写开头+含小写。
+    for (const m of line.matchAll(new RegExp(`(?:^\\s*|[{,(]\\s*)${KEY_SUFFIX}\\s*:\\s*(["'])([A-Z](?:\\\\.|(?!\\1).)*)\\1`, "g"))) {
+      if (/[a-z]/.test(m[2]) && /[A-Za-z]{2}/.test(m[2])) found.push({ text: decodeEnt(m[2]), loc, cat: 5 });
     }
     // ⑤b Zod 校验方法参数(代码评审3 阻断修复):`z.string().min(1, "Name is required")`。
     // 只覆盖 Zod 风格校验方法,避免把普通字符串方法 `.startsWith("http")` 当 UI 文案。
@@ -381,6 +392,10 @@ function selfTest() {
   ok(fx(`{ message: "Name is required" }`).found.some((f) => f.text === "Name is required" && f.cat === 5), "⑤校验 message 对象键");
   ok(fx(`rules={{ required: "Folder name is required" }}`).found.some((f) => f.text === "Folder name is required" && f.cat === 5), "⑤表单 required 对象键");
   ok(!fx(`titleX: "Not a prop"`).found.some((f) => f.cat === 5), "⑤键名全词匹配(titleX 不触发)");
+  ok(fx(`copySuccessMessage: "Config copied",`).found.some((f) => f.text === "Config copied" && f.cat === 5), "⑤c 语义后缀对象键(验收抽查盲区)");
+  ok(!fx(`buttonText: "primary"`).found.some((f) => f.cat === 5), "⑤c 小写开头技术值不触发");
+  ok(fx(`<Select emptyMessage="No active keys found." />`).found.some((f) => f.text === "No active keys found." && f.cat === 2), "②b 语义后缀 prop");
+  ok(!fx(`<input sortText="01" />`).found.some((f) => f.cat === 2), "②b 无字母值不触发");
   ok(fx(`name: z.string().min(1, "Name is required")`).found.some((f) => f.text === "Name is required" && f.cat === 5), "⑤b Zod 方法消息参数");
   ok(fx(`\t.min(1, "Name is required")`).found.some((f) => f.text === "Name is required" && f.cat === 5), "⑤b 多行链式 Zod 方法消息参数");
   ok(fx(`endpoint: z.string().refine((v) => v.trim() === "" || v.includes("."), "Enter the endpoint DNS name")`).found.some((f) => f.text === "Enter the endpoint DNS name" && f.cat === 5), "⑤b Zod refine 第二参数消息");

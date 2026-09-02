@@ -523,3 +523,8 @@ vpce-0abc123-x1y2z3.bedrock-mantle.us-east-1.vpce.amazonaws.com # [技术串/示
 vpce-0abc123-x1y2z3.bedrock-agent-runtime.us-east-1.vpce.amazonaws.com # [技术串/示例值]
 bucket.vpce-0abc123-x1y2z3.s3.us-east-1.vpce.amazonaws.com # [技术串/示例值]
 /images/new-release-image.webp # [技术串-资源路径]
+
+# ── 阶段D 验收抽查分流(2026-09-02,语义后缀键盲区) ──
+Client ID # [技术标识-OAuth 字段名]
+Client Secret # [技术标识-OAuth 字段名]
+Audience # [技术标识-OAuth 字段名]
