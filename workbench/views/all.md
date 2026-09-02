@@ -31,3 +31,4 @@
 | [workbench外壳重设计 期2 验收记录](../cases/workbench外壳重设计/期2/验收记录.md) | 验收记录 | workbench外壳重设计 |  | 2026-09-02 |
 | [workbench 外壳重设计](../reports/workbench外壳重设计.md) | 需求 | workbench外壳重设计 | 已交付 | 2026-09-02 |
 | [zh 中文化层 TS/mjs 孪生实现收敛](../reports/zh中文化层TS-mjs孪生收敛.md) | 需求 | zh中文化层TS-mjs孪生收敛 | 观察中 | 2026-09-02 |
+| [活跃工作台不再显示被取代的旧方案版本](../reports/活跃工作台取代版本过滤.md) | 需求 | 活跃工作台取代版本过滤 | 已交付 | 2026-09-02 |

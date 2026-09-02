@@ -121,6 +121,21 @@ def is_active(d):
     return d.get("status") not in TERMINAL
 
 
+def is_superseded(d, docs):
+    """同 case 同期存在更高版本的方案/蓝图 = 已被取代。
+    评审判「需修改」后旧版 status 冻结不动（记历史事实），若视图只看 status，
+    每份旧版会永远挂在活跃工作台——活跃性须由版本关系推导，frontmatter 不动。"""
+    if d["type"] == "方案":
+        v = d.get("version") or 0
+        return any(x["type"] == "方案" and x.get("case") == d.get("case")
+                   and x.get("phase") == d.get("phase") and (x.get("version") or 0) > v
+                   for x in docs)
+    if d["type"] == "开发蓝图":
+        return any(x["type"] == "开发蓝图" and x.get("case") == d.get("case")
+                   and blueprint_version(x) > blueprint_version(d) for x in docs)
+    return False
+
+
 def href(d, base):
     return posixpath.relpath(d["_path"], base or ".")
 
@@ -207,7 +222,7 @@ def group_cases(docs):
 
 def render_index(docs, base):
     lines = [MARK, "# 活跃工作台", ""]
-    active = [d for d in docs if is_active(d)]
+    active = [d for d in docs if is_active(d) and not is_superseded(d, docs)]
     if not active:
         lines += ["当前无活跃文档。从 `templates/需求.md` 立第一个需求开始。", ""]
     by_case = {}
@@ -220,7 +235,7 @@ def render_index(docs, base):
         lines.append("")
     lines += ["---", "",
               "怎么读：过程文档主页（`cases/<case>/index.md`）给出阅读顺序；"
-              "全景与索引见左侧「工作台」。"]
+              "全量索引与需求报告见左侧「工作台」;被新版本取代的旧方案不在此列。"]
     return "\n".join(lines) + "\n"
 
 

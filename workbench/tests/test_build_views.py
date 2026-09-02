@@ -84,3 +84,25 @@ def test_timeline_convergence_after_code_review_before_acceptance():
     ]
     order = [d["type"] for d in phase_flat(docs)]
     assert order == ["方案", "代码评审", "收敛评审", "验收记录"]
+
+
+def test_superseded_plan_versions_absent_from_index():
+    # 需修改的旧版被 v+1 取代后不得再挂活跃工作台(活跃工作台取代版本过滤)
+    from workbench.tools.build_views import is_superseded
+    v1 = _doc(title="示例 期1 方案 v1", version=1, status="需修改",
+              relates=["示例"], _path="cases/示例/期1/方案v1.md")
+    v2 = _doc(title="示例 期1 方案 v2", version=2, status="待评审",
+              relates=["示例"], _path="cases/示例/期1/方案v2.md")
+    docs = [v1, v2]
+    assert is_superseded(v1, docs) and not is_superseded(v2, docs)
+    page = render_index(docs, "")
+    assert "方案v1.md" not in page and "方案v2.md" in page
+    # 不同期不互相取代;蓝图同理按版本取代
+    other = _doc(version=9, phase=2, status="待评审", relates=["示例"],
+                 _path="cases/示例/期2/方案v9.md")
+    assert not is_superseded(v2, docs + [other])
+    b1 = _doc(title="示例 开发蓝图 v1", type="开发蓝图", status="需修改",
+              relates=["示例"], _path="cases/示例/开发蓝图.md")
+    b2 = _doc(title="示例 开发蓝图 v2", type="开发蓝图", status="待评审",
+              relates=["示例"], _path="cases/示例/开发蓝图v2.md")
+    assert is_superseded(b1, [b1, b2]) and not is_superseded(b2, [b1, b2])
