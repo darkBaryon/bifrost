@@ -1,6 +1,6 @@
 # Finding 台账
 
-手维护(非生成)。条目要件与生命周期见 [规范/change/findings.md](规范/change/findings.md):`观察中 → 已确认 → 已转Case / 已接受`;每次被再次观察到,追加 `triggered_by`。**台账即触发器**——攒到碍眼时由用户打包转 REF Case,不设定期巡检。
+手维护(非生成)。条目要件与生命周期见 [规范/机制/finding台账.md](规范/机制/finding台账.md):`观察中 → 已确认 → 已转Case / 已接受`;每次被再次观察到,追加 `triggered_by`。**台账即触发器**——攒到碍眼时由用户打包转 REF Case,不设定期巡检。
 
 ---
 
@@ -78,10 +78,10 @@ convert_when: "REF 需求『zh中文化层TS-mjs孪生收敛』落地即消(见 
 
 ```yaml
 id: FIND-010
-status: 观察中
+status: 已转Case
 triggered_by: [workbench外壳重设计]
-evidence: "执行序以同等粒度写在 AGENTS.md 流程锚点与 规范.md 单线图两处,出生即分叉一处(/convergence-review skill 仅 规范.md 提及);流程变更须两处手改,漂移无护栏;来源:workbench外壳重设计 期1 收敛评审1 挂账1"
-convert_when: "下次流程锚点变更时一并收敛:AGENTS 为正典,规范.md 降为链接或粗粒度示意(±15 行);或用户裁定刻意双写则转豁免"
+evidence: "执行序以同等粒度写在 AGENTS.md 流程锚点与 规范.md 单线图两处,出生即分叉一处;来源:workbench外壳重设计 期1 收敛评审1 挂账1"
+convert_when: "已关账(2026-09-02,本 case 期2 页面重排):执行序唯一权威收敛至 规范/流程.md,AGENTS 锚点降为本仓落地信号,规范.md 主页只留页面地图"
 ```
 
 ```yaml

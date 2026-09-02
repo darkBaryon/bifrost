@@ -1,8 +1,8 @@
 # Finding 台账
 
-[← 返回 Change 模型](README.md)
+[← 返回规范主页](../../规范.md) · [流程](../流程.md)
 
-Finding 记录**看到了、但现在不修**的结构问题——防止"看到了结构问题，不修，之后就忘了"。它是[收敛评审](convergence-review.md)的记忆，也是技术债的聚合视图。
+Finding 记录**看到了、但现在不修**的结构问题——防止"看到了结构问题，不修，之后就忘了"。它是[收敛评审](收敛评审.md)的记忆，也是技术债的聚合视图。
 
 ## 来源
 
@@ -15,8 +15,8 @@ Finding 记录**看到了、但现在不修**的结构问题——防止"看到�
 ```yaml
 id: FIND-021
 status: 观察中            # 观察中 → 已确认 → 已转Case / 已接受
-triggered_by: [CHG-014, CHG-017]   # 每次被再次观察到，追加一条
-evidence: "detail_page.dart 连续 3 个 Change 被改，职责持续增长（CHG-009/014/017 各 +1 个分支）"
+triggered_by: [账号搜索, 导出重构]   # 每次被再次观察到，追加一条
+evidence: "detail_page.dart 连续 3 个 Change 被改，职责持续增长（三个 Change 各 +1 个分支）"
 convert_when: "再有 Change 需要改动该文件的解析逻辑时，先转 REF 处理"
 ```
 

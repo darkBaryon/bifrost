@@ -33,7 +33,7 @@
 | `方案` | `case`, `phase`, `version`, `relates` | `草拟中 → 待评审 → 需修改 → 已通过 → 已实施 → 已归档` |
 | `方案评审` | `case`, `phase`, `round` | 无状态机，必填 `verdict`（通过/需修改/驳回） |
 | `代码评审` | `case`, `phase`, `round` | 同上 |
-| `收敛评审` | `case`, `phase`, `round` | 无状态机，必填 `verdict`（无碍/仅立债挂账/有Blocking）——三态出口见 规范/change/convergence-review.md；L1 不建单独文档 |
+| `收敛评审` | `case`, `phase`, `round` | 无状态机，必填 `verdict`（无碍/仅立债挂账/有Blocking）——三态出口见 规范/机制/收敛评审.md；L1 不建单独文档 |
 | `验收记录` | `case`, `phase` | 无状态机 |
 
 - `relates`：列表，元素为需求 `id`；蓝图/方案必填，评审/验收可省（沿用所属方案的关联）。
@@ -43,7 +43,7 @@
 
 ## 风险分级（tier ↔ Change 级别）
 
-**case 名即账本主键**——本仓不设 CHG/REF 编号,一个需求 + 同名过程文档目录就是一个 Change 的完整账本;跨 Change 血缘用需求的 `triggered_by` 表达。tier 与 规范/change/risk-levels-and-gates.md 的级别对应:
+**case 名即账本主键**——本仓不设 CHG/REF 编号,一个需求 + 同名过程文档目录就是一个 Change 的完整账本;跨 Change 血缘用需求的 `triggered_by` 表达。tier 与 规范/风险分级.md 的级别对应:
 
 | tier | Change 级别 | 必需产物增量 |
 |---|---|---|

@@ -1,0 +1,18 @@
+# workbench外壳重设计 期2 —— 方案v1 §4 同源
+# 用法: python3 tools/preflight.py --config cases/workbench外壳重设计/期2/checklist.yaml --repo ..
+
+必过命令:
+  - { name: views-check, run: "cd workbench && python3 tools/build_views.py --check" }
+  - { name: shell-tests, run: "PYTHONPATH=. python3 -m pytest workbench/tests -q" }
+  - { name: site-build, run: "cd workbench && python3 tools/build_site.py" }
+  - { name: old-suites-gone, run: "test ! -e workbench/规范/change -a ! -e workbench/规范/development -a ! -e workbench/规范/refactoring -a ! -e workbench/规范/testing -a ! -e workbench/规范/本仓操作规范.md" }
+  - { name: new-tree-complete, run: "test -e workbench/规范/流程.md -a -e workbench/规范/风险分级.md -a -e workbench/规范/机制/方案与复核.md -a -e workbench/规范/机制/实施纪律.md -a -e workbench/规范/机制/交付.md -a -e workbench/规范/机制/收敛评审.md -a -e workbench/规范/机制/finding台账.md -a -e workbench/规范/差异/开发.md -a -e workbench/规范/差异/重构.md -a -e workbench/规范/差异/测试.md" }
+  - { name: no-dead-links, run: "! grep -rov 'cases/\\|evidence/' workbench/site --include='*.html' | grep -q 'href=\"[^\"]*规范/\\(change\\|development\\|refactoring\\|testing\\|本仓操作规范\\)'" }
+
+必存产物:
+  - workbench/规范/流程.md
+  - workbench/findings.md
+
+必含符号:
+  - { grep: "执行序唯一权威", in: "workbench/AGENTS.md" }
+  - { grep: "本地演化", in: "workbench/ADOPTION.md" }

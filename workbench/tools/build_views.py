@@ -33,7 +33,7 @@ TYPES = {"需求", "开发蓝图", "方案", "方案评审", "代码评审", "�
 TIERS = {"蓝图级", "标准级", "轻量级"}
 REQUEST_STATUS = {"观察中", "待计划", "开发中", "已交付", "已作废"}
 PLAN_STATUS = {"草拟中", "待评审", "需修改", "已通过", "已实施", "已归档"}
-# verdict 按 type 分枚举（收敛评审的三态出口见 规范/change/convergence-review.md）
+# verdict 按 type 分枚举（收敛评审的三态出口见 规范/机制/收敛评审.md）
 VERDICTS = {
     "方案评审": {"通过", "需修改", "驳回"},
     "代码评审": {"通过", "需修改", "驳回"},
@@ -324,13 +324,16 @@ def nav_model(docs, cases):
     if case_nodes:
         model.append(sec("过程文档", case_nodes))
     model.append(sec("规范", [page("规范主页", "规范.md"),
-                              page("Change 模型", "规范/change/README.md"),
-                              page("风险分级与 Gate", "规范/change/risk-levels-and-gates.md"),
-                              page("收敛评审", "规范/change/convergence-review.md"),
-                              page("Finding 台账", "规范/change/findings.md"),
-                              page("开发规范", "规范/development/README.md"),
-                              page("重构规范", "规范/refactoring/README.md"),
-                              page("测试规范", "规范/testing/README.md"),
+                              page("流程", "规范/流程.md"),
+                              page("风险分级", "规范/风险分级.md"),
+                              page("机制·方案与复核", "规范/机制/方案与复核.md"),
+                              page("机制·实施纪律", "规范/机制/实施纪律.md"),
+                              page("机制·交付", "规范/机制/交付.md"),
+                              page("机制·收敛评审", "规范/机制/收敛评审.md"),
+                              page("机制·finding台账", "规范/机制/finding台账.md"),
+                              page("差异·开发", "规范/差异/开发.md"),
+                              page("差异·重构", "规范/差异/重构.md"),
+                              page("差异·测试", "规范/差异/测试.md"),
                               page("操作约定", "AGENTS.md"),
                               page("Finding 台账(本仓)", "findings.md"),
                               page("Schema", "SCHEMA.md")]))

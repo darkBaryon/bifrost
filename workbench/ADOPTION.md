@@ -1,5 +1,7 @@
 # Workbench 采纳记录
 
+> **2026-09-02 起规范内核脱钩上游,本地演化**(用户裁决,workbench外壳重设计 期2):engineering-playbook 是用户自己的历史中间态仓库,本仓 `规范/` 不再是其只读副本——页面布局与内容以本仓为准,自由迭代,不再 re-vendor。下表仅作血缘记录保留。
+
 本工作台 = **playbook 规范内核 + xhs-recon 工具外壳**。血缘:xhs-recon 的 workbench 是流程实践的中间产物,后被提炼升级为 engineering-playbook(更完整:Change 模型/风险 Gate/收敛评审/Finding/重构与测试规范);工具外壳(frontmatter 状态机/视图生成/预飞/本地站点)仍以 xhs-recon 版本为源。
 
 | 部件 | 来源 | 版本 |
