@@ -14,8 +14,12 @@ const UI_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const SCAN_DIRS = ["app", "components", "hooks", "lib"];
 const ZH_LOCALE = join(UI_ROOT, "lib", "zhLocale.ts");
 const WHITELIST = join(UI_ROOT, "scripts", "zh-coverage-whitelist.txt");
+const TOPBAR_UTILS = join(UI_ROOT, "components", "topbar.utils.ts");
 const CANARY = "XQ7#鑫W9-zk";
 const PROPS = ["placeholder", "title", "label", "description", "aria-label", "tooltip"];
+// ⑤ 对象属性位可扫键(阶段C 盲区A):与 PROPS 同名但语法位不同(冒号 vs 等号),aria-label 不作对象键
+const OBJ_KEYS = ["placeholder", "title", "label", "description", "tooltip", "message", "required", "required_error", "invalid_type_error"];
+const ZOD_MESSAGE_METHODS = ["min", "max", "length", "email", "url", "uuid", "regex", "nonempty"];
 
 // ───────────────────────── 归一化(F4: 嵌套花括号朴素切割,错切进清单=响的失败) ─────────────────────────
 export function normalize(tpl) {
@@ -127,6 +131,15 @@ export function extractFromSource(src, file) {
       if (/^\(\w+:/.test(t) || /^extends /.test(t)) continue; // TS 类型标注碎片
       found.push({ text: decodeEnt(t), loc, cat: 1 });
     }
+    // ①d 自闭合标签后的行尾文本(阶段C 盲区C):`<Icon /> Add Profile` 行尾无 `<` 终止,
+    // ①永远不触发。锚定 `/>`(裸 `>text$` 形态实测全仓 0 命中,且会撞箭头函数/泛型,不做)。
+    {
+      const m = line.match(/\/>\s+([A-Za-z][^<>{}`]*)$/);
+      if (m) {
+        const t = m[1].trim();
+        if (/[A-Za-z]{2}/.test(t)) found.push({ text: decodeEnt(t), loc, cat: 1 });
+      }
+    }
     // ①c JSX 独立文本 children,按 JSX 空白折叠规则跨行聚合(修复:原①b只取紧邻单行,
     // 漏掉"多行纯文本、最终被闭合标签终止"这一常见写法,截断后的 key 永远命中不上
     // 真实 DOM 完整文本节点)。起点:上一行以 '>' 收尾;逐行累积直到遇到含 <{` 的行
@@ -157,6 +170,41 @@ export function extractFromSource(src, file) {
     for (const m of line.matchAll(/toast(?:\.\w+)?\(\s*"([^"]+)"/g)) {
       found.push({ text: m[1], loc, cat: 3 });
     }
+    // ⑤ 对象属性位字符串(阶段C 盲区A):`title: "User Success Rate"`。
+    // 通道②只认 JSX 等号位;对象字面量冒号位此前不可见。抽样 18/18 全为真实 UI 文案(巡检证据)。
+    for (const m of line.matchAll(new RegExp(`(?:^\\s*|[{,(]\\s*)(?:${OBJ_KEYS.join("|")})\\s*:\\s*(["'])((?:\\\\.|(?!\\1).)*)\\1`, "g"))) {
+      if (/[A-Za-z]{2}/.test(m[2])) found.push({ text: decodeEnt(m[2]), loc, cat: 5 });
+    }
+    // ⑤b Zod 校验方法参数(代码评审3 阻断修复):`z.string().min(1, "Name is required")`。
+    // 只覆盖 Zod 风格校验方法,避免把普通字符串方法 `.startsWith("http")` 当 UI 文案。
+    for (const m of line.matchAll(new RegExp(`\\.(?:${ZOD_MESSAGE_METHODS.join("|")})\\([^\\n]*?(["'])((?:\\\\.|(?!\\1).)*[A-Za-z]{2}(?:\\\\.|(?!\\1).)*)\\1`, "g"))) {
+      if (/\bMath\s*$/.test(line.slice(0, m.index))) continue;
+      found.push({ text: decodeEnt(m[2]), loc, cat: 5 });
+    }
+    for (const m of line.matchAll(/\.refine\([^,]+,\s*(["'])((?:\\.|(?!\1).)*[A-Za-z]{2}(?:\\.|(?!\1).)*)\1/g)) {
+      found.push({ text: decodeEnt(m[2]), loc, cat: 5 });
+    }
+    // ⑥ 路由映射表值(阶段C 盲区B):`"/workspace/x": "Title"`。键以 / 开头限定为路径映射,避免泛化误报。
+    for (const m of line.matchAll(/"\/[^"]+"\s*:\s*"([^"]+)"/g)) {
+      if (/[A-Za-z]{2}/.test(m[1])) found.push({ text: decodeEnt(m[1]), loc, cat: 6 });
+    }
+    // ⑦ 三元字符串对(阶段C 盲区:表达式位字面量):`cond ? "Saving..." : "Save Changes"`。
+    // 两分支均须「大写开头且含小写」——排除 "POST"/"GET" 类全大写技术值;全仓 172 处肉眼抽样全真。
+    for (const m of line.matchAll(/\?\s*(["'])([A-Z](?:\\.|(?!\1).)*)\1\s*:\s*(["'])([A-Z](?:\\.|(?!\3).)*)\3/g)) {
+      for (const t of [m[2], m[4]]) {
+        if (/[a-z]/.test(t) && /[A-Za-z]{2}/.test(t)) found.push({ text: decodeEnt(t), loc, cat: 7 });
+      }
+    }
+    // ⑦b 跨行三元(复巡检发现的残余盲区):prettier 会把长三元折成
+    // `cond\n\t? "Long branch A..."\n\t: "Long branch B..."`,⑦的同行正则永不触发。
+    // 行尾 `? "…"` 与行首 `: "…"` 各自独立提取,守卫同⑦(大写开头+含小写)。
+    {
+      const tail = line.match(/\?\s*(["'])([A-Z](?:\\.|(?!\1).)*)\1\s*$/);
+      const head = line.match(/^\s*:\s*(["'])([A-Z](?:\\.|(?!\1).)*)\1/);
+      for (const m of [tail, head]) {
+        if (m && /[a-z]/.test(m[2]) && /[A-Za-z]{2}/.test(m[2])) found.push({ text: decodeEnt(m[2]), loc, cat: 7 });
+      }
+    }
     // ④ 模板字面量(四通道位置围栏 + 语法位上下文围栏 + 形态围栏)
     for (const m of line.matchAll(/`([^`]*\$\{[^`]*)`/g)) {
       const skeleton = normalize(m[1]);
@@ -166,7 +214,8 @@ export function extractFromSource(src, file) {
         />\s*\{\s*$/.test(before) || />\s*\{\s*[^{}]*$/.test(before) === false && />\s*\{/.test(before) // children 表达式(保守)
         || new RegExp(`(?:${PROPS.join("|")})\\s*=\\s*\\{\\s*$`).test(before)
         || /(?:toast(?:\.\w+)?|announce)\(\s*$/.test(before)
-        || /(?:=|return)\s*(?:\[?\s*)?$/.test(before); // 第四通道:赋值/return 位(评审3-F1)
+        || /(?:=|return)\s*(?:\[?\s*)?$/.test(before) // 第四通道:赋值/return 位(评审3-F1)
+        || /\w+\s*:\s*$/.test(before); // 第五通道(阶段C 盲区#5):对象属性位 `title: \`${x} ...\``
       if (!passesFormFence(skeleton)) { excluded.form++; continue; }
       if (ctxExcluded) { excluded.context++; bypass.push({ skeleton, loc, why: "上下文围栏" }); continue; }
       if (!positional) { excluded.position++; bypass.push({ skeleton, loc, why: "位置围栏" }); continue; }
@@ -180,10 +229,51 @@ export function extractFromSource(src, file) {
 function* walkFiles(dir) {
   for (const name of readdirSync(dir)) {
     const p = join(dir, name);
-    if (name === "_fallbacks" || name === "node_modules") continue;
+    // 阶段C 盲区D:_fallbacks 不再排除——其组件在社区版真实渲染(集群配置页实证)。
+    // .test./.spec. 排除:测试字符串永不面向用户。
+    if (name === "node_modules") continue;
     const st = statSync(p);
     if (st.isDirectory()) yield* walkFiles(p);
-    else if (/\.tsx?$/.test(name) && !/\.gen\.ts$/.test(name) && name !== "zhLocale.ts") yield p;
+    else if (/\.tsx?$/.test(name) && !/\.gen\.ts$/.test(name) && !/\.(test|spec)\.tsx?$/.test(name) && name !== "zhLocale.ts") yield p;
+  }
+}
+
+// ───────────────────────── ⑧ slug 合成标题(阶段C 盲区E) ─────────────────────────
+// topbar 的 deriveTitleFromPathname 会把无 override 的路由段在运行时合成英文标题
+// ("skills-repo" → "Skills Repo"),源码中不存在该字符串,静态扫描原理性不可见。
+// 对策:枚举 app/workspace 全部 page.tsx 路由,按同一算法在扫描期预合成,纳入候选。
+// titleAcronyms/routeTitleOverrides 从 topbar.utils.ts 解析(非硬编码,防漂移),解析失败即抛错(响的失败)。
+export function parseTopbarMaps(src) {
+  const grab = (name) => {
+    const m = src.match(new RegExp(`const ${name}[^=]*=\\s*\\{([\\s\\S]*?)\\n\\};`));
+    if (!m) throw new Error(`对账失败: topbar.utils.ts 未找到 ${name} 块`);
+    const map = new Map();
+    for (const line of m[1].split("\n")) {
+      const kv = line.match(/^\s*(?:"([^"]+)"|(\w+)):\s*"([^"]+)",?\s*$/);
+      if (kv) map.set(kv[1] ?? kv[2], kv[3]);
+    }
+    return map;
+  };
+  return { acronyms: grab("titleAcronyms"), overrides: grab("routeTitleOverrides") };
+}
+export function deriveSlugTitle(route, acronyms, overrides) {
+  if (overrides.has(route)) return null; // override 值由通道⑥负责
+  const seg = route.split("/").filter(Boolean).at(-1) ?? "dashboard";
+  return seg.split("-").map((p) => acronyms.get(p.toLowerCase()) ?? p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+}
+function* slugTitleCandidates() {
+  const { acronyms, overrides } = parseTopbarMaps(readFileSync(TOPBAR_UTILS, "utf8"));
+  const routes = new Set();
+  (function walk(dir, route) {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p, `${route}/${name}`);
+      else if (name === "page.tsx" && !route.includes("[")) routes.add(route); // 动态段标题含参数值,不可静态预判
+    }
+  })(join(UI_ROOT, "app", "workspace"), "/workspace");
+  for (const route of [...routes].sort()) {
+    const title = deriveSlugTitle(route, acronyms, overrides);
+    if (title && /[A-Za-z]{2}/.test(title)) yield { text: title, loc: `slug:${route}`, cat: 8 };
   }
 }
 
@@ -206,6 +296,12 @@ function scan() {
         e.n++; miss.set(it.text, e);
       }
     }
+  }
+  // ⑧ slug 合成标题:不来自任何源文件行,单独并入
+  for (const it of slugTitleCandidates()) {
+    if (translate(it.text) !== null || inWhitelist(wl, it.text)) continue;
+    const e = miss.get(it.text) ?? { n: 0, first: it.loc, cat: it.cat };
+    e.n++; miss.set(it.text, e);
   }
   return { miss, allBypass, totals };
 }
@@ -266,6 +362,39 @@ function selfTest() {
   }
   let threw = false; try { parseWhitelist("/.*/"); } catch { threw = true; } ok(threw, "白名单金丝雀拒绝 /.*/");
   ok(parseWhitelist("Issue \\#1 tracker").literals.has("Issue #1 tracker"), "白名单 \\# 转义");
+
+  // ── 阶段C 新通道(盲区修复,每通道正例+守卫负例) ──
+  ok(fx(`<Plus className="size-4" /> Add Profile`).found.some((f) => f.text === "Add Profile" && f.cat === 1), "①d 自闭合标签后行尾文本");
+  ok(fx(`<PencilIcon className="h-4 w-4" /> Edit`).found.some((f) => f.text === "Edit"), "①d 单词也提取(Edit/Delete 实例)");
+  ok(!fx("const f = (x) => x").found.length, "①d 箭头函数不误触(锚定 /> 而非裸 >)");
+  ok(fx(`\t\t\t\ttitle: "User Success Rate",`).found.some((f) => f.text === "User Success Rate" && f.cat === 5), "⑤对象属性位字符串(盲区A)");
+  ok(fx(`{ label: "Beta Headers", value: 1 }`).found.some((f) => f.text === "Beta Headers" && f.cat === 5), "⑤行中对象键({ 前缀)");
+  ok(fx(`{ message: "Name is required" }`).found.some((f) => f.text === "Name is required" && f.cat === 5), "⑤校验 message 对象键");
+  ok(fx(`rules={{ required: "Folder name is required" }}`).found.some((f) => f.text === "Folder name is required" && f.cat === 5), "⑤表单 required 对象键");
+  ok(!fx(`titleX: "Not a prop"`).found.some((f) => f.cat === 5), "⑤键名全词匹配(titleX 不触发)");
+  ok(fx(`name: z.string().min(1, "Name is required")`).found.some((f) => f.text === "Name is required" && f.cat === 5), "⑤b Zod 方法消息参数");
+  ok(fx(`\t.min(1, "Name is required")`).found.some((f) => f.text === "Name is required" && f.cat === 5), "⑤b 多行链式 Zod 方法消息参数");
+  ok(fx(`endpoint: z.string().refine((v) => v.trim() === "" || v.includes("."), "Enter the endpoint DNS name")`).found.some((f) => f.text === "Enter the endpoint DNS name" && f.cat === 5), "⑤b Zod refine 第二参数消息");
+  ok(fx(`\t.refine((hours) => hours === 0 || hours >= 1, "Sync interval must be 0 (disabled) or at least 1 hour")`).found.some((f) => f.text === "Sync interval must be 0 (disabled) or at least 1 hour" && f.cat === 5), "⑤b 多行链式 Zod refine 第二参数消息");
+  ok(!fx(`z.string().refine((v) => v.startsWith("http://"), { message: "URL is required" })`).found.some((f) => f.text === "http://"), "⑤b Zod refine predicate 字符串不误触");
+  ok(!fx(`Math.max(0, offset - PAGE_SIZE, "push")`).found.some((f) => f.cat === 5), "⑤b Math.max 不误触");
+  ok(!fx(`value.startsWith("http://")`).found.some((f) => f.cat === 5), "⑤b 普通字符串方法不误触");
+  ok(fx(`"/workspace/observability": "Observability Connectors",`).found.some((f) => f.text === "Observability Connectors" && f.cat === 6), "⑥路由映射表值(盲区B)");
+  ok(!fx(`"active": "bg-green-500"`).found.some((f) => f.cat === 6), "⑥非路径键不触发");
+  { const r = fx(`{isLoading ? "Saving..." : "Save Changes"}`);
+    ok(r.found.some((f) => f.text === "Saving..." && f.cat === 7) && r.found.some((f) => f.text === "Save Changes"), "⑦三元字符串对两分支"); }
+  { const r = fx(`hidden ? 'All goroutines are hidden. Click "Clear hidden" to show them.' : "No goroutine data available"`);
+    ok(r.found.some((f) => f.text === `All goroutines are hidden. Click "Clear hidden" to show them.` && f.cat === 7), "⑦单引号三元分支"); }
+  ok(!fx(`method === "POST" ? "POST" : "GET"`).found.some((f) => f.cat === 7), "⑦全大写技术值不触发");
+  { const r = fx(`{canCreate\n\t? "Create prompts and version them."\n\t: "View prompts in the playground."}`);
+    ok(r.found.some((f) => f.text === "Create prompts and version them." && f.cat === 7)
+      && r.found.some((f) => f.text === "View prompts in the playground."), "⑦b 跨行三元两分支(复巡检盲区)"); }
+  ok(!fx(`x\n\t? "POST"\n\t: "GET"`).found.some((f) => f.cat === 7), "⑦b 跨行三元全大写技术值不触发");
+  ok(fx("title: `${v} is now available.`").found.some((f) => f.text === "⟨x⟩ is now available." && f.cat === 4), "④对象属性位模板(盲区#5,sidebar 横幅实例)");
+  { const { acronyms, overrides } = parseTopbarMaps(`const titleAcronyms: Record<string, string> = {\n\tmcp: "MCP",\n};\nconst routeTitleOverrides: Record<string, string> = {\n\t"/workspace/logs": "LLM Logs",\n};`);
+    ok(deriveSlugTitle("/workspace/skills-repo", acronyms, overrides) === "Skills Repo", "⑧slug 合成(skills-repo → Skills Repo)");
+    ok(deriveSlugTitle("/workspace/mcp-registry", acronyms, overrides) === "MCP Registry", "⑧slug acronym 表生效");
+    ok(deriveSlugTitle("/workspace/logs", acronyms, overrides) === null, "⑧override 路由让位于通道⑥"); }
   console.log(`\nself-test 全绿(${n} 项)`);
 }
 
