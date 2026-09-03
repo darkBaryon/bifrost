@@ -69,6 +69,7 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | [lib-Account接口皮](07-阅读笔记/04-lib-Account接口皮.md) | account.go:core 通过接口拿配置、ctx 过滤通道、类型翻译 |
 | [server-路由总目录](07-阅读笔记/05-server-路由总目录.md) | 三张路由表、handlers 包结构与拆分分析 |
 | [handlers-chatCompletion一条链](07-阅读笔记/06-handlers-chatCompletion一条链.md) | 推理 handler 五步骨架、header 到 ctx 的翻译、流式的坑 |
+| [core-schemas数据模型](07-阅读笔记/07-core-schemas数据模型.md) | BifrostRequest 信封、50 种请求、差异推到两头、设计成因 |
 
 ### 06-产品调研 —— 市场与竞品
 

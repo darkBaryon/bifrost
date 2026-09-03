@@ -18,7 +18,7 @@
 
 ### 第二阶段:core 内核
 
-- [ ] 7. `core/schemas/bifrost.go` — BifrostRequest/BifrostResponse/RequestType 数据模型
+- [x] 7. `core/schemas/bifrost.go` — BifrostRequest/BifrostResponse/RequestType 数据模型 → [笔记](07-core-schemas数据模型.md)
 - [ ] 8. `core/bifrost.go:70` — Bifrost 主结构体 + Init
 - [ ] 9. `ChatCompletionRequest(797) → handleRequest(5089) → tryRequest(5372)` — fallback 编排
 - [ ] 10. `ProviderQueue(134) + requestWorker(6552)` — 队列/worker 并发模型(TOCTOU 注释必读)
@@ -48,3 +48,4 @@
 | 04 | [lib-Account接口皮](04-lib-Account接口皮.md) | account.go:core 只要三样、接口如何工作、ctx 过滤通道、两个 ProviderConfig 的翻译、现读不缓存 |
 | 05 | [server-路由总目录](05-server-路由总目录.md) | 三张路由表与中间件、handlers 包结构:model 三处、handler 为何重、互调仅一处、按家族拆子包可行 |
 | 06 | [handlers-chatCompletion一条链](06-handlers-chatCompletion一条链.md) | 推理 handler 五步骨架、header→ctx 28 键翻译表、流式 260 行的六个坑、第一阶段收束 |
+| 07 | [core-schemas数据模型](07-core-schemas数据模型.md) | 信封设计、类型归属、50 种从哪来、为何流程能一样、丑在哪与历史成因、上游改 API 的波及 |
