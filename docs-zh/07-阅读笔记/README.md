@@ -28,7 +28,7 @@
 
 ### 第三阶段:插件与有状态层
 
-- [ ] 12. `core/schemas/plugin.go:165-206` — 插件接口与生命周期注释
+- [x] 12. `core/schemas/plugin.go:165-206` — 插件接口与生命周期注释 → [笔记](12-core-插件接口.md)
 - [ ] 13. `server/plugins.go` — 插件装配;挑 governance 或 logging 读一个真实插件
 - [ ] 14. `integrations/router.go` — 兼容层通用引擎(RouteConfig + 双向格式转换)
 - [ ] 15. `framework/{configstore,logstore,vectorstore}/store.go` 三个接口 — 热更新链路
@@ -54,3 +54,4 @@
 | 08 | [core-Bifrost引擎与Init](08-core-Bifrost引擎与Init.md) | 编排的十个决定、每 provider 一条流水线、两种 channel、队列不 close 的 TOCTOU、上帝类的成分分析、按功能触发的读法 |
 | 09 | [core-fallback编排](09-core-fallback编排.md) | 两层循环、三个判断函数、短路两条路、AllowFallbacks 观察、插件口子与边界、没口子时的三条路 |
 | 11 | [core-providers适配器](11-core-providers适配器.md) | 55 方法接口、为何 Bifrost 格式=OpenAI 格式、三种方言三个底座、deepseek 薄适配器公式、配置 vs 代码边界、接国内厂商决策树 |
+| 12 | [core-插件接口](12-core-插件接口.md) | 七个接口三层、三钩子返回值协议、error≠拒绝、HTTP 钩子、三条交付路(包壳里 SyncLoadedPlugin)、内容安全插件的形状 |
