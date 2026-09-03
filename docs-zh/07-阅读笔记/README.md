@@ -11,10 +11,10 @@
 
 - [x] 1. `transports/bifrost-http/main.go` — 入口、flag、Bootstrap/Start 两步 → [笔记](01-transports-main入口.md)
 - [x] 2. `server/server.go:2355 Bootstrap` — 装配全景(LoadConfig → 插件 → bifrost.Init → Router) → [笔记](02-server-BifrostHTTPServer.md)
-- [ ] 3. `lib/config.go:857 LoadConfig` — config.json 与 DB 怎么合并(SourceOfTruthSplit)
-- [ ] 4. `lib/account.go` — 配置以 `schemas.Account` 接口形态喂给 core
-- [ ] 5. `server/server.go:2040 RegisterAPIRoutes` — 所有路由的总目录
-- [ ] 6. `handlers/inference.go:1010 chatCompletion` — 一条完整 handler 链
+- [x] 3. `lib/config.go:857 LoadConfig` — config.json 与 DB 怎么合并(SourceOfTruthSplit) → [笔记](03-lib-Config与LoadConfig.md)
+- [x] 4. `lib/account.go` — 配置以 `schemas.Account` 接口形态喂给 core → [笔记](04-lib-Account接口皮.md)
+- [x] 5. `server/server.go:2040 RegisterAPIRoutes` — 所有路由的总目录 → [笔记](05-server-路由总目录.md)
+- [x] 6. `handlers/inference.go:1010 chatCompletion` — 一条完整 handler 链 → [笔记](06-handlers-chatCompletion一条链.md)
 
 ### 第二阶段:core 内核
 
@@ -44,3 +44,7 @@
 |---|---|---|
 | 01 | [transports-main入口](01-transports-main入口.md) | main.go 全文:embed UI、automaxprocs、init/flag、profiling、logger 注入 |
 | 02 | [server-BifrostHTTPServer](02-server-BifrostHTTPServer.md) | server.go:三个职责、回调接口与企业版、热更新、存储、成长史、导航 |
+| 03 | [lib-Config与LoadConfig](03-lib-Config与LoadConfig.md) | config.go:Config 为何带方法、文件与库谁说了算、hash 判漂移、source_of_truth、热更新三段分工 |
+| 04 | [lib-Account接口皮](04-lib-Account接口皮.md) | account.go:core 只要三样、接口如何工作、ctx 过滤通道、两个 ProviderConfig 的翻译、现读不缓存 |
+| 05 | [server-路由总目录](05-server-路由总目录.md) | 三张路由表与中间件、handlers 包结构:model 三处、handler 为何重、互调仅一处、按家族拆子包可行 |
+| 06 | [handlers-chatCompletion一条链](06-handlers-chatCompletion一条链.md) | 推理 handler 五步骨架、header→ctx 28 键翻译表、流式 260 行的六个坑、第一阶段收束 |

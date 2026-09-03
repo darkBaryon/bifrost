@@ -65,6 +65,10 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | [进度总览](07-阅读笔记/README.md) | 主线阅读路线打卡 + 笔记索引 |
 | [transports-main入口](07-阅读笔记/01-transports-main入口.md) | main.go 细读:embed UI、init/flag、profiling、logger 注入 |
 | [server-BifrostHTTPServer](07-阅读笔记/02-server-BifrostHTTPServer.md) | server.go:三个职责、回调接口与企业版插座、热更新、存储布局、成长史 |
+| [lib-Config与LoadConfig](07-阅读笔记/03-lib-Config与LoadConfig.md) | config.go:文件与库的合并规则、hash 判漂移、source_of_truth、热更新分工 |
+| [lib-Account接口皮](07-阅读笔记/04-lib-Account接口皮.md) | account.go:core 通过接口拿配置、ctx 过滤通道、类型翻译 |
+| [server-路由总目录](07-阅读笔记/05-server-路由总目录.md) | 三张路由表、handlers 包结构与拆分分析 |
+| [handlers-chatCompletion一条链](07-阅读笔记/06-handlers-chatCompletion一条链.md) | 推理 handler 五步骨架、header 到 ctx 的翻译、流式的坑 |
 
 ### 06-产品调研 —— 市场与竞品
 
