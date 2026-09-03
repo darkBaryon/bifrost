@@ -7,6 +7,8 @@
 
 带着六个问题读(格式翻译 / key 选择 / fallback / 故障隔离 / 流式 / 插件切面),每步读完打勾并链接笔记。
 
+> 2026-09-04 起的读法:先建地图再按需钻。第二阶段 9/10/11 只过骨架,重心放 12/13/15(写插件要懂的);编排细节等开发对应功能时再回来细读。
+
 ### 第一阶段:装配与入口(transports)
 
 - [x] 1. `transports/bifrost-http/main.go` — 入口、flag、Bootstrap/Start 两步 → [笔记](01-transports-main入口.md)
@@ -19,7 +21,7 @@
 ### 第二阶段:core 内核
 
 - [x] 7. `core/schemas/bifrost.go` — BifrostRequest/BifrostResponse/RequestType 数据模型 → [笔记](07-core-schemas数据模型.md)
-- [ ] 8. `core/bifrost.go:70` — Bifrost 主结构体 + Init
+- [x] 8. `core/bifrost.go:70` — Bifrost 主结构体 + Init → [笔记](08-core-Bifrost引擎与Init.md)
 - [ ] 9. `ChatCompletionRequest(797) → handleRequest(5089) → tryRequest(5372)` — fallback 编排
 - [ ] 10. `ProviderQueue(134) + requestWorker(6552)` — 队列/worker 并发模型(TOCTOU 注释必读)
 - [ ] 11. `core/schemas/provider.go:631 Provider 接口` + `core/providers/openai/` 一个实现样板
@@ -49,3 +51,4 @@
 | 05 | [server-路由总目录](05-server-路由总目录.md) | 三张路由表与中间件、handlers 包结构:model 三处、handler 为何重、互调仅一处、按家族拆子包可行 |
 | 06 | [handlers-chatCompletion一条链](06-handlers-chatCompletion一条链.md) | 推理 handler 五步骨架、header→ctx 28 键翻译表、流式 260 行的六个坑、第一阶段收束 |
 | 07 | [core-schemas数据模型](07-core-schemas数据模型.md) | 信封设计、类型归属、50 种从哪来、为何流程能一样、丑在哪与历史成因、上游改 API 的波及 |
+| 08 | [core-Bifrost引擎与Init](08-core-Bifrost引擎与Init.md) | 编排的十个决定、每 provider 一条流水线、两种 channel、队列不 close 的 TOCTOU、上帝类的成分分析、按功能触发的读法 |
