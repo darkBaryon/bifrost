@@ -14,7 +14,7 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 
 ## 文档目录
 
-按读者意图分五个区。**扩充规则**:读代码的产出写进 `03-源码精读`(一个主题一篇),动手经验写进 `04-开发指南`(一个任务一篇)。
+按读者意图分区。**扩充规则**:通读过程中的进度和逐文件笔记记在 `07-阅读笔记`(按阅读顺序编号);读完一个主题后沉淀的结论性文章写进 `03-源码精读`(一个主题一篇);动手经验写进 `04-开发指南`(一个任务一篇)。
 
 ### 01-入门 —— 第一天读什么
 
@@ -57,6 +57,25 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | 文档 | 内容 |
 |---|---|
 | [部署方式](05-部署运维/01-部署方式.md) | Docker、Helm、Terraform、一键部署配方 |
+
+### 07-阅读笔记 —— 通读进度与逐文件笔记
+
+| 文档 | 内容 |
+|---|---|
+| [进度总览](07-阅读笔记/README.md) | 主线阅读路线打卡 + 笔记索引 |
+| [transports-main入口](07-阅读笔记/01-transports-main入口.md) | main.go 细读:embed UI、init/flag、profiling、logger 注入 |
+| [server-BifrostHTTPServer](07-阅读笔记/02-server-BifrostHTTPServer.md) | server.go:三个职责、回调接口与企业版插座、热更新、存储布局、成长史 |
+| [lib-Config与LoadConfig](07-阅读笔记/03-lib-Config与LoadConfig.md) | config.go:文件与库的合并规则、hash 判漂移、source_of_truth、热更新分工 |
+| [lib-Account接口皮](07-阅读笔记/04-lib-Account接口皮.md) | account.go:core 通过接口拿配置、ctx 过滤通道、类型翻译 |
+| [server-路由总目录](07-阅读笔记/05-server-路由总目录.md) | 三张路由表、handlers 包结构与拆分分析 |
+| [handlers-chatCompletion一条链](07-阅读笔记/06-handlers-chatCompletion一条链.md) | 推理 handler 五步骨架、header 到 ctx 的翻译、流式的坑 |
+| [core-schemas数据模型](07-阅读笔记/07-core-schemas数据模型.md) | BifrostRequest 信封、50 种请求、差异推到两头、设计成因 |
+| [core-Bifrost引擎与Init](07-阅读笔记/08-core-Bifrost引擎与Init.md) | 编排的十个决定、每 provider 一条流水线、队列设计、上帝类分析 |
+| [core-fallback编排](07-阅读笔记/09-core-fallback编排.md) | fallback 规则、插件短路、插件口子边界与包壳 |
+| [core-providers适配器](07-阅读笔记/11-core-providers适配器.md) | 三种方言三个底座、薄适配器公式、配置 vs 代码、接厂商决策树 |
+| [core-插件接口](07-阅读笔记/12-core-插件接口.md) | 插件接口、钩子返回值协议、三条交付路、内容安全插件形状 |
+| [插件装配与governance](07-阅读笔记/13-插件装配与governance.md) | 插件装配、governance 范本:决策序、热更新、10s 落库 |
+| [framework三个store接口](07-阅读笔记/15-framework三个store接口.md) | 三个 store 契约、表与迁移怎么加、ee/ 自建表不改上游 |
 
 ### 06-产品调研 —— 市场与竞品
 
