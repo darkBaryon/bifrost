@@ -95,8 +95,8 @@ type MCPClientsQueryParams struct {
 	// Virtual-key access filter (OR semantics within the group). When both are
 	// set, a client matches if it is open to all VKs OR explicitly assigned to
 	// one of VirtualKeyIDs.
-	OnlyAllVirtualKeys bool     // include clients with allow_on_all_virtual_keys=true
-	VirtualKeyIDs      []string // include clients explicitly assigned to any of these VK IDs
+	OnlyAllowedByDefault bool     // include clients allowed by default (column allow_on_all_virtual_keys)
+	VirtualKeyIDs        []string // include clients explicitly assigned to any of these VK IDs
 }
 
 // MCPLibraryQueryParams holds pagination, filtering, search, and sort
@@ -308,6 +308,11 @@ type ConfigStore interface {
 	GetComplexityAnalyzerConfig(ctx context.Context) (*ComplexityAnalyzerConfig, error)
 	// UpdateComplexityAnalyzerConfig persists the normalized analyzer config.
 	UpdateComplexityAnalyzerConfig(ctx context.Context, config *ComplexityAnalyzerConfig, tx ...*gorm.DB) error
+	// ResetComplexityAnalyzerConfig restores the tier boundaries and phrase lists from the
+	// supplied defaults, preserves every other section of the stored record, and returns what
+	// was persisted. Read and save share one transaction so a concurrent edit to a preserved
+	// section cannot be overwritten.
+	ResetComplexityAnalyzerConfig(ctx context.Context, defaults *ComplexityAnalyzerConfig) (*ComplexityAnalyzerConfig, error)
 
 	// Plugins CRUD
 	GetPlugins(ctx context.Context) ([]*tables.TablePlugin, error)
@@ -415,6 +420,10 @@ type ConfigStore interface {
 	DeleteModelConfig(ctx context.Context, id string, tx ...*gorm.DB) error
 	// DeleteModelConfigsForScope deletes all model configs (and their owned budgets/rate-limits) for a scope owner. Must run inside the owner-delete transaction.
 	DeleteModelConfigsForScope(ctx context.Context, tx *gorm.DB, scope, scopeID string) error
+	// GetModelConfigsForScope loads all model configs (with Budgets/RateLimit) for a scope owner
+	// within the given transaction, so a caller mid-transaction sees its own uncommitted writes
+	// (e.g. deletions staged earlier in the same tx) rather than the last-committed state.
+	GetModelConfigsForScope(ctx context.Context, tx *gorm.DB, scope, scopeID string) ([]tables.TableModelConfig, error)
 
 	// Governance config CRUD
 	GetGovernanceConfig(ctx context.Context) (*GovernanceConfig, error)
@@ -539,6 +548,12 @@ type ConfigStore interface {
 	// of the given MCP client IDs in one query, keyed by MCPClientID. Not
 	// filtered by status; clients with no admin row are absent from the map.
 	GetAdminOauthTokensByMCPClientIDs(ctx context.Context, mcpClientIDs []string) (map[string]*tables.TableMCPOauthToken, error)
+	// GetSharedOauthTokensByConfigIDs is GetSharedOauthTokenByConfigID's batch
+	// counterpart: resolves the shared-mode token row for each of the given
+	// oauth config IDs in one query, keyed by OauthConfigID. Same
+	// active-first ordering, so a stale duplicate can't shadow the live row.
+	// Not filtered by status; configs with no shared row are absent.
+	GetSharedOauthTokensByConfigIDs(ctx context.Context, oauthConfigIDs []string) (map[string]*tables.TableMCPOauthToken, error)
 	// PromoteSharedOauthTokenToAdmin transactionally installs the config's
 	// fresh shared-mode token as the retained admin-mode discovery credential
 	// for mcpClientID: if an admin row already exists its credential fields
@@ -661,14 +676,18 @@ type ConfigStore interface {
 	// per-user-named methods on this merged table, see GetOauthUserTokenByMode's
 	// comment), this is not scoped away from 'shared' — the tokenID handed in
 	// always comes from an internal lookup already, never an arbitrary
-	// caller-supplied ID.
-	MarkOauthUserTokenNeedsReauthByID(ctx context.Context, tokenID string) error
+	// caller-supplied ID. reason is recorded as the row's StatusReason (the
+	// provider's rejection, e.g. "provider rejected the refresh (HTTP 400,
+	// invalid_grant: Token has been expired or revoked)") so the UI and the
+	// client's connection-failure record can say what actually failed rather
+	// than only that the row is no longer usable.
+	MarkOauthUserTokenNeedsReauthByID(ctx context.Context, tokenID string, reason string) error
 	// MarkTokensNeedsReauthByConfigID flips status to 'needs_reauth' on every
 	// token row bound to an OAuth config in one bulk UPDATE, with no
 	// auth_mode filter — rotating an oauth_configs row's client_id/client_secret
 	// invalidates every existing holder's cached credential (shared, per-user,
 	// vk, session, admin alike), not just the shared one.
-	MarkTokensNeedsReauthByConfigID(ctx context.Context, oauthConfigID string, tx ...*gorm.DB) error
+	MarkTokensNeedsReauthByConfigID(ctx context.Context, oauthConfigID string, reason string, tx ...*gorm.DB) error
 	// MarkAdminExchangeTokenNeedsReauthByMCPClientID flips status to
 	// 'needs_reauth' on a token_exchange client's retained admin bootstrap
 	// credential (auth_mode='admin', mcp_client_id=<id>, oauth_config_id='' —
@@ -681,7 +700,7 @@ type ConfigStore interface {
 	// cached in-memory only, never persisted (see GetExchangedAccessToken's
 	// doc comment) — the admin row is the only persisted state a
 	// token_exchange config edit can invalidate.
-	MarkAdminExchangeTokenNeedsReauthByMCPClientID(ctx context.Context, mcpClientID string) error
+	MarkAdminExchangeTokenNeedsReauthByMCPClientID(ctx context.Context, mcpClientID string, reason string) error
 	// RotateMCPOAuthConfig updates every field of an oauth_configs row in
 	// place when ANY of them differs from what's stored (client_id,
 	// client_secret, authorize_url, token_url, registration_url, resource,
@@ -805,7 +824,7 @@ type ConfigStore interface {
 	// dashboard edit, AP propagation, SCIM auto-assign). Orphans
 	// vk-keyed credentials whose MCP is no longer in the VK's effective
 	// allowlist (explicit per-VK row ∪ MCPs with
-	// AllowOnAllVirtualKeys=true) and reactivates orphaned rows when the
+	// AllowByDefault=true) and reactivates orphaned rows when the
 	// grant returns. Pending flow rows for lost grants are hard-deleted.
 	//
 	// Session-keyed rows are never touched — they carry no notion of
@@ -816,7 +835,7 @@ type ConfigStore interface {
 	ReconcileOauthAfterVKChange(ctx context.Context, vkID string) error
 	ReconcileMCPHeadersAfterVKChange(ctx context.Context, vkID string) error
 	// MCP-side variants: called when the change originates on the MCP
-	// client (vk_configs edit OR AllowOnAllVirtualKeys toggle). Each
+	// client (vk_configs edit OR AllowByDefault toggle). Each
 	// re-evaluates every VK that holds a credential for the changed MCP.
 	ReconcileOauthAfterMCPChange(ctx context.Context, mcpClientID string) error
 	ReconcileMCPHeadersAfterMCPChange(ctx context.Context, mcpClientID string) error
@@ -885,6 +904,17 @@ type ConfigStore interface {
 	ListClaimableSidekiqJobs(ctx context.Context, staleBefore time.Time) ([]tables.TableSidekiqJob, error)
 	GetInFlightSidekiqJobByKind(ctx context.Context, kind string) (*tables.TableSidekiqJob, error)
 	MarkStaleSidekiqJobsFailed(ctx context.Context, staleBefore time.Time) (int64, error)
+
+	// Batch jobs - mutable coordination state for delayed batch accounting
+	UpsertProviderJob(ctx context.Context, job *tables.TableProviderJob) error
+	GetProviderJob(ctx context.Context, jobID string) (*tables.TableProviderJob, error)
+	ListDueProviderJobs(ctx context.Context, kind, provider string, now time.Time, limit int) ([]*tables.TableProviderJob, error)
+	ClaimProviderJob(ctx context.Context, jobID, runnerID string, staleBefore time.Time, allowUnpriceable bool) (bool, error)
+	MarkProviderJobAggregateLogWritten(ctx context.Context, jobID, runnerID string) error
+	MarkProviderJobGovernanceReported(ctx context.Context, jobID, runnerID string) error
+	CompleteProviderJob(ctx context.Context, jobID, runnerID string) error
+	MarkProviderJobUnpriceable(ctx context.Context, jobID, runnerID, reason string, err error) error
+	FailProviderJob(ctx context.Context, jobID, runnerID string, err error) error
 
 	// Webhook Endpoints
 	GetWebhookEndpoints(ctx context.Context) ([]tables.TableWebhookEndpoint, error)

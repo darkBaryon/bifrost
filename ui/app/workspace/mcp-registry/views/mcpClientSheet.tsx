@@ -34,6 +34,7 @@ import { getErrorMessage, useGetCoreConfigQuery, useGetVirtualKeysQuery, useUpda
 import { MCPClient, MCPVKConfig } from "@/lib/types/mcp";
 import { mcpClientUpdateSchema, type MCPClientUpdateSchema } from "@/lib/types/schemas";
 import { parseArrayFromText } from "@/lib/utils/array";
+import { failureStageLabel, formatDurationSince, hasStateReason, stateReasonTitle } from "@/lib/utils/mcpConnectionFailure";
 import { titleCaseFromSnakeCase } from "@/lib/utils/strings";
 import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
 import { useGetSCIMProvidersQuery } from "@enterprise/lib/store/apis/scimApi";
@@ -43,6 +44,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { OAuthAdvancedFields } from "./oauthAdvancedFields";
 import { OAuth2Authorizer } from "./oauth2Authorizer";
+import { MCPClientCredentialSection, MCPClientSessionsSection } from "./mcpClientCredentialSection";
+import { ConnectionFailureBlock } from "./mcpConnectionFailure";
 import { SectionHeader } from "./sectionHeader";
 import { TLSConfigFields } from "./tlsConfigFields";
 import { TokenExchangeFields } from "./tokenExchangeFields";
@@ -54,6 +57,41 @@ interface MCPClientSheetProps {
 	onNavigate?: (direction: "prev" | "next") => void;
 	hasPrev?: boolean;
 	hasNext?: boolean;
+}
+
+// stateDescription is the sentence under the sheet title. The pending and
+// needs_reauth prose is unchanged; unstable and degraded gain a sentence
+// naming what Bifrost's last check ran into, and needs_reauth appends the
+// recorded reason so the explanation sits next to the instruction.
+function stateDescription(mcpClient: MCPClient, isPerUserAuth: boolean): string {
+	const failure = mcpClient.last_failure;
+	switch (mcpClient.state) {
+		case "pending_verification":
+			return mcpClient.config.auth_type === "token_exchange"
+				? "This server needs a one-time verification: Bifrost exchanges your signed-in identity token, tests the connection, and discovers tools. Callers then have their own identity tokens exchanged automatically on every tool call."
+				: mcpClient.config.auth_type === "per_user_oauth"
+					? "This client was declared in config.json. An admin sign-in is needed to verify the OAuth setup and discover tools; Bifrost keeps it on file to refresh the tool list periodically. Each user will still authenticate individually when they use this server."
+					: "This client was declared in config.json and needs a one-time OAuth authorization before it can be used.";
+		case "needs_reauth": {
+			// Each auth type names the repair action the actions menu actually
+			// offers for it, matching the credential block below.
+			const base =
+				mcpClient.config.auth_type === "token_exchange"
+					? "The admin credential Bifrost keeps on file to refresh this server's tool list needs repair. Callers' tool calls are unaffected. Use Re-verify as me from the server's actions menu to fix it."
+					: isPerUserAuth
+						? "The admin credential Bifrost keeps on file to refresh this server's tool list needs repair. End-user credentials and tool calls are unaffected. Use Refresh admin credential from the server's actions menu to fix it."
+						: "This connection's credentials need to be re-authorized. Use Reauthorize from the server's actions menu to redo the OAuth consent flow.";
+			return failure ? `${base} Reason: ${failure.message}` : base;
+		}
+		case "unstable":
+			return failure
+				? `Bifrost's last connection check failed ${formatDurationSince(failure.at)} ago while ${failureStageLabel(failure.stage).toLowerCase()}. Tool calls are still attempted normally; the next check runs within about 10 seconds.`
+				: "Bifrost's last connection check failed. Tool calls are still attempted normally; the next check runs within about 10 seconds.";
+		case "degraded":
+			return "Instances of this deployment disagree about this server's state. Tool calls are still attempted on every instance.";
+		default:
+			return "MCP server configuration and available tools";
+	}
 }
 
 /** API sends tool_sync_interval as nanoseconds (Go time.Duration). Normalize to minutes for form/store. */
@@ -112,6 +150,12 @@ export default function MCPClientSheet({
 	const isPerUserAuth =
 		mcpClient.config.auth_type === "per_user_oauth" ||
 		mcpClient.config.auth_type === "per_user_headers" ||
+		mcpClient.config.auth_type === "token_exchange";
+	// Auth types whose server holds an OAuth credential of its own: the shared
+	// token, or the retained admin token used to refresh the tool list.
+	const holdsOwnOauthCredential =
+		mcpClient.config.auth_type === "oauth" ||
+		mcpClient.config.auth_type === "per_user_oauth" ||
 		mcpClient.config.auth_type === "token_exchange";
 	const [updateMCPClient, { isLoading: isUpdating }] = useUpdateMCPClientMutation();
 
@@ -238,7 +282,7 @@ export default function MCPClientSheet({
 			is_code_mode_client: mcpClient.config.is_code_mode_client || false,
 			is_ping_available: mcpClient.config.is_ping_available === true || mcpClient.config.is_ping_available === undefined,
 			needs_session_stickiness: mcpClient.config.needs_session_stickiness === true,
-			allow_on_all_virtual_keys: mcpClient.config.allow_on_all_virtual_keys || false,
+			allow_by_default: mcpClient.config.allow_by_default || false,
 			disabled: mcpClient.config.disabled || false,
 			headers: mcpClient.config.headers,
 			per_user_header_keys: mcpClient.config.auth_type === "per_user_headers" ? mcpClient.config.per_user_header_keys || [] : undefined,
@@ -289,7 +333,7 @@ export default function MCPClientSheet({
 			is_code_mode_client: mcpClient.config.is_code_mode_client || false,
 			is_ping_available: mcpClient.config.is_ping_available === true || mcpClient.config.is_ping_available === undefined,
 			needs_session_stickiness: mcpClient.config.needs_session_stickiness === true,
-			allow_on_all_virtual_keys: mcpClient.config.allow_on_all_virtual_keys || false,
+			allow_by_default: mcpClient.config.allow_by_default || false,
 			disabled: mcpClient.config.disabled || false,
 			headers: mcpClient.config.headers,
 			per_user_header_keys: mcpClient.config.auth_type === "per_user_headers" ? mcpClient.config.per_user_header_keys || [] : undefined,
@@ -438,14 +482,18 @@ export default function MCPClientSheet({
 					// explicit false is rejected for sse/stdio, which always keep
 					// a persistent connection regardless of this field.
 					needs_session_stickiness: mcpClient.config.connection_type === "http" ? data.needs_session_stickiness : undefined,
-					allow_on_all_virtual_keys: data.allow_on_all_virtual_keys,
+					allow_by_default: data.allow_by_default,
 					disabled: data.disabled,
 					headers: data.headers ?? {},
 					per_user_header_keys: mcpClient.config.auth_type === "per_user_headers" ? data.per_user_header_keys : undefined,
 					tools_to_execute: data.tools_to_execute,
 					tools_to_auto_execute: data.tools_to_auto_execute,
 					tool_pricing: data.tool_pricing,
-					tool_sync_interval: data.tool_sync_interval ?? 0,
+					// Sent only when edited: PUT has PATCH semantics, and the
+					// nanoseconds-to-minutes normalization is lossy for a sub-minute
+					// interval set in config.json, so echoing the field back on an
+					// unrelated edit would silently rewrite it.
+					tool_sync_interval: form.formState.dirtyFields.tool_sync_interval ? (data.tool_sync_interval ?? 0) : undefined,
 					tool_execution_timeout: data.tool_execution_timeout ?? 0,
 					allowed_extra_headers: data.allowed_extra_headers,
 					oauth_config: shouldRotateOAuthCredentials
@@ -603,27 +651,15 @@ export default function MCPClientSheet({
 	return (
 		<>
 			<Sheet open onOpenChange={(open) => !open && onClose()}>
-				<SheetContent className="flex w-full flex-col overflow-x-hidden pt-4 sm:max-w-[60%]">
-					<SheetHeader className="w-full p-0 px-4 py-4 md:px-8" showCloseButton={false} headerClassName="mb-0 sticky -top-4 bg-card z-10">
+				<SheetContent className="flex w-full flex-col overflow-hidden! pt-4 sm:max-w-[60%]">
+					<SheetHeader className="w-full p-0 py-4" showCloseButton={false} headerClassName="mb-0 sticky -top-4 bg-card z-10 px-4 md:px-8">
 						<div className="flex w-full items-center justify-between">
 							<div className="space-y-2">
 								<SheetTitle className="flex w-fit items-center gap-2 font-medium">
 									{mcpClient.config.name}
 									<Badge className={MCP_STATUS_COLORS[mcpClient.state]}>{titleCaseFromSnakeCase(mcpClient.state)}</Badge>
 								</SheetTitle>
-								<SheetDescription>
-									{mcpClient.state === "pending_verification"
-										? mcpClient.config.auth_type === "token_exchange"
-											? "This server needs a one-time verification: Bifrost exchanges your signed-in identity token, tests the connection, and discovers tools. Callers then have their own identity tokens exchanged automatically on every tool call."
-											: mcpClient.config.auth_type === "per_user_oauth"
-												? "This client was declared in config.json. An admin sign-in is needed to verify the OAuth setup and discover tools; Bifrost keeps it on file to refresh the tool list periodically. Each user will still authenticate individually when they use this server."
-												: "This client was declared in config.json and needs a one-time OAuth authorization before it can be used."
-										: mcpClient.state === "needs_reauth"
-											? isPerUserAuth
-												? "The admin credential Bifrost keeps on file to refresh this server's tool list needs repair. End-user credentials and tool calls are unaffected. Use Refresh admin credential from the server's actions menu to fix it."
-												: "This connection's credentials need to be re-authorized. Use Reauthorize from the server's actions menu to redo the OAuth consent flow."
-											: "MCP server configuration and available tools"}
-								</SheetDescription>
+								<SheetDescription>{stateDescription(mcpClient, isPerUserAuth)}</SheetDescription>
 							</div>
 							<SheetNavigationButtons
 								hasPrev={hasPrev}
@@ -657,6 +693,15 @@ export default function MCPClientSheet({
 									</div>
 
 									<TabsContent value="general" className="space-y-6 pb-10">
+										{hasStateReason(mcpClient) && (
+											<div className="space-y-4">
+												<SectionHeader
+													title={mcpClient.node_states ? "Connection checks across instances" : "Last connection check"}
+													description={stateReasonTitle(mcpClient.state, !!mcpClient.node_states)}
+												/>
+												<ConnectionFailureBlock client={mcpClient} />
+											</div>
+										)}
 										<div className="space-y-4">
 											<SectionHeader title="Basic Information" description="Identify this server and review its connection details." />
 											<FormField
@@ -840,20 +885,22 @@ export default function MCPClientSheet({
 																	</FormItem>
 																)}
 															/>
-															{needsSessionStickinessDirty && (
-																<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-																	<Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-																	<p>
-																		Toggling this takes effect immediately on save:{" "}
-																		{needsSessionStickiness
-																			? "the shared connection will be opened now."
-																			: "the existing shared connection will be closed now."}
-																	</p>
-																</div>
-															)}
 														</>
 													)}
 											</div>
+											{/* Sits outside the bordered row group: it's a consequence of the
+											    toggle above, not another setting row. */}
+											{needsSessionStickinessDirty && (
+												<div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+													<Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+													<p>
+														Toggling this takes effect immediately on save:{" "}
+														{needsSessionStickiness
+															? "the shared connection will be opened now."
+															: "the existing shared connection will be closed now."}
+													</p>
+												</div>
+											)}
 										</div>
 
 										<DottedSeparator />
@@ -883,8 +930,7 @@ export default function MCPClientSheet({
 																				</TooltipTrigger>
 																				<TooltipContent className="max-w-xs">
 																					<p>
-																						Override the global tool sync interval for this server. Leave empty to use global setting. Set
-																						to -1 to disable sync for this server.
+																						Override the global tool sync interval for this server. Leave empty to use the global setting.
 																					</p>
 																				</TooltipContent>
 																			</Tooltip>
@@ -902,7 +948,7 @@ export default function MCPClientSheet({
 																			const val = e.target.value === "" ? undefined : parseInt(e.target.value);
 																			field.onChange(val);
 																		}}
-																		min="-1"
+																		min="0"
 																	/>
 																</FormControl>
 															</FormItem>
@@ -963,8 +1009,6 @@ export default function MCPClientSheet({
 												/>
 											</div>
 										</div>
-
-										<DottedSeparator />
 
 										<FormField
 											control={form.control}
@@ -1074,6 +1118,13 @@ export default function MCPClientSheet({
 											</>
 										)}
 
+										{mcpClient.config.auth_type === "per_user_headers" && (
+											<>
+												<DottedSeparator />
+												<MCPClientCredentialSection mcpClient={mcpClient} />
+											</>
+										)}
+
 										<DottedSeparator />
 										<div className="space-y-4">
 											<SectionHeader
@@ -1112,6 +1163,20 @@ export default function MCPClientSheet({
 												)}
 											/>
 										</div>
+
+										{holdsOwnOauthCredential && (
+											<>
+												<DottedSeparator />
+												<MCPClientCredentialSection mcpClient={mcpClient} />
+											</>
+										)}
+
+										{(mcpClient.config.auth_type === "per_user_oauth" || mcpClient.config.auth_type === "per_user_headers") && (
+											<>
+												<DottedSeparator />
+												<MCPClientSessionsSection mcpClient={mcpClient} />
+											</>
+										)}
 
 										{(() => {
 											const showTLS = mcpClient.config.connection_type === "http" || mcpClient.config.connection_type === "sse";
@@ -1570,15 +1635,15 @@ export default function MCPClientSheet({
 										<div className="space-y-4">
 											<SectionHeader
 												title="Access Control"
-												description="Control whether this server is reachable by all virtual keys without explicit per-key assignment."
+												description="Control whether this server is reachable without an explicit assignment."
 											/>
 											<FormField
 												control={form.control}
-												name="allow_on_all_virtual_keys"
+												name="allow_by_default"
 												render={({ field }) => (
 													<FormItem className="flex flex-row items-center justify-between gap-4 rounded-md border p-4">
 														<div className="flex items-center gap-2">
-															<FormLabel>Allow on All Virtual Keys</FormLabel>
+															<FormLabel>Allow by Default</FormLabel>
 															<TooltipProvider>
 																<Tooltip>
 																	<TooltipTrigger asChild>
@@ -1586,9 +1651,8 @@ export default function MCPClientSheet({
 																	</TooltipTrigger>
 																	<TooltipContent className="max-w-xs">
 																		<p>
-																			When enabled, this MCP server is accessible to all virtual keys without requiring explicit per-key
-																			assignment. All tools are allowed by default. If a virtual key has an explicit MCP config for this
-																			server, that config takes precedence and overrides this behaviour.
+																			When enabled, any caller can use this MCP server without an explicit assignment, with all tools
+																			allowed. An explicit assignment for a caller takes precedence over this setting for that caller.
 																		</p>
 																	</TooltipContent>
 																</Tooltip>
@@ -1610,7 +1674,7 @@ export default function MCPClientSheet({
 
 										<div className="space-y-4">
 											<SectionHeader
-												title="Virtual Key Access"
+												title="Virtual Key Assignments"
 												description="Control which virtual keys can use this server and which tools they're allowed to call."
 												action={
 													<VirtualKeySelector
@@ -1633,11 +1697,11 @@ export default function MCPClientSheet({
 												}
 											/>
 											<div className="flex flex-col gap-2">
-												{form.watch("allow_on_all_virtual_keys") && (
+												{form.watch("allow_by_default") && (
 													<p className="text-muted-foreground flex items-center gap-1 text-xs">
 														<Info className="h-3 w-3 shrink-0" />
-														Configuring access for a virtual key here overrides the{" "}
-														<span className="font-medium">Allow on All Virtual Keys</span>&nbsp;setting for that key.
+														Configuring access for a virtual key here overrides the <span className="font-medium">Allow by Default</span>
+														&nbsp;setting for that key.
 													</p>
 												)}
 											</div>
@@ -1703,9 +1767,11 @@ export default function MCPClientSheet({
 														</TableBody>
 													</Table>
 												</div>
-											) : form.watch("allow_on_all_virtual_keys") ? (
+											) : form.watch("allow_by_default") ? (
 												<div className="text-muted-foreground rounded-sm border p-6 text-center">
-													<p className="text-sm">All virtual keys can access this MCP server unless a key has an explicit override.</p>
+													<p className="text-sm">
+														This MCP server is allowed by default; a virtual key with an explicit assignment uses that instead.
+													</p>
 												</div>
 											) : (
 												<div className="text-muted-foreground rounded-sm border p-6 text-center">

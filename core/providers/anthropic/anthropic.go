@@ -544,12 +544,16 @@ func HandleAnthropicChatCompletionRequest(
 	response := AcquireAnthropicMessageResponse()
 	defer ReleaseAnthropicMessageResponse(response)
 
-	rawRequest, rawResponse, bifrostErr := providerUtils.HandleProviderResponse(responseBody, response, jsonBody, providerUtils.ShouldSendBackRawRequest(ctx, config.ShouldSendBackRawRequest), providerUtils.ShouldSendBackRawResponse(ctx, config.ShouldSendBackRawResponse))
+	rawRequest, rawResponse, bifrostErr := providerUtils.HandleProviderResponseCtx(ctx, responseBody, response, jsonBody, providerUtils.ShouldSendBackRawRequest(ctx, config.ShouldSendBackRawRequest), providerUtils.ShouldSendBackRawResponse(ctx, config.ShouldSendBackRawResponse))
 	if bifrostErr != nil {
 		return nil, providerUtils.EnrichError(ctx, bifrostErr, jsonBody, responseBody, config.ShouldSendBackRawRequest, config.ShouldSendBackRawResponse, latency)
 	}
 	// Create final response
+	convTracer, convHandle := providerUtils.StartResponseConvertorSpan(ctx)
 	bifrostResponse := response.ToBifrostChatResponse(ctx)
+	if convTracer != nil {
+		convTracer.EndSpan(convHandle, schemas.SpanStatusOk, "")
+	}
 
 	// Set ExtraFields
 	bifrostResponse.ExtraFields.Latency = latency.Milliseconds()
@@ -634,6 +638,7 @@ func accumulateAnthropicResponsesUsage(usage *schemas.ResponsesResponseUsage, bi
 	if usage == nil || usageToProcess == nil {
 		return
 	}
+	usageToProcess = billableAnthropicUsage(usageToProcess)
 	// Web search request count → billed as search queries (server tool use). The
 	// terminal chunk overwrites Response.Usage with this accumulator, so the count
 	// must live here (not only on the per-event message_delta usage).
@@ -778,7 +783,7 @@ func HandleAnthropicChatCompletionStreaming(
 	providerUtils.SetExtraHeaders(ctx, req, extraHeaders, []string{AnthropicBetaHeader})
 	// OAuth passthrough: forward the caller's raw headers, whose token is the upstream
 	// credential. Skips anthropic-beta — MergeBetaHeaders below owns the final value.
-	providerUtils.SetPassthroughHeaders(ctx, req, providerName, []string{AnthropicBetaHeader})
+	providerUtils.SetPassthroughHeadersForStreaming(ctx, req, providerName, []string{AnthropicBetaHeader})
 
 	if betaHeaders := FilterBetaHeadersForProvider(MergeBetaHeaders(ctx, extraHeaders), providerName, betaHeaderOverrides); len(betaHeaders) > 0 {
 		req.Header.Set(AnthropicBetaHeader, strings.Join(betaHeaders, ","))
@@ -993,8 +998,12 @@ func HandleAnthropicChatCompletionStreaming(
 				continue
 			}
 			var event AnthropicStreamEvent
-			if err := sonic.Unmarshal([]byte(eventData), &event); err != nil {
-				logger.Warn("Failed to parse message_start event: %v", err)
+			// Per-event decode -> "response-parse" (Serialization) stream phase.
+			parseStart := time.Now()
+			umErr := sonic.Unmarshal([]byte(eventData), &event)
+			schemas.AddStreamParse(ctx, time.Since(parseStart))
+			if umErr != nil {
+				logger.Warn("Failed to parse message_start event: %v", umErr)
 				continue
 			}
 			if event.Type == AnthropicStreamEventTypeMessageStart && event.Message != nil && event.Message.ID != "" {
@@ -1009,6 +1018,11 @@ func HandleAnthropicChatCompletionStreaming(
 				usageToProcess = event.Message.Usage
 			}
 			if usageToProcess != nil {
+				if served := usageToProcess.ServerSideFallbackModel(); served != nil {
+					servedFallbackModel = served
+					usage.ServerSideFallbackModel = served
+				}
+				usageToProcess = billableAnthropicUsage(usageToProcess)
 				// Web search request count → billed as search queries (server tool use).
 				if usageToProcess.ServerToolUse != nil && usageToProcess.ServerToolUse.WebSearchRequests > 0 {
 					if usage.CompletionTokensDetails == nil {
@@ -1045,10 +1059,6 @@ func HandleAnthropicChatCompletionStreaming(
 				if usageToProcess.InferenceGeo != nil {
 					servedInferenceGeo = usageToProcess.InferenceGeo
 					usage.InferenceGeo = usageToProcess.InferenceGeo
-				}
-				if served := usageToProcess.ServerSideFallbackModel(); served != nil {
-					servedFallbackModel = served
-					usage.ServerSideFallbackModel = served
 				}
 				// Collect usage information and send at the end of the stream
 				// Here in some cases usage comes before final message
@@ -1168,7 +1178,10 @@ func HandleAnthropicChatCompletionStreaming(
 				}
 			}
 
+			// Per-event mapping -> "convertor" (Convertor) stream phase.
+			convStart := time.Now()
 			response, bifrostErr, isLastChunk := event.ToBifrostChatCompletionStream(ctx, structuredOutputToolName, streamState)
+			schemas.AddStreamConvert(ctx, time.Since(convStart))
 			if bifrostErr != nil {
 				ctx.SetValue(schemas.BifrostContextKeyStreamEndIndicator, true)
 				providerUtils.ProcessAndSendBifrostError(ctx, postHookRunner, bifrostErr, responseChan, logger, postHookSpanFinalizer)
@@ -1313,7 +1326,7 @@ func HandleAnthropicResponsesRequest(
 	if isLargeResp, _ := ctx.Value(schemas.BifrostContextKeyLargeResponseMode).(bool); isLargeResp {
 		preview, _ := ctx.Value(schemas.BifrostContextKeyLargePayloadResponsePreview).(string)
 		return &schemas.BifrostResponsesResponse{
-			ID:        schemas.Ptr("resp_" + providerUtils.GetRandomString(50)),
+			ID:        schemas.Ptr("resp_" + schemas.GetRandomString(50)),
 			Object:    "response",
 			CreatedAt: int(time.Now().Unix()),
 			Model:     request.Model,
@@ -1432,7 +1445,7 @@ func HandleAnthropicResponsesStream(
 	providerUtils.SetExtraHeaders(ctx, req, extraHeaders, []string{AnthropicBetaHeader})
 	// OAuth passthrough: forward the caller's raw headers, whose token is the upstream
 	// credential. Skips anthropic-beta — MergeBetaHeaders below owns the final value.
-	providerUtils.SetPassthroughHeaders(ctx, req, providerName, []string{AnthropicBetaHeader})
+	providerUtils.SetPassthroughHeadersForStreaming(ctx, req, providerName, []string{AnthropicBetaHeader})
 
 	if betaHeaders := FilterBetaHeadersForProvider(MergeBetaHeaders(ctx, extraHeaders), providerName, betaHeaderOverrides); len(betaHeaders) > 0 {
 		req.Header.Set(AnthropicBetaHeader, strings.Join(betaHeaders, ","))
@@ -1636,8 +1649,11 @@ func HandleAnthropicResponsesStream(
 				continue
 			}
 			var event AnthropicStreamEvent
-			if err := sonic.Unmarshal([]byte(eventData), &event); err != nil {
-				logger.Warn("Failed to parse message_start event: %v", err)
+			parseStart := time.Now()
+			umErr := sonic.Unmarshal([]byte(eventData), &event)
+			schemas.AddStreamParse(ctx, time.Since(parseStart))
+			if umErr != nil {
+				logger.Warn("Failed to parse message_start event: %v", umErr)
 				continue
 			}
 			if event.Message != nil && modelName == "" {
@@ -1688,7 +1704,9 @@ func HandleAnthropicResponsesStream(
 				}
 			}
 
+			convCallStart := time.Now()
 			responses, bifrostErr, isLastChunk := event.ToBifrostResponsesStream(ctx, chunkIndex, streamState)
+			schemas.AddStreamConvert(ctx, time.Since(convCallStart))
 			// Propagate message_delta emission flag to context so the output converter
 			// (ToAnthropicResponsesStreamResponse) can skip synthesizing a duplicate.
 			if streamState.HasEmittedMessageDelta {
@@ -2282,11 +2300,16 @@ func (provider *AnthropicProvider) BatchResults(ctx *schemas.BifrostContext, key
 		})
 
 		batchResultsResp := &schemas.BifrostBatchResultsResponse{
-			BatchID: request.BatchID,
-			Results: results,
+			BatchID:  request.BatchID,
+			Endpoint: schemas.BatchEndpointMessages,
+			Results:  results,
 			ExtraFields: schemas.BifrostResponseExtraFields{
 				Latency: latency.Milliseconds(),
 			},
+		}
+
+		if providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse) {
+			batchResultsResp.ExtraFields.RawResponse = results
 		}
 
 		if len(parseResult.Errors) > 0 {
@@ -2550,13 +2573,15 @@ func (provider *AnthropicProvider) FileList(ctx *schemas.BifrostContext, keys []
 	var lastFileID string
 	for _, file := range anthropicResp.Data {
 		files = append(files, schemas.FileObject{
-			ID:        file.ID,
-			Object:    file.Type,
-			Bytes:     file.SizeBytes,
-			CreatedAt: parseAnthropicFileTimestamp(file.CreatedAt),
-			Filename:  file.Filename,
-			Purpose:   schemas.FilePurposeBatch,
-			Status:    schemas.FileStatusProcessed,
+			ID:           file.ID,
+			Object:       file.Type,
+			Bytes:        file.SizeBytes,
+			CreatedAt:    parseAnthropicFileTimestamp(file.CreatedAt),
+			Filename:     file.Filename,
+			ContentType:  file.MimeType,
+			Downloadable: file.Downloadable,
+			Purpose:      schemas.FilePurposeBatch,
+			Status:       schemas.FileStatusProcessed,
 		})
 		lastFileID = file.ID
 	}
@@ -2978,6 +3003,11 @@ func (provider *AnthropicProvider) VideoDelete(_ *schemas.BifrostContext, _ sche
 // VideoList is not supported by the Anthropic provider.
 func (provider *AnthropicProvider) VideoList(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoListRequest) (*schemas.BifrostVideoListResponse, *schemas.BifrostError) {
 	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoListRequest, provider.GetProviderKey())
+}
+
+// VideoEdit is not supported by the Anthropic provider.
+func (provider *AnthropicProvider) VideoEdit(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoEditRequest) (*schemas.BifrostVideoEditResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoEditRequest, provider.GetProviderKey())
 }
 
 // VideoRemix is not supported by the Anthropic provider.

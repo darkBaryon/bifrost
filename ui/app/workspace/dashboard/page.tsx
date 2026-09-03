@@ -65,6 +65,7 @@ export default function DashboardPage() {
 			cost_chart: parseAsString.withDefault("bar"),
 			model_chart: parseAsString.withDefault("bar"),
 			latency_chart: parseAsString.withDefault("bar"),
+			overhead_chart: parseAsString.withDefault("bar"),
 			throughput_chart: parseAsString.withDefault("bar"),
 			cost_model: parseAsString.withDefault("all"),
 			usage_model: parseAsString.withDefault("all"),
@@ -85,6 +86,7 @@ export default function DashboardPage() {
 			team_ids: parseAsSafeArrayOf.withDefault([]),
 			customer_ids: parseAsSafeArrayOf.withDefault([]),
 			business_unit_ids: parseAsSafeArrayOf.withDefault([]),
+			project_ids: parseAsSafeArrayOf.withDefault([]),
 			aliases: parseAsSafeArrayOf.withDefault([]),
 			apps: parseAsSafeArrayOf.withDefault([]),
 		},
@@ -144,6 +146,7 @@ export default function DashboardPage() {
 			...(urlState.team_ids.length > 0 && { team_ids: urlState.team_ids }),
 			...(urlState.customer_ids.length > 0 && { customer_ids: urlState.customer_ids }),
 			...(urlState.business_unit_ids.length > 0 && { business_unit_ids: urlState.business_unit_ids }),
+			...(urlState.project_ids.length > 0 && { project_ids: urlState.project_ids }),
 			...(urlState.aliases.length > 0 && { aliases: urlState.aliases }),
 			...(urlState.apps.length > 0 && { apps: urlState.apps }),
 		}),
@@ -168,6 +171,7 @@ export default function DashboardPage() {
 			urlState.team_ids,
 			urlState.customer_ids,
 			urlState.business_unit_ids,
+			urlState.project_ids,
 			urlState.aliases,
 			urlState.apps,
 		],
@@ -211,6 +215,7 @@ export default function DashboardPage() {
 	const teamRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const customerRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const buRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
+	const projectRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const userRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const virtualKeyRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
 	const appRankingsRef = useRef<DimensionRankingsTabViewHandle>(null);
@@ -223,6 +228,7 @@ export default function DashboardPage() {
 		teamRankingsRef,
 		customerRankingsRef,
 		buRankingsRef,
+		projectRankingsRef,
 		userRankingsRef,
 		virtualKeyRankingsRef,
 		appRankingsRef,
@@ -246,6 +252,7 @@ export default function DashboardPage() {
 			teamRankingsData: null,
 			customerRankingsData: null,
 			buRankingsData: null,
+			projectRankingsData: null,
 			userRankingsData: null,
 			virtualKeyRankingsData: null,
 			appRankingsData: null,
@@ -280,6 +287,7 @@ export default function DashboardPage() {
 			"team-rankings": teamRankingsRef,
 			"customer-rankings": customerRankingsRef,
 			"bu-rankings": buRankingsRef,
+			"project-rankings": projectRankingsRef,
 			"user-rankings": userRankingsRef,
 			"virtual-key-rankings": virtualKeyRankingsRef,
 			"app-rankings": appRankingsRef,
@@ -307,6 +315,7 @@ export default function DashboardPage() {
 	const handleCostChartToggle = useCallback((type: ChartType) => setUrlState({ cost_chart: type }), [setUrlState]);
 	const handleModelChartToggle = useCallback((type: ChartType) => setUrlState({ model_chart: type }), [setUrlState]);
 	const handleLatencyChartToggle = useCallback((type: ChartType) => setUrlState({ latency_chart: type }), [setUrlState]);
+	const handleOverheadChartToggle = useCallback((type: ChartType) => setUrlState({ overhead_chart: type }), [setUrlState]);
 	const handleThroughputChartToggle = useCallback((type: ChartType) => setUrlState({ throughput_chart: type }), [setUrlState]);
 	const handleProviderCostChartToggle = useCallback((type: ChartType) => setUrlState({ provider_cost_chart: type }), [setUrlState]);
 	const handleProviderTokenChartToggle = useCallback((type: ChartType) => setUrlState({ provider_token_chart: type }), [setUrlState]);
@@ -370,6 +379,7 @@ export default function DashboardPage() {
 				team_ids: newFilters.team_ids || [],
 				customer_ids: newFilters.customer_ids || [],
 				business_unit_ids: newFilters.business_unit_ids || [],
+				project_ids: newFilters.project_ids || [],
 				aliases: newFilters.aliases || [],
 				apps: newFilters.apps || [],
 			});
@@ -469,13 +479,13 @@ export default function DashboardPage() {
 	return (
 		<div
 			id="dashboard-root"
-			className="no-padding-parent no-border-parent bg-background flex h-[calc(var(--app-content-viewport)_-_16px)] w-full gap-3"
+			className="no-padding-parent no-border-parent bg-background flex h-[calc(var(--app-content-viewport)_-_var(--app-bottom-padding))] w-full gap-3"
 		>
 			{/* Sidebar Filters */}
 			<LogsFilterSidebar filters={filters} onFiltersChange={setFilters} />
 
 			{/* Main Content */}
-			<ScrollArea className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-l-md" viewportClassName="no-table">
+			<ScrollArea className="bg-card flex min-w-0 flex-1 flex-col gap-4 rounded-md border" viewportClassName="no-table">
 				<div className="p-4">
 					{/* Tabs */}
 					<Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -513,6 +523,9 @@ export default function DashboardPage() {
 									</TabsTrigger>
 									<TabsTrigger className="shrink-0" value="bu-rankings" data-testid="dashboard-tab-bu-rankings">
 										BU Rankings
+									</TabsTrigger>
+									<TabsTrigger className="shrink-0" value="project-rankings" data-testid="dashboard-tab-project-rankings">
+										Project Rankings
 									</TabsTrigger>
 									<TabsTrigger value="app-rankings" data-testid="dashboard-tab-app-rankings">
 										App Rankings
@@ -589,6 +602,7 @@ export default function DashboardPage() {
 									costChartType={toChartType(urlState.cost_chart)}
 									modelChartType={toChartType(urlState.model_chart)}
 									latencyChartType={toChartType(urlState.latency_chart)}
+									overheadChartType={toChartType(urlState.overhead_chart)}
 									throughputChartType={toChartType(urlState.throughput_chart)}
 									costModel={urlState.cost_model}
 									usageModel={urlState.usage_model}
@@ -597,6 +611,7 @@ export default function DashboardPage() {
 									onCostChartToggle={handleCostChartToggle}
 									onModelChartToggle={handleModelChartToggle}
 									onLatencyChartToggle={handleLatencyChartToggle}
+									onOverheadChartToggle={handleOverheadChartToggle}
 									onThroughputChartToggle={handleThroughputChartToggle}
 									onCostModelChange={handleCostModelChange}
 									onUsageModelChange={handleUsageModelChange}
@@ -708,6 +723,22 @@ export default function DashboardPage() {
 									testIdPrefix="dashboard-bu-rankings"
 									dataKey="buRankingsData"
 									pdfMode={isExportingTab("bu-rankings")}
+								/>
+							</div>
+						</TabsContent>
+
+						{/* Project Rankings Tab */}
+						<TabsContent value="project-rankings" {...(exportingAll && { forceMount: true })}>
+							<div id="dashboard-section-project-rankings">
+								<DimensionRankingsTabView
+									ref={projectRankingsRef}
+									filters={filters}
+									active={activeTab === "project-rankings" || exportingAll}
+									dimension="project"
+									dimensionLabel="Project"
+									testIdPrefix="dashboard-project-rankings"
+									dataKey="projectRankingsData"
+									pdfMode={isExportingTab("project-rankings")}
 								/>
 							</div>
 						</TabsContent>

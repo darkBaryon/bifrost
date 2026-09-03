@@ -2759,6 +2759,11 @@ func (provider *VertexProvider) VideoList(_ *schemas.BifrostContext, _ schemas.K
 	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoListRequest, provider.GetProviderKey())
 }
 
+// VideoEdit is not supported by the Vertex provider.
+func (provider *VertexProvider) VideoEdit(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoEditRequest) (*schemas.BifrostVideoEditResponse, *schemas.BifrostError) {
+	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoEditRequest, provider.GetProviderKey())
+}
+
 // VideoRemix is not supported by the Vertex provider.
 func (provider *VertexProvider) VideoRemix(_ *schemas.BifrostContext, _ schemas.Key, _ *schemas.BifrostVideoRemixRequest) (*schemas.BifrostVideoGenerationResponse, *schemas.BifrostError) {
 	return nil, providerUtils.NewUnsupportedOperationError(schemas.VideoRemixRequest, provider.GetProviderKey())
@@ -2883,7 +2888,7 @@ func (provider *VertexProvider) BatchCreate(ctx *schemas.BifrostContext, key sch
 
 		// Inline mode: convert to JSONL and upload next to the output location (Bedrock pattern).
 		if inputFileID == "" {
-			jsonlData, err := vertexConvertRequestsToJSONL(request.Requests)
+			jsonlData, err := vertexConvertRequestsToJSONL(ctx, request.Requests, *request.Model)
 			if err != nil {
 				return nil, providerUtils.NewBifrostOperationError("failed to convert requests to Vertex JSONL", err)
 			}
@@ -2922,7 +2927,7 @@ func (provider *VertexProvider) BatchCreate(ctx *schemas.BifrostContext, key sch
 		ctx,
 		request,
 		func() (providerUtils.RequestBodyWithExtraParams, error) {
-			return ToVertexBatchCreateRequest(request, jobName, inputFileID, outputURI), nil
+			return ToVertexBatchCreateRequest(ctx, request, jobName, inputFileID, outputURI), nil
 		},
 	)
 	if bodyErr != nil {
@@ -3412,13 +3417,18 @@ func (provider *VertexProvider) batchResultsByKey(ctx *schemas.BifrostContext, k
 			if err := sonic.Unmarshal(rawLine, &line); err != nil {
 				continue // skip malformed lines rather than failing the whole result set
 			}
+			// Anthropic/Claude jobs echo a native top-level custom_id; Gemini jobs carry it in labels.
+			customID := line.CustomID
+			if customID == "" {
+				customID = line.Request.Labels[vertexBatchCustomIDLabel]
+			}
 			item := schemas.BatchResultItem{
-				CustomID: line.Request.Labels[vertexBatchCustomIDLabel],
+				CustomID: customID,
 			}
 			if line.Response != nil {
 				item.Response = &schemas.BatchResultResponse{
 					StatusCode: 200,
-					Body:       line.Response,
+					Body:       vertexNormalizeBatchUsage(line.Response),
 				}
 			} else {
 				item.Error = &schemas.BatchResultError{Message: line.Status}
@@ -3427,13 +3437,45 @@ func (provider *VertexProvider) batchResultsByKey(ctx *schemas.BifrostContext, k
 		}
 	}
 
-	return &schemas.BifrostBatchResultsResponse{
-		BatchID: request.BatchID,
-		Results: results,
+	batchResultsResp := &schemas.BifrostBatchResultsResponse{
+		BatchID:  request.BatchID,
+		Endpoint: schemas.BatchEndpointChatCompletions,
+		Results:  results,
 		ExtraFields: schemas.BifrostResponseExtraFields{
 			Latency: time.Since(startTime).Milliseconds(),
 		},
-	}, nil
+	}
+	if providerUtils.ShouldSendBackRawResponse(ctx, provider.sendBackRawResponse) {
+		batchResultsResp.ExtraFields.RawResponse = results
+	}
+	return batchResultsResp, nil
+}
+
+func vertexNormalizeBatchUsage(body map[string]any) map[string]any {
+	raw, ok := body["usageMetadata"]
+	if !ok {
+		return body
+	}
+	metaBytes, err := sonic.Marshal(raw)
+	if err != nil {
+		return body
+	}
+	var meta gemini.GenerateContentResponseUsageMetadata
+	if err := sonic.Unmarshal(metaBytes, &meta); err != nil {
+		return body
+	}
+	usage := map[string]any{
+		"prompt_tokens":     meta.PromptTokenCount,
+		"completion_tokens": meta.CandidatesTokenCount,
+		"total_tokens":      meta.TotalTokenCount,
+	}
+	if meta.CachedContentTokenCount > 0 {
+		usage["prompt_tokens_details"] = map[string]any{
+			"cached_tokens": meta.CachedContentTokenCount,
+		}
+	}
+	body["usage"] = usage
+	return body
 }
 
 // gcsListAllObjects lists every object under a prefix, following pagination.
@@ -3524,7 +3566,6 @@ const (
 	gcsStorageBase = "https://storage.googleapis.com/storage/v1"
 	gcsUploadBase  = "https://storage.googleapis.com/upload/storage/v1"
 )
-
 
 // --- GCS helpers ---
 
@@ -4533,16 +4574,12 @@ func (provider *VertexProvider) Passthrough(
 	}
 
 	if len(req.Body) > 0 && strings.Contains(strings.ToLower(string(fasthttpReq.Header.ContentType())), "application/json") {
-		region := keyRegion
-		// Replace fully-qualified model paths that have placeholder project/location
-		// e.g. "projects/None/locations/None/publishers/..." -> "projects/real-id/locations/real-region/..."
-		body := req.Body
-		bodyStr := vertexBodyProjectsRe.ReplaceAllString(string(body), "${1}projects/"+projectID)
-		bodyStr = vertexLocationsPathRe.ReplaceAllString(bodyStr, "/locations/"+region)
-		// Expand short-form model names: "models/X" -> "projects/P/locations/L/publishers/google/models/X"
-		bodyStr = vertexShortModelRe.ReplaceAllString(bodyStr,
-			fmt.Sprintf(`"projects/%s/locations/%s/publishers/google/$1"`, projectID, keyRegion))
-		fasthttpReq.SetBodyString(bodyStr)
+		// Replace placeholder project/location and expand short-form model names.
+		if rewritten, changed := rewritePassthroughBody(req.Body, projectID, keyRegion); changed {
+			fasthttpReq.SetBodyRaw(rewritten)
+		} else {
+			fasthttpReq.SetBody(req.Body)
+		}
 	} else if len(req.Body) > 0 {
 		fasthttpReq.SetBody(req.Body)
 	}
@@ -4569,7 +4606,16 @@ func (provider *VertexProvider) Passthrough(
 
 	var passthroughUsage *schemas.BifrostPassthroughUsage
 	if resp.StatusCode() >= 200 && resp.StatusCode() < 300 {
-		passthroughUsage = gemini.ExtractGeminiPassthroughUsage(req.Path, req.Body, body)
+		switch {
+		case isAnthropicPassthroughPath(req.Path):
+			passthroughUsage = anthropic.ExtractAnthropicMessagesUsage(body)
+		case isMistralPassthroughPath(req.Path):
+			passthroughUsage = openai.ExtractOAIChatUsage(body)
+		case isOpenAICompatPassthroughPath(req.Path):
+			passthroughUsage = openai.ExtractOpenAIPassthroughUsage(req.Method, req.Path, req.Body, body)
+		default:
+			passthroughUsage = gemini.ExtractGeminiPassthroughUsage(req.Path, req.Body, body)
+		}
 	}
 
 	bifrostResponse := &schemas.BifrostPassthroughResponse{
@@ -4679,11 +4725,11 @@ func (provider *VertexProvider) PassthroughStream(
 	}
 
 	if len(req.Body) > 0 && strings.Contains(strings.ToLower(string(fasthttpReq.Header.ContentType())), "application/json") {
-		bodyStr := vertexBodyProjectsRe.ReplaceAllString(string(req.Body), "${1}projects/"+projectID)
-		bodyStr = vertexLocationsPathRe.ReplaceAllString(bodyStr, "/locations/"+keyRegion)
-		bodyStr = vertexShortModelRe.ReplaceAllString(bodyStr,
-			fmt.Sprintf(`"projects/%s/locations/%s/publishers/google/$1"`, projectID, keyRegion))
-		fasthttpReq.SetBodyString(bodyStr)
+		if rewritten, changed := rewritePassthroughBody(req.Body, projectID, keyRegion); changed {
+			fasthttpReq.SetBodyRaw(rewritten)
+		} else {
+			fasthttpReq.SetBody(req.Body)
+		}
 	} else if len(req.Body) > 0 {
 		fasthttpReq.SetBody(req.Body)
 	}
@@ -4730,6 +4776,30 @@ func (provider *VertexProvider) PassthroughStream(
 	}
 
 	providerUtils.SetStreamIdleTimeoutIfEmpty(ctx, provider.networkConfig.StreamIdleTimeoutInSeconds)
+
+	// Anthropic on Vertex streams Anthropic Messages events, so usage is merged across
+	// by the Anthropic accumulator instead of the Gemini parser.
+	hasUsage := gemini.HasGeminiPassthroughUsage
+	observe := func(event []byte) *schemas.BifrostPassthroughUsage {
+		return gemini.ExtractGeminiPassthroughUsage(req.Path, req.Body, event)
+	}
+	switch {
+	case isAnthropicPassthroughPath(req.Path):
+		messagesUsage := &anthropic.AnthropicPassthroughStreamUsage{}
+		hasUsage = anthropic.HasAnthropicPassthroughUsage
+		observe = messagesUsage.ObserveEvent
+	case isMistralPassthroughPath(req.Path):
+		hasUsage = openai.HasOpenAIPassthroughUsage
+		observe = func(event []byte) *schemas.BifrostPassthroughUsage {
+			return openai.ExtractOAIChatUsage(event)
+		}
+	case isOpenAICompatPassthroughPath(req.Path):
+		hasUsage = openai.HasOpenAIPassthroughUsage
+		observe = func(event []byte) *schemas.BifrostPassthroughUsage {
+			return openai.ExtractOpenAIPassthroughUsage(req.Method, req.Path, req.Body, event)
+		}
+	}
+
 	return providerUtils.StreamPassthrough(
 		ctx, postHookRunner, postHookSpanFinalizer, resp, bodyStream,
 		providerUtils.PassthroughStreamParams{
@@ -4741,10 +4811,8 @@ func (provider *VertexProvider) PassthroughStream(
 			StartTime:           time.Now(),
 			UseTerminalDetector: true,
 			Logger:              provider.logger,
-			HasUsage:            gemini.HasGeminiPassthroughUsage,
-			Observe: func(event []byte) *schemas.BifrostPassthroughUsage {
-				return gemini.ExtractGeminiPassthroughUsage(req.Path, req.Body, event)
-			},
+			HasUsage:            hasUsage,
+			Observe:             observe,
 		},
 	), nil
 }

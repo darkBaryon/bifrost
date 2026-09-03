@@ -2,6 +2,8 @@ import { formatCost, formatLatency } from "@/app/workspace/dashboard/utils/chart
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdownMenu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TruncatedLabel } from "@/components/ui/truncatedLabel";
 import { ProviderIconType, RenderProviderIcon } from "@/lib/constants/icons";
 import {
 	getProviderLabel,
@@ -14,7 +16,7 @@ import {
 	Status,
 	StatusBarColors,
 } from "@/lib/constants/logs";
-import { ChatMessageContent, DisplayLogEntry, LogEntry, ResponsesMessageContentBlock } from "@/lib/types/logs";
+import { ChatMessageContent, DisplayLogEntry, LLMUsage, LogEntry, ResponsesMessageContentBlock } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import { formatCompactNumber } from "@/lib/utils/numbers";
 import { ColumnDef } from "@tanstack/react-table";
@@ -28,6 +30,28 @@ export interface LogsTableMeta {
 	expandedChainIds: Set<string>;
 	loadingChainIds: Set<string>;
 	onToggleChain: (log: LogEntry) => void;
+}
+
+function batchAccountingDisplay(log: LogEntry): { model: string; usage: LLMUsage } | null {
+	const breakdowns = log.batch_debug?.accounting?.model_breakdowns;
+	if (!breakdowns) {
+		return null;
+	}
+	const entries = Object.values(breakdowns);
+	if (entries.length === 0) {
+		return null;
+	}
+	const model = entries.length === 1 ? entries[0].model : "mixed";
+	const usage: LLMUsage = { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 };
+	for (const entry of entries) {
+		usage.prompt_tokens = (usage.prompt_tokens ?? 0) + (entry.usage?.prompt_tokens ?? 0);
+		usage.completion_tokens = (usage.completion_tokens ?? 0) + (entry.usage?.completion_tokens ?? 0);
+		usage.total_tokens = (usage.total_tokens ?? 0) + (entry.usage?.total_tokens ?? 0);
+	}
+	if ((usage.total_tokens ?? 0) === 0) {
+		return null;
+	}
+	return { model, usage };
 }
 
 function LogActionsMenu({ log, onDelete }: { log: LogEntry; onDelete: (log: LogEntry) => void }) {
@@ -344,6 +368,7 @@ export const createColumns = (
 			header: "Type",
 			size: 150,
 			cell: ({ row }) => {
+				const isVideoSettlement = Boolean(row.original.video_debug?.accounting);
 				return (
 					<Badge
 						variant="outline"
@@ -352,7 +377,9 @@ export const createColumns = (
 							RequestTypeColors[row.original.object as keyof typeof RequestTypeColors],
 						)}
 					>
-						{RequestTypeLabels[row.original.object as keyof typeof RequestTypeLabels]}
+						{isVideoSettlement
+							? "Video Settlement"
+							: RequestTypeLabels[row.original.object as keyof typeof RequestTypeLabels]}
 					</Badge>
 				);
 			},
@@ -369,12 +396,14 @@ export const createColumns = (
 			size: 190,
 			cell: ({ row }) => {
 				const provider = row.original.provider as ProviderName | undefined;
-				const model = row.original.model;
+				const model = row.original.model || batchAccountingDisplay(row.original)?.model;
+				const canonicalModel = row.original.canonical_model_name;
+				const modelLabel = canonicalModel && canonicalModel !== model ? `${canonicalModel} (${model})` : model;
 				return (
 					<div className="flex min-w-0 items-center gap-2">
 						{provider ? <RenderProviderIcon provider={provider as ProviderIconType} size="xs" /> : null}
 						<div className="flex min-w-0 flex-col leading-tight">
-							<span className="truncate font-mono text-[12px]">{model || "N/A"}</span>
+							<TruncatedLabel className="font-mono text-[12px]">{modelLabel || "N/A"}</TruncatedLabel>
 							<span className="text-muted-foreground truncate text-[10.5px]">{provider ? getProviderLabel(provider) : "N/A"}</span>
 						</div>
 					</div>
@@ -434,7 +463,7 @@ export const createColumns = (
 			),
 			size: 190,
 			cell: ({ row }) => {
-				const tokenUsage = row.original.token_usage;
+				const tokenUsage = row.original.token_usage ?? batchAccountingDisplay(row.original)?.usage;
 				if (!tokenUsage) {
 					return <div className="pl-4 font-mono text-xs">N/A</div>;
 				}
@@ -477,6 +506,17 @@ export const createColumns = (
 			size: 120,
 			cell: ({ row }) => {
 				if (row.original.cost == null) {
+					const batchCost = row.original.batch_debug?.accounting?.cost;
+					if (batchCost != null) {
+						return (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<div className="text-muted-foreground pl-4 font-mono text-sm tabular-nums">{formatCost(batchCost)}</div>
+								</TooltipTrigger>
+								<TooltipContent>Settled cost of this batch, billed once.</TooltipContent>
+							</Tooltip>
+						);
+					}
 					return <div className="pl-4 font-mono text-[12px]">N/A</div>;
 				}
 				return <div className="pl-4 font-mono text-sm tabular-nums">{formatCost(row.original.cost)}</div>;
@@ -495,7 +535,7 @@ export const createColumns = (
 					return <div className="font-mono text-xs">-</div>;
 				}
 				return (
-					<Badge variant="outline" className="font-mono text-[11px] py-0.5 px-1.5 uppercase">
+					<Badge variant="outline" className="px-1.5 py-0.5 font-mono text-[11px] uppercase">
 						{tier}
 					</Badge>
 				);
@@ -557,6 +597,12 @@ export const createColumns = (
 					id={row.original.business_unit_id}
 				/>
 			),
+		},
+		{
+			id: "project",
+			header: "Project",
+			size: 150,
+			cell: ({ row }) => <AttributionCell name={row.original.project_name} id={row.original.project_id} />,
 		},
 	];
 

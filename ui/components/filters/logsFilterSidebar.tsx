@@ -9,6 +9,7 @@ import { TruncatedLabel } from "@/components/ui/truncatedLabel";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { RequestTypeLabels, RequestTypes, RoutingEngineUsedLabels, Statuses } from "@/lib/constants/logs";
 import { useGetAvailableFilterDataQuery, useGetProvidersQuery } from "@/lib/store";
+import { COMPLEXITY_TIER_VALUES, LEGACY_COMPLEXITY_TIER_VALUES, COMPLEXITY_MECHANISM_LABELS, COMPLEXITY_MECHANISM_VALUES } from "@/lib/types/complexityRouter";
 import type { LogFilters } from "@/lib/types/logs";
 import { cn } from "@/lib/utils";
 import { ChevronDown, LoaderCircle, PanelLeftClose, Plus, RotateCcw, Search } from "lucide-react";
@@ -51,7 +52,7 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 	}, []);
 
 	const activeFilterCount = useMemo(() => {
-		const excludedKeys = ["start_time", "end_time", "content_search", "metadata_filters", "period", "polling"];
+		const excludedKeys = ["start_time", "end_time", "content_search", "request_id", "metadata_filters", "period", "polling"];
 		let count = Object.entries(filters).reduce((c, [key, value]) => {
 			if (excludedKeys.includes(key)) return c;
 			if (Array.isArray(value)) return c + value.length;
@@ -76,7 +77,7 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 	}
 
 	return (
-		<div className="bg-card fixed inset-y-2 left-2 z-40 flex h-auto w-[calc(100vw-1rem)] max-w-72 shrink-0 flex-col rounded-md border shadow-xl md:static md:h-full md:w-64 md:max-w-none md:rounded-l-none md:rounded-r-md md:border-0 md:shadow-none">
+		<div className="bg-card fixed inset-y-2 left-2 z-40 flex h-auto w-[calc(100vw-1rem)] max-w-72 shrink-0 flex-col rounded-md border shadow-xl md:static md:h-full md:w-64 md:max-w-none md:rounded-md md:shadow-none">
 			{/* Header */}
 			<div className="flex h-11 items-center justify-between border-b pr-2 pl-5">
 				<span className="text-sm font-semibold">Filters</span>
@@ -108,11 +109,14 @@ export function LogsFilterSidebar({ filters, onFiltersChange }: LogsSidebarProps
 					<AliasesFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<RoutingEnginesFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<RoutingRulesFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<ComplexityTierFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<ComplexityMechanismFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<LocalCachingFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<UserFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<TeamFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<CustomerFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<BusinessUnitFilter filters={filters} onFiltersChange={onFiltersChange} />
+					<ProjectFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<SessionFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<CostFilter filters={filters} onFiltersChange={onFiltersChange} />
 					<StopReasonFilter filters={filters} onFiltersChange={onFiltersChange} />
@@ -871,6 +875,63 @@ function RoutingRulesFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 }
 
 // ---------------------------------------------------------------------------
+// ComplexityTierFilter – static enum, no fetch (tiers are a closed value set)
+// ---------------------------------------------------------------------------
+
+function ComplexityTierFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const hasActive = (filters.complexity_tiers || []).length > 0;
+	// Legacy tiers (REASONING, merged into COMPLEX) are offered so historical
+	// rows recorded under the old scheme stay reachable through the filter.
+	const tiers: { value: string; label: string }[] = [
+		...COMPLEXITY_TIER_VALUES.map((tier) => ({ value: tier as string, label: tier.toLowerCase() })),
+		...LEGACY_COMPLEXITY_TIER_VALUES.map((tier) => ({ value: tier as string, label: `${tier.toLowerCase()} (legacy)` })),
+	];
+	return (
+		<FilterSection title="Complexity Tier" defaultOpen={defaultOpen || hasActive} testId="complexity-tier-filter-toggle">
+			{tiers.map(({ value, label }) => (
+				<CheckboxFilterItem
+					key={value}
+					labelClassName="capitalize"
+					label={label}
+					checked={(filters.complexity_tiers || []).includes(value)}
+					onCheckedChange={() => {
+						const current = filters.complexity_tiers || [];
+						const next = current.includes(value) ? current.filter((t) => t !== value) : [...current, value];
+						onFiltersChange({ ...filters, complexity_tiers: next });
+					}}
+					testId={`complexity-tier-filter-checkbox-${value.toLowerCase()}`}
+				/>
+			))}
+		</FilterSection>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// ComplexityMechanismFilter – static enum, no fetch (mechanisms are a closed value set)
+// ---------------------------------------------------------------------------
+
+function ComplexityMechanismFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const hasActive = (filters.complexity_mechanisms || []).length > 0;
+	return (
+		<FilterSection title="Complexity Mechanism" defaultOpen={defaultOpen || hasActive} testId="complexity-mechanism-filter-toggle">
+			{COMPLEXITY_MECHANISM_VALUES.map((mechanism) => (
+				<CheckboxFilterItem
+					key={mechanism}
+					label={COMPLEXITY_MECHANISM_LABELS[mechanism] ?? mechanism}
+					checked={(filters.complexity_mechanisms || []).includes(mechanism)}
+					onCheckedChange={() => {
+						const current = filters.complexity_mechanisms || [];
+						const next = current.includes(mechanism) ? current.filter((m) => m !== mechanism) : [...current, mechanism];
+						onFiltersChange({ ...filters, complexity_mechanisms: next });
+					}}
+					testId={`complexity-mechanism-filter-checkbox-${mechanism}`}
+				/>
+			))}
+		</FilterSection>
+	);
+}
+
+// ---------------------------------------------------------------------------
 // SessionFilter
 // ---------------------------------------------------------------------------
 
@@ -1115,6 +1176,65 @@ function BusinessUnitFilter({ filters, onFiltersChange, defaultOpen }: FilterCom
 				onSearch={setSearchQuery}
 				fetching={isFetching}
 				testIdPrefix="business-units-filter"
+			/>
+		</FilterSection>
+	);
+}
+
+// ---------------------------------------------------------------------------
+// ProjectFilter
+// ---------------------------------------------------------------------------
+
+function ProjectFilter({ filters, onFiltersChange, defaultOpen }: FilterComponentProps) {
+	const hasActive = (filters.project_ids || []).length > 0;
+	const [opened, setOpened] = useState(defaultOpen || hasActive);
+	const searchInputRef = useAutoFocusOnOpen(opened);
+	const [searchQuery, setSearchQuery] = useState("");
+	const {
+		data: filterData,
+		isUninitialized,
+		isLoading,
+		isFetching,
+	} = useGetAvailableFilterDataQuery({ dimensions: ["projects"], q: searchQuery || undefined }, { skip: !opened && !hasActive });
+	const availableProjects = filterData?.projects || [];
+	const nameToIds = useMemo(() => groupByName(availableProjects), [availableProjects]);
+
+	if (!isUninitialized && !isLoading && availableProjects.length === 0 && !hasActive && !opened) return null;
+
+	const toggle = (name: string) => {
+		const resolvedIds = nameToIds.get(name) || [name];
+		const current = filters.project_ids || [];
+		const allSelected = resolvedIds.every((id) => current.includes(id));
+		const next = allSelected
+			? current.filter((v) => !resolvedIds.includes(v))
+			: [...current, ...resolvedIds.filter((id) => !current.includes(id))];
+		onFiltersChange({ ...filters, project_ids: next });
+	};
+
+	const isSelected = (name: string) => {
+		const resolvedIds = nameToIds.get(name) || [name];
+		const current = filters.project_ids || [];
+		return resolvedIds.every((id) => current.includes(id));
+	};
+
+	return (
+		<FilterSection
+			title="Projects"
+			defaultOpen={defaultOpen || hasActive}
+			loading={isLoading}
+			onOpenChange={setOpened}
+			testId="projects-filter-toggle"
+		>
+			<SearchableCheckboxList
+				inputRef={searchInputRef}
+				placeholder="Search or add a project"
+				items={dedup(availableProjects).map((name) => ({ key: name, label: name }))}
+				allowCustom
+				isSelected={isSelected}
+				onToggle={toggle}
+				onSearch={setSearchQuery}
+				fetching={isFetching}
+				testIdPrefix="projects-filter"
 			/>
 		</FilterSection>
 	);

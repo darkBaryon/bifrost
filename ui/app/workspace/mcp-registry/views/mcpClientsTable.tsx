@@ -20,7 +20,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
-import { MCP_STATUS_COLORS } from "@/lib/constants/config";
 import {
 	getErrorMessage,
 	useDeleteMCPClientMutation,
@@ -31,8 +30,7 @@ import {
 	useVerifyMCPClientExchangeMutation,
 	useVerifyMCPClientHeadersMutation,
 } from "@/lib/store";
-import { MCPClient } from "@/lib/types/mcp";
-import { titleCaseFromSnakeCase } from "@/lib/utils/strings";
+import { MCPAuthType, MCPClient } from "@/lib/types/mcp";
 import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
 import { Link } from "@tanstack/react-router";
 import {
@@ -53,7 +51,9 @@ import {
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { IconWrap, InfoBox } from "./authorizerUi";
 import MCPClientSheet from "./mcpClientSheet";
+import { authScopeOf } from "./mcpClientFormFields";
 import { canReconnectMCPClient } from "./mcpClientsTable.utils";
+import { StateBadge } from "./mcpConnectionFailure";
 import { MCPHeadersAuthorizer } from "./mcpHeadersAuthorizer";
 import { MCPServersEmptyState } from "./mcpServersEmptyState";
 import { MCPUsageGuideSheet } from "./mcpUsageGuide";
@@ -502,18 +502,15 @@ export default function MCPClientsTable({
 		}
 	};
 
-	const getAuthScopeDisplay = (type: string | undefined) => {
-		switch (type) {
-			case "per_user_oauth":
-			case "per_user_headers":
-			case "token_exchange":
-				return "Per-User";
-			case "oauth":
-			case "headers":
-				return "Shared";
-			default:
-				return "-";
+	// token_exchange carries the caller's own token on every call, so it is
+	// per-user even though the form does not expose a scope dropdown for it.
+	// Everything else, including "none", resolves through authScopeOf so the
+	// table agrees with the form.
+	const getAuthScopeDisplay = (type: MCPAuthType | undefined) => {
+		if (type === "token_exchange") {
+			return "Per-User";
 		}
+		return authScopeOf(type) === "per_user" ? "Per-User" : "Shared";
 	};
 
 	const handleRowClick = (mcpClient: MCPClient) => {
@@ -929,7 +926,7 @@ export default function MCPClientsTable({
 								<TableHead className="w-[150px] font-semibold">Auth Type</TableHead>
 								<TableHead className="w-[140px] font-semibold">Auth Scope</TableHead>
 								<TableHead className="w-[120px] font-semibold">Code Mode</TableHead>
-								<TableHead className="w-[120px] font-semibold">VK Access</TableHead>
+								<TableHead className="w-[150px] font-semibold">Access</TableHead>
 								<TableHead className="w-[130px] font-semibold">Enabled Tools</TableHead>
 								<TableHead className="w-[160px] font-semibold">Auto-execute Tools</TableHead>
 								<TableHead className="w-[140px] font-semibold">
@@ -971,18 +968,31 @@ export default function MCPClientsTable({
 							) : (
 								mcpClients.map((c: MCPClient) => {
 									const canReconnect = canReconnectMCPClient(c.config);
-									const enabledToolsCount =
-										c.state == "healthy"
-											? c.config.tools_to_execute?.includes("*")
-												? c.tools?.length
-												: (c.config.tools_to_execute?.length ?? 0)
-											: 0;
-									const autoExecuteToolsCount =
-										c.state == "healthy"
-											? c.config.tools_to_auto_execute?.includes("*")
-												? c.tools?.length
-												: (c.config.tools_to_auto_execute?.length ?? 0)
-											: 0;
+									// Tool counts come from the last successful discovery, which is
+									// deliberately retained across a failed connection check, so an
+									// "unstable" (or degraded/needs_reauth) client still has a real
+									// tool list to report. Gate on the list itself rather than on
+									// "healthy" so only the states that genuinely have no discovered
+									// tools (pending_verification, error, a disabled shared client)
+									// fall back to a dash.
+									//
+									// Both lists are matched against the discovered names: nothing
+									// prunes a tool name from the config when the upstream server
+									// stops exposing it, so an unfiltered length can exceed the
+									// number of tools that actually exist. Auto-execute is further
+									// narrowed to the enabled set, mirroring canAutoExecuteTool,
+									// which requires a tool to pass tools_to_execute first.
+									const discoveredToolNames = new Set(c.tools?.map((tool) => tool.name) ?? []);
+									const enabledToolNames = c.config.tools_to_execute?.includes("*")
+										? discoveredToolNames
+										: new Set((c.config.tools_to_execute ?? []).filter((name) => discoveredToolNames.has(name)));
+									const autoExecuteToolNames = c.config.tools_to_auto_execute?.includes("*")
+										? enabledToolNames
+										: new Set((c.config.tools_to_auto_execute ?? []).filter((name) => enabledToolNames.has(name)));
+									const toolCount = discoveredToolNames.size;
+									const hasDiscoveredTools = toolCount > 0;
+									const enabledToolsCount = enabledToolNames.size;
+									const autoExecuteToolsCount = autoExecuteToolNames.size;
 									return (
 										<TableRow key={c.config.client_id} className="group hover:bg-muted/50 transition-colors">
 											<TableCell className="font-medium">
@@ -997,39 +1007,34 @@ export default function MCPClientsTable({
 											</TableCell>
 											<TableCell data-testid="mcp-client-auth-type">{getAuthTypeDisplay(c.config.auth_type)}</TableCell>
 											<TableCell data-testid="mcp-client-auth-scope">{getAuthScopeDisplay(c.config.auth_type)}</TableCell>
-											<TableCell>
-												<Badge
-													className={
-														c.state == "healthy"
-															? c.config.is_code_mode_client
-																? "bg-green-100 text-green-800"
-																: "bg-gray-100 text-gray-800"
-															: ""
-													}
-												>
-													{c.state == "healthy" ? <>{c.config.is_code_mode_client ? "Enabled" : "Disabled"}</> : "-"}
+											<TableCell data-testid="mcp-client-code-mode">
+												{/* Pure config, valid whatever the connection state is: a server
+												    that can't be reached right now is still configured for code
+												    mode or not. */}
+												<Badge className={c.config.is_code_mode_client ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"}>
+													{c.config.is_code_mode_client ? "Enabled" : "Disabled"}
 												</Badge>
 											</TableCell>
 											<TableCell data-testid="mcp-client-vk-access">
-												{c.config.allow_on_all_virtual_keys
-													? "All"
+												{c.config.allow_by_default
+													? "Allowed by default"
 													: c.vk_configs?.length
 														? `${c.vk_configs.length} ${c.vk_configs.length === 1 ? "VK" : "VKs"}`
 														: "None"}
 											</TableCell>
-											<TableCell>
-												{c.state == "healthy" ? (
+											<TableCell data-testid="mcp-client-enabled-tools">
+												{hasDiscoveredTools ? (
 													<>
-														{enabledToolsCount}/{c.tools?.length}
+														{enabledToolsCount}/{toolCount}
 													</>
 												) : (
 													"-"
 												)}
 											</TableCell>
-											<TableCell>
-												{c.state == "healthy" ? (
+											<TableCell data-testid="mcp-client-auto-execute-tools">
+												{hasDiscoveredTools ? (
 													<>
-														{autoExecuteToolsCount}/{c.tools?.length}
+														{autoExecuteToolsCount}/{toolCount}
 													</>
 												) : (
 													"-"
@@ -1042,9 +1047,10 @@ export default function MCPClientsTable({
 												    per-user auth types, so this is just the badge uniformly,
 												    same as shared clients. Column-header tooltip above explains
 												    that "unstable" reflects Bifrost's own connection checks, not
-												    caller traffic. "degraded" additionally gets a drill-down —
-												    see StateBadge below. */}
-												<StateBadge state={c.state} nodeStates={c.node_states} />
+												    caller traffic. Any state with a recorded reason (or a
+												    per-instance breakdown) gets a drill-down, see StateBadge in
+												    mcpConnectionFailure.tsx. */}
+												<StateBadge client={c} />
 											</TableCell>
 											<TableCell onClick={(e) => e.stopPropagation()}>
 												<Switch
@@ -1222,46 +1228,6 @@ export default function MCPClientsTable({
 				/>
 			)}
 		</div>
-	);
-}
-
-// StateBadge renders the plain state badge, except for "degraded" — a
-// distributed deployment's instances currently disagreeing about a client's
-// state — which additionally gets a hover drill-down showing the
-// per-instance breakdown behind the aggregate. summarizeNodeStates groups
-// instance IDs by their reported state so the drill-down reads as counts
-// ("2 instances: Healthy, 1 instance: Unstable") rather than a raw ID list.
-function summarizeNodeStates(nodeStates: Record<string, string>): string[] {
-	const countByState = new Map<string, number>();
-	for (const state of Object.values(nodeStates)) {
-		countByState.set(state, (countByState.get(state) ?? 0) + 1);
-	}
-	return Array.from(countByState.entries()).map(
-		([state, count]) => `${count} ${count === 1 ? "instance" : "instances"}: ${titleCaseFromSnakeCase(state)}`,
-	);
-}
-
-function StateBadge({ state, nodeStates }: { state: string; nodeStates?: Record<string, string> }) {
-	const badge = <Badge className={MCP_STATUS_COLORS[state]}>{titleCaseFromSnakeCase(state)}</Badge>;
-	if (state !== "degraded" || !nodeStates || Object.keys(nodeStates).length === 0) {
-		return badge;
-	}
-	return (
-		<Popover>
-			<PopoverTrigger asChild>
-				<button type="button" data-testid="mcp-client-state-degraded-trigger" className="cursor-help">
-					{badge}
-				</button>
-			</PopoverTrigger>
-			<PopoverContent className="w-xs text-xs" align="start">
-				<p className="text-muted-foreground mb-1.5">Instances disagree about this client&apos;s state:</p>
-				<ul className="space-y-0.5">
-					{summarizeNodeStates(nodeStates).map((line) => (
-						<li key={line}>{line}</li>
-					))}
-				</ul>
-			</PopoverContent>
-		</Popover>
 	);
 }
 
