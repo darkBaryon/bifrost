@@ -23,8 +23,8 @@
 - [x] 7. `core/schemas/bifrost.go` — BifrostRequest/BifrostResponse/RequestType 数据模型 → [笔记](07-core-schemas数据模型.md)
 - [x] 8. `core/bifrost.go:70` — Bifrost 主结构体 + Init → [笔记](08-core-Bifrost引擎与Init.md)
 - [x] 9. `ChatCompletionRequest(797) → handleRequest(5089) → tryRequest(5372)` — fallback 编排 → [笔记](09-core-fallback编排.md)(骨架级)
-- [x] 10. `ProviderQueue(134) + requestWorker(6552)` — 队列/worker 并发模型(TOCTOU 注释必读) → [笔记](10-core-队列与worker.md)(骨架级,只记规则)
-- [ ] 11. `core/schemas/provider.go:631 Provider 接口` + `core/providers/openai/` 一个实现样板 —— **跳过**,太底层且永不自己写适配器;需要时看接口方法列表 + openai 一个翻译函数即可
+- [ ] 10. `ProviderQueue(134) + requestWorker(6552)` — 队列/worker 并发模型 —— **跳过**(太底层,永不碰;TOCTOU 注释已在 08 记过;重试/换 key 规则需要时从 :5915 进)
+- [ ] 11. `core/schemas/provider.go:631 Provider 接口` + `core/providers/openai/` 一个实现样板
 
 ### 第三阶段:插件与有状态层
 
@@ -53,4 +53,3 @@
 | 07 | [core-schemas数据模型](07-core-schemas数据模型.md) | 信封设计、类型归属、50 种从哪来、为何流程能一样、丑在哪与历史成因、上游改 API 的波及 |
 | 08 | [core-Bifrost引擎与Init](08-core-Bifrost引擎与Init.md) | 编排的十个决定、每 provider 一条流水线、两种 channel、队列不 close 的 TOCTOU、上帝类的成分分析、按功能触发的读法 |
 | 09 | [core-fallback编排](09-core-fallback编排.md) | 两层循环、三个判断函数、短路两条路、AllowFallbacks 观察、插件口子与边界、没口子时的三条路 |
-| 10 | [core-队列与worker](10-core-队列与worker.md) | 五条规则:队列满等或丢、重试默认关、per-key 才换 key、弃单计费、热更新先起新再退旧 |

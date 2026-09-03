@@ -72,7 +72,6 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | [core-schemas数据模型](07-阅读笔记/07-core-schemas数据模型.md) | BifrostRequest 信封、50 种请求、差异推到两头、设计成因 |
 | [core-Bifrost引擎与Init](07-阅读笔记/08-core-Bifrost引擎与Init.md) | 编排的十个决定、每 provider 一条流水线、队列设计、上帝类分析 |
 | [core-fallback编排](07-阅读笔记/09-core-fallback编排.md) | fallback 规则、插件短路、插件口子边界与包壳 |
-| [core-队列与worker](07-阅读笔记/10-core-队列与worker.md) | 队列满、重试与换 key、弃单计费、provider 热更新的五条规则 |
 
 ### 06-产品调研 —— 市场与竞品
 
