@@ -75,6 +75,7 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | [core-providers适配器](07-阅读笔记/11-core-providers适配器.md) | 三种方言三个底座、薄适配器公式、配置 vs 代码、接厂商决策树 |
 | [core-插件接口](07-阅读笔记/12-core-插件接口.md) | 插件接口、钩子返回值协议、三条交付路、内容安全插件形状 |
 | [插件装配与governance](07-阅读笔记/13-插件装配与governance.md) | 插件装配、governance 范本:决策序、热更新、10s 落库 |
+| [framework三个store接口](07-阅读笔记/15-framework三个store接口.md) | 三个 store 契约、表与迁移怎么加、ee/ 自建表不改上游 |
 
 ### 06-产品调研 —— 市场与竞品
 

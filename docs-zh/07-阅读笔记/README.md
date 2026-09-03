@@ -8,6 +8,8 @@
 带着六个问题读(格式翻译 / key 选择 / fallback / 故障隔离 / 流式 / 插件切面),每步读完打勾并链接笔记。
 
 > 2026-09-04 起的读法:先建地图再按需钻。第二阶段 9/10/11 只过骨架,重心放 12/13/15(写插件要懂的);编排细节等开发对应功能时再回来细读。
+>
+> **主线已走完(2026-09-04)**:13 步读,2 步跳(10 队列、14 integrations)。下一步是两个最小实验:hello-world 插件(照 examples/plugins/llm-only,用 SyncLoadedPlugin 注册)、`ee/` 包壳加一条路由。之后按功能触发回来细读。
 
 ### 第一阶段:装配与入口(transports)
 
@@ -30,8 +32,8 @@
 
 - [x] 12. `core/schemas/plugin.go:165-206` — 插件接口与生命周期注释 → [笔记](12-core-插件接口.md)
 - [x] 13. `server/plugins.go` — 插件装配;挑 governance 或 logging 读一个真实插件 → [笔记](13-插件装配与governance.md)
-- [ ] 14. `integrations/router.go` — 兼容层通用引擎(RouteConfig + 双向格式转换)
-- [ ] 15. `framework/{configstore,logstore,vectorstore}/store.go` 三个接口 — 热更新链路
+- [ ] 14. `integrations/router.go` — 兼容层通用引擎 —— **跳过**(不写协议翻译;骨架已在 05 路由总目录里:15 个扩展路由器各自 RegisterRoutes,每家一个前缀)
+- [x] 15. `framework/{configstore,logstore,vectorstore}/store.go` 三个接口 — 热更新链路 → [笔记](15-framework三个store接口.md)
 
 ### 支线(按需)
 
@@ -55,4 +57,5 @@
 | 09 | [core-fallback编排](09-core-fallback编排.md) | 两层循环、三个判断函数、短路两条路、AllowFallbacks 观察、插件口子与边界、没口子时的三条路 |
 | 11 | [core-providers适配器](11-core-providers适配器.md) | 55 方法接口、为何 Bifrost 格式=OpenAI 格式、三种方言三个底座、deepseek 薄适配器公式、配置 vs 代码边界、接国内厂商决策树 |
 | 12 | [core-插件接口](12-core-插件接口.md) | 七个接口三层、三钩子返回值协议、error≠拒绝、HTTP 钩子、三条交付路(包壳里 SyncLoadedPlugin)、内容安全插件的形状 |
-| 13 | [插件装配与governance](13-插件装配与governance.md) | LoadPlugins 两段装法、InstantiatePlugin 只答"代码在哪"、governance 五文件骨架、三钩子分工、决策序的安全理由、规则从哪来/热更新/10s 落库 |
+| 13 | [插件装配与governance](13-插件装配与governance.md) | LoadPlugins 两段装法、InstantiatePlugin 只答"代码在哪"、governance 五文件骨架、三钩子分工、决策序的安全理由、规则从哪来/热更新/10s 落库;补 prompts 最小版本 |
+| 15 | [framework三个store接口](15-framework三个store接口.md) | 296 方法一份 GORM 实现、表三件套、迁移幂等与集群锁、`DB()` 导出让 ee/ 自建表不改上游 |

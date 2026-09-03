@@ -45,3 +45,15 @@
 `store.go` 规则内存副本(检测档案、阈值、按 VK 绑定,从自己的表加载);`main.go` PreLLM/PostLLM;一组 `Update*InMemory` 给包壳回调;拦截事件像 tracker 内存攒定时落库。规模 governance 十分之一。
 
 下一步:14 integrations 引擎(可跳),15 三个 store 接口。
+
+## 补:prompts 插件,governance 的最小版本(611 行一个文件)
+
+功能:请求头带 `x-bf-prompt-id`(可选 `x-bf-prompt-version`),插件把该版本的模板消息插到用户消息前,模板的模型参数当默认值(请求自带的优先)。
+
+五个部件:`InMemoryStore` 接口只要 ConfigStore 两个方法(消费者定义小接口);`PromptResolver` 接口 + 默认 `headerResolver` 从 ctx 读两个 header,`InitWithResolver` 给企业版换按用户/团队决定的 resolver;`Plugin` struct = store + logger + resolver + 读写锁 + 两个 map;`loadCache`/`Reload`;`PreLLMHook`。
+
+规则从哪来、怎么热更新四十行讲完:`loadCache` 两次查库在**局部变量**建好新 map,加写锁换 struct 上的指针——"换指针不改内容"最小实现;`Reload` 就是再调一次,handler 增删改完提示词调 `PromptCacheReloader.Reload`(全量重载,表小不值得增量)。
+
+`PreLLMHook` 六步:resolver 拿 ID 和版本 → 查内存 map(版本 0 = latest)→ 选中的 ID/名/版本写 ctx 给 logging → 版本参数合并进请求(请求优先)→ 模板消息转 ChatMessage → 拼到 `Input` 前。每步失败 `Warn` 后 `return req, nil, nil`:**找不到模板不拒绝,原样放行**,它是增强不是门禁。PostLLMHook、Cleanup 空实现。
+
+没有的:落库、后台 worker、拒绝、层级决策。"读配置改请求"这类插件的标准形状;内容安全插件比它多两样——PreLLMHook 里拒绝(第 12 步 ShortCircuit)、拦截记录落库(governance tracker),其余照它抄。
