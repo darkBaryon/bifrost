@@ -1,0 +1,47 @@
+# ee包壳骨架 期1 —— 方案v3 §7 与评审之间的合同
+# 用法: python3 tools/preflight.py --config cases/ee包壳骨架/期1/checklist.yaml --repo ..
+# 前置: 工作树干净(git status --porcelain --untracked-files=no 为空), go.mod 工具链漂移先 git checkout 还原
+
+必过命令:
+  - { name: worktree-clean, run: "git status --porcelain --untracked-files=no", expect_empty: true }
+  - { name: ee-build, run: "cd ee && go build ./..." }
+  - { name: ee-vet, run: "cd ee && go vet ./..." }
+  - { name: ee-test, run: "cd ee && go test ./..." }
+  - { name: ee-in-gowork, run: "grep -qxE '\\s*\\./ee' go.work" }
+  - { name: ui-overlay, run: "bash ee/ui/sync.sh && test -L ui/app/enterprise/components/audit-logs/auditLogsView.tsx" }
+  - { name: ui-build, run: "cd ui && ./node_modules/.bin/vite build" }
+  - { name: ui-typecheck, run: "cd ui && ./node_modules/.bin/tsc --noEmit" }
+  - { name: upstream-untouched, run: "git diff --name-only upstream/dev HEAD -- . ':!docs-zh' ':!workbench' ':!ee' ':!ui/app/main.tsx' ':!ui/lib/zhDict.json' ':!ui/lib/zhLocale.ts' ':!ui/scripts' ':!.claude'", expect_empty: true }
+
+必存产物:
+  - ee/go.mod
+  - ee/Makefile
+  - ee/transports/bifrost-http/main.go
+  - ee/transports/bifrost-http/ui/.keep
+  - ee/transports/bifrost-http/server/bootstrap.go
+  - ee/transports/bifrost-http/server/probe_plugin.go
+  - ee/transports/bifrost-http/handlers/probe.go
+  - ee/transports/bifrost-http/handlers/branding.go
+  - ee/transports/bifrost-http/handlers/middlewares.go
+  - ee/transports/bifrost-http/lib/tables.go
+  - ee/transports/bifrost-http/lib/shell.go
+  - ee/ui/sync.sh
+  - ee/ui/app/enterprise/components/audit-logs/auditLogsView.tsx
+  - ee/scripts/smoke.sh
+  - docs-zh/04-开发指南/07-ee包壳.md
+
+必含符号:
+  - { grep: "SyncLoadedPlugin", in: "ee" }
+  - { grep: "AutoMigrate", in: "ee" }
+  - { grep: "/api/ee/ping", in: "ee" }
+  - { grep: "/api/branding", in: "ee" }
+  - { grep: "X-Bifrost-EE", in: "ee" }
+  - { grep: "x-bifrost-ee", in: "ee/transports/bifrost-http/lib" }
+  - { grep: "func Bootstrap", in: "ee/transports/bifrost-http/server" }
+  - { grep: ") RegisterRoutes", in: "ee/transports/bifrost-http/handlers" }
+  - { grep: "TableName", in: "ee/transports/bifrost-http/lib" }
+
+禁留标记:
+  - { grep: "BifrostContextKeyIsEnterprise", in: "ee" }
+  - { grep: "fmt.Println(\"DEBUG", in: "ee" }
+  - { grep: "console.log(\"DEBUG", in: "ee/ui" }

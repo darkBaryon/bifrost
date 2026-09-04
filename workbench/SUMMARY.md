@@ -5,6 +5,7 @@
     - [需求报告](需求报告.md)
 - 需求
     - [UI 完整中文化](reports/UI完整中文化.md)
+    - [ee 包壳骨架](reports/ee包壳骨架.md)
     - [workbench 外壳重设计](reports/workbench外壳重设计.md)
     - [zh 中文化层 TS/mjs 孪生实现收敛](reports/zh中文化层TS-mjs孪生收敛.md)
     - [活跃工作台不再显示被取代的旧方案版本](reports/活跃工作台取代版本过滤.md)
@@ -24,6 +25,15 @@
             - [代码评审](cases/UI完整中文化/期1/代码评审3.md)
             - [收敛评审](cases/UI完整中文化/期1/收敛评审1.md)
             - [验收记录](cases/UI完整中文化/期1/验收记录.md)
+    - ee包壳骨架
+        - [主页](cases/ee包壳骨架/index.md)
+        - 期1
+            - [方案 v1](cases/ee包壳骨架/期1/方案v1.md)
+            - [方案评审](cases/ee包壳骨架/期1/方案评审1.md)
+            - [方案 v2](cases/ee包壳骨架/期1/方案v2.md)
+            - [方案评审](cases/ee包壳骨架/期1/方案评审2.md)
+            - [方案 v3（当前）](cases/ee包壳骨架/期1/方案v3.md)
+            - [方案评审](cases/ee包壳骨架/期1/方案评审3.md)
     - workbench外壳重设计
         - [主页](cases/workbench外壳重设计/index.md)
         - 期1
