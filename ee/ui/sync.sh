@@ -15,7 +15,6 @@ OVERLAY=ee/ui/app/enterprise
 rm -rf "$DST"
 cp -R "$SRC" "$DST"
 
-n=0
 ( cd "$OVERLAY" && find . -type f -print0 ) | while IFS= read -r -d '' f; do
   f="${f#./}"
   mkdir -p "$DST/$(dirname "$f")"

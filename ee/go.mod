@@ -246,7 +246,6 @@ replace (
 	github.com/maximhq/bifrost/framework => ../framework
 	github.com/maximhq/bifrost/plugins/compat => ../plugins/compat
 	github.com/maximhq/bifrost/plugins/governance => ../plugins/governance
-	github.com/maximhq/bifrost/plugins/jsonparser => ../plugins/jsonparser
 	github.com/maximhq/bifrost/plugins/logging => ../plugins/logging
 	github.com/maximhq/bifrost/plugins/maxim => ../plugins/maxim
 	github.com/maximhq/bifrost/plugins/mocker => ../plugins/mocker

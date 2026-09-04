@@ -39,5 +39,5 @@ test: workspace ## go vet + go test
 dev: workspace ui-sync ## 从源码起 ee 版 API (无热重载); UI 开发服务器另起: cd ui && npm run dev (3000 → 8080)
 	@go run ./transports/bifrost-http -port $(PORT) -app-dir $(APP_DIR) -log-style pretty
 
-smoke: build ## 起 ee 与 OSS 各一份, 跑 T1-T7 断言 (见方案 §6)
+smoke: build ## 起 ee 与 OSS 各一份, 跑 9 条断言 T1-T8 (见方案 §6)
 	@bash $(ROOT)/ee/scripts/smoke.sh
