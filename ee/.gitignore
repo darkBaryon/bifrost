@@ -1,0 +1,5 @@
+# 构建产物
+tmp/
+# embed 的 UI 产物由 make build-ui 生成, 只保留占位文件
+transports/bifrost-http/ui/*
+!transports/bifrost-http/ui/.keep
