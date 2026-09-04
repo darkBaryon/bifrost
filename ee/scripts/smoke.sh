@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ee 骨架冒烟: ee 版 (18080) 与 OSS 版 (18081) 各起一份, 对同一 config.db 的两份副本跑 T1-T7.
+# ee 骨架冒烟: ee 版 (18080) 与 OSS 版 (18081) 各起一份, 对同一 config.db 的两份副本跑 9 条断言 (T1-T8).
 # 前提: 已 make -C ee build (ee/tmp/bifrost-http 含 UI); 本机 ~/.config/bifrost/config.db 存在;
 #       上游 transports/bifrost-http/ui/ 目录存在 (OSS 对照用 go run, 其 embed 需要该目录).
 # 总则: OSS 对照一律不比状态码 (上游 /{filepath:*} 把未知 /api/* 兜底成 200 HTML), 只比 Content-Type 与结构.
@@ -9,8 +9,6 @@ cd "$(dirname "$0")/../.."   # 仓库根
 APP_SRC="${APP_SRC:-$HOME/.config/bifrost/config.db}"
 EE_PORT=18080; OSS_PORT=18081
 TMP="$(mktemp -d)"; mkdir -p "$TMP/ee" "$TMP/oss"
-cp "$APP_SRC" "$TMP/ee/config.db" || { echo "missing $APP_SRC"; exit 1; }
-cp "$APP_SRC" "$TMP/oss/config.db" || exit 1
 PIDS=()
 cleanup() {
   for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done
@@ -19,6 +17,8 @@ cleanup() {
   rm -rf "$TMP"
 }
 trap cleanup EXIT
+cp "$APP_SRC" "$TMP/ee/config.db" || { echo "missing $APP_SRC"; exit 1; }
+cp "$APP_SRC" "$TMP/oss/config.db" || exit 1
 
 wait_up() { for _ in $(seq 1 90); do curl -sf -m 2 "http://localhost:$1/api/version" >/dev/null && return 0; sleep 1; done; echo "port $1 did not come up"; return 1; }
 

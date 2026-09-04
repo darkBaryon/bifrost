@@ -35,6 +35,7 @@
             - [方案 v3（当前）](cases/ee包壳骨架/期1/方案v3.md)
             - [方案评审](cases/ee包壳骨架/期1/方案评审3.md)
             - [代码评审](cases/ee包壳骨架/期1/代码评审1.md)
+            - [代码评审](cases/ee包壳骨架/期1/代码评审2.md)
             - [收敛评审](cases/ee包壳骨架/期1/收敛评审1.md)
     - workbench外壳重设计
         - [主页](cases/workbench外壳重设计/index.md)
