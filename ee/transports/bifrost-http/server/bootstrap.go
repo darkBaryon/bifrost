@@ -9,8 +9,13 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
+
+	"github.com/darkBaryon/bifrost/ee/transports/bifrost-http/handlers"
+	"github.com/darkBaryon/bifrost/ee/transports/bifrost-http/lib"
 )
 
 // Bootstrap 取代上游 main 里的 s.Bootstrap(ctx) 调用.
@@ -22,11 +27,38 @@ func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer) error {
 	return attach(ctx, s)
 }
 
-// prepare 在上游 Bootstrap 之前运行. 骨架期为空, 后续在此设置 ShellRewriter 等
-// "nil on OSS" 字段; B2 起在此处理 IsEnterprise 相关开关.
-func prepare(s *bifrostServer.BifrostHTTPServer) {}
+// prepare 在上游 Bootstrap 之前运行: 只能放上游装配过程中会读取的东西.
+// ShellRewriter 在 RegisterAPIRoutes → NewUIHandler 时被捕获, 之后再赋值无效.
+// B2 起在此处理 IsEnterprise 相关开关.
+func prepare(s *bifrostServer.BifrostHTTPServer) {
+	s.ShellRewriter = lib.EEShellRewriter
+}
 
-// attach 在上游 Bootstrap 之后、Start 之前运行. 骨架期为空, 第 2 步补五个插座.
+// attach 在上游 Bootstrap 之后、Start 之前运行. 此时上游对象已装配完成但尚未监听,
+// Router / Server.Handler / Config / 插件链都是可改的活数据.
 func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer) error {
+	// ① 自建表: 复用上游的数据库连接, ee 表一律 ee_ 前缀, 各自迁移互不打听.
+	if s.Config == nil || s.Config.ConfigStore == nil {
+		return errors.New("ee requires the config store (database mode); config_store.enabled=false is not supported")
+	}
+	db := s.Config.ConfigStore.DB()
+	if db == nil {
+		return errors.New("ee: config store returned a nil *gorm.DB")
+	}
+	if err := db.AutoMigrate(&lib.Probe{}); err != nil {
+		return fmt.Errorf("ee: migrate %s: %w", lib.Probe{}.TableName(), err)
+	}
+
+	// ② 进程内插件: 不经 .so, 上游把它同步进 Config 与 core 的插件链并排序 (纯内存, 不落库).
+	if err := s.SyncLoadedPlugin(ctx, ProbePluginName, probePlugin{}, nil, nil); err != nil {
+		return fmt.Errorf("ee: register plugin %s: %w", ProbePluginName, err)
+	}
+
+	// ③ 路由: 往上游的路由表加 ee 的路径. 无鉴权的只有骨架探针与上游设计即公开的 branding.
+	handlers.NewProbeHandler(db, ProbePluginName).RegisterRoutes(s.Router)
+	handlers.NewBrandingHandler().RegisterRoutes(s.Router)
+
+	// ④ 全局中间件: 包在上游拼好的整条链外面 (ServerCallbacks 被上游硬编码, 不可替换).
+	s.Server.Handler = handlers.EEHeaderMiddleware(s.Server.Handler)
 	return nil
 }
