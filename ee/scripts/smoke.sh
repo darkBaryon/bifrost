@@ -10,7 +10,12 @@ EE_PORT=18080; OSS_PORT=18081
 TMP="$(mktemp -d)"; mkdir -p "$TMP/ee" "$TMP/oss"
 cp "$APP_SRC" "$TMP/ee/config.db"; cp "$APP_SRC" "$TMP/oss/config.db"
 PIDS=()
-cleanup() { for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done; rm -rf "$TMP"; }
+cleanup() {
+  for p in "${PIDS[@]:-}"; do [ -n "$p" ] && kill "$p" 2>/dev/null || true; done
+  # go run 的子进程不随父 shell 退出, 按端口再杀一遍
+  for port in $EE_PORT $OSS_PORT; do lsof -ti "tcp:$port" -sTCP:LISTEN 2>/dev/null | xargs kill 2>/dev/null || true; done
+  rm -rf "$TMP"
+}
 trap cleanup EXIT
 
 wait_up() { for _ in $(seq 1 90); do curl -sf -m 2 "http://localhost:$1/api/version" >/dev/null && return 0; sleep 1; done; echo "port $1 did not come up"; return 1; }
