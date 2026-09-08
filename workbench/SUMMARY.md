@@ -37,6 +37,7 @@
             - [代码评审](cases/ee包壳骨架/期1/代码评审1.md)
             - [代码评审](cases/ee包壳骨架/期1/代码评审2.md)
             - [收敛评审](cases/ee包壳骨架/期1/收敛评审1.md)
+            - [验收记录](cases/ee包壳骨架/期1/验收记录.md)
     - workbench外壳重设计
         - [主页](cases/workbench外壳重设计/index.md)
         - 期1
