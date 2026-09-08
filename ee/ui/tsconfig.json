@@ -1,0 +1,17 @@
+{
+  "extends": "../../ui/tsconfig.json",
+  "compilerOptions": {
+    "typeRoots": ["../../ui/node_modules/@types", "../../ui/node_modules"],
+    "paths": {
+      "@/*": ["../../ui/*"],
+      "@enterprise/*": ["./app/enterprise/*", "../../ui/app/_fallbacks/enterprise/*"],
+      "@schemas/*": [
+        "./app/enterprise/lib/schemas/*",
+        "../../ui/app/_fallbacks/enterprise/lib/schemas/*"
+      ],
+      "*": ["../../ui/node_modules/@types/*", "../../ui/node_modules/*"]
+    }
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules"]
+}

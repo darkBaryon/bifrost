@@ -9,6 +9,7 @@
     - [workbench 外壳重设计](reports/workbench外壳重设计.md)
     - [zh 中文化层 TS/mjs 孪生实现收敛](reports/zh中文化层TS-mjs孪生收敛.md)
     - [活跃工作台不再显示被取代的旧方案版本](reports/活跃工作台取代版本过滤.md)
+    - [管理操作审计](reports/管理操作审计.md)
 - 过程文档
     - UI完整中文化
         - [主页](cases/UI完整中文化/index.md)
@@ -55,6 +56,10 @@
             - [代码评审](cases/workbench外壳重设计/期2/代码评审1.md)
             - [收敛评审](cases/workbench外壳重设计/期2/收敛评审1.md)
             - [验收记录](cases/workbench外壳重设计/期2/验收记录.md)
+    - 管理操作审计
+        - [主页](cases/管理操作审计/index.md)
+        - 期1
+            - [方案 v1（当前）](cases/管理操作审计/期1/方案v1.md)
 - 规范
     - [规范主页](规范.md)
     - [流程](规范/流程.md)
