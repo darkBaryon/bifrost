@@ -1020,3 +1020,11 @@ cd ui && npm run build
 * Follow **strict folder structure and routing conventions**
 * Use **the right tool for the right problem**
 * Keep code **simple, predictable, and maintainable**
+
+
+## 本地产品与工程文档入口
+
+- 产品调研、需求与产品方案：`product/README.md`；写作遵循 `product/AGENTS.md`。
+- 原 `docs-zh/` 已整理到 `product/`：参考资料在 `product/docs-zh/`，公共调研在 `product/竞品调研/`，具体需求在 `product/需求/`。不要重新创建根目录 `docs-zh/`。
+- 架构设计、实施、评审、验收：`workbench/README.md` 与 `workbench/AGENTS.md`，保持独立。
+- 产品与工程以文档引用交接，不另建统一流程或复制业务规则；功能分支带回旧路径文档时先比较内容再按新路径整合。

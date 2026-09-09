@@ -7,6 +7,8 @@ bifrost fork（darkBaryon/bifrost）的本地功能开发工作台：在文件�
 - **本仓怎么操作**（铁律 / 目录 / 读写协议 / 流程锚点）：[AGENTS.md](AGENTS.md)（唯一操作页）
 - **日常入口**：[index.md](index.md)（活跃工作台，生成文件）
 
+产品调研与产品方案见独立的 [产品文档](../product/README.md)；已有源码导读见 [中文参考资料](../product/docs-zh/README.md)。Workbench 保持架构与工程交付职责，引用产品方案作为输入。
+
 ## 命令
 
 ```bash

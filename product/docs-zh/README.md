@@ -1,7 +1,7 @@
-# Bifrost 中文说明文档
+# Bifrost 中文参考资料
 
-> 本文件夹是对 Bifrost 仓库（`maximhq/bifrost`）的完整中文导读，基于 `dev` 分支实际代码整理。
-> 已提交在 fork（darkBaryon/bifrost）的 develop 分支上，随二次开发持续扩充。
+> 原 `docs-zh` 的源码导读与学习资料，现作为 `product` 的参考资料保留。各篇内容按其编写时的代码版本理解；历史说明不自动代表当前实现。
+> 产品调研、需求与路线图从 [产品入口](../README.md) 阅读；架构设计与工程交付从 [Workbench](../../workbench/README.md) 阅读。
 
 ## Bifrost 是什么
 
@@ -77,13 +77,6 @@ Bifrost 是 Maxim 出品的**高性能 AI 网关（LLM Gateway）**：把 20+ �
 | [core-插件接口](07-阅读笔记/12-core-插件接口.md) | 插件接口、钩子返回值协议、三条交付路、内容安全插件形状 |
 | [插件装配与governance](07-阅读笔记/13-插件装配与governance.md) | 插件装配、governance 范本:决策序、热更新、10s 落库 |
 | [framework三个store接口](07-阅读笔记/15-framework三个store接口.md) | 三个 store 契约、表与迁移怎么加、ee/ 自建表不改上游 |
-
-### 06-产品调研 —— 市场与竞品
-
-| 文档 | 内容 |
-|---|---|
-| [竞品全景](06-产品调研/01-竞品全景.md) | AI 网关市场五象限地图、2026 整合大事记、Bifrost 竞争坐标 |
-| [象限A功能对比](06-产品调研/02-象限A功能对比.md) | 七大开源网关功能矩阵、五个战略判断、中国合规缝隙假设修正 |
 
 ## 5 分钟上手
 
