@@ -1,16 +1,9 @@
 import { baseApi } from "./baseApi";
 
 /**
- * custom branding.
- *
- * Enterprise deployments can replace the Bifrost logo and icon. Every endpoint
- * below lives in the enterprise build — the read is public there (the login
- * screen renders before any session exists), while the writes carry auth and
- * RBAC. On OSS none of them exist: callers skip the query (see useBranding) and
- * every surface keeps the bundled defaults.
- *
- * The response carries URLs rather than base64 so the images are fetched and
- * cached by the browser as ordinary assets instead of riding along in JSON.
+ * 企业品牌设置的接口响应。查询使用 POST，保持公开以供未登录页面读取；写入沿用管理端鉴权。
+ * OSS 不提供这些接口，由 useBranding 跳过查询并使用默认图片。
+ * 响应只携带图片 URL，浏览器通过 GET 读取和缓存图片。
  */
 export interface BrandingState {
 	/** True when at least one slot is overridden. */
@@ -44,25 +37,26 @@ export const brandingApi = baseApi.injectEndpoints({
 	endpoints: (builder) => ({
 		getBranding: builder.query<BrandingState, void>({
 			query: () => ({
-				url: "/branding",
+				url: "/branding/get",
+				method: "POST",
 			}),
 			providesTags: ["Branding"],
 		}),
 
 		updateBranding: builder.mutation<BrandingState, BrandingPayload>({
 			query: (data) => ({
-				url: "/branding",
-				method: "PUT",
+				url: "/branding/update",
+				method: "POST",
 				body: data,
 			}),
 			invalidatesTags: ["Branding"],
 		}),
 
-		// Clears branding and restores the default Bifrost logo and icon.
+		// 清空品牌设置，恢复默认 Logo 和小图标。
 		resetBranding: builder.mutation<BrandingState, void>({
 			query: () => ({
-				url: "/branding",
-				method: "DELETE",
+				url: "/branding/reset",
+				method: "POST",
 			}),
 			invalidatesTags: ["Branding"],
 		}),

@@ -1,0 +1,40 @@
+# 历史验证快照，不是当前检查入口；当前使用 workbench/cases/Logo品牌设置/期1/checklist.yaml。
+必过命令:
+  - { name: diff-check, run: "git diff --check" }
+  - name: go-format
+    run: |
+      python3 - <<'PY'
+      import subprocess
+      from pathlib import Path
+      paths = [str(p) for base in ['ee/framework/configstore/branding', 'ee/transports/bifrost-http/handlers/branding'] for p in Path(base).glob('*.go')]
+      paths += ['ee/transports/bifrost-http/server/bootstrap.go', 'ee/transports/bifrost-http/lib/tables.go']
+      result = subprocess.check_output(['gofmt', '-l', *paths], text=True)
+      assert not result.strip(), result
+      PY
+  - { name: go-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: go-test, run: "cd ee && GOWORK=off go test -count=1 ./..." }
+  - { name: go-race, run: "cd ee && GOWORK=off go test -race ./framework/configstore/branding ./transports/bifrost-http/handlers/branding" }
+  - { name: ui-format, run: "./ui/node_modules/.bin/oxfmt --config ui/.oxfmtrc.json --check ee/ui/app/enterprise/components/branding ee/ui/app/enterprise/lib/schemas/branding.ts ui/lib/store/apis/brandingApi.ts ui/lib/store/apis/brandingApi.test.ts" }
+  - { name: ui-build, run: "make -C ee build-ui" }
+  - { name: ui-typecheck, run: "cd ui && ./node_modules/.bin/tsc --noEmit && ./node_modules/.bin/tsc --noEmit -p ../ee/ui/tsconfig.json --types vite/client,node" }
+  - { name: ui-test, run: "cd ui && ./node_modules/.bin/vitest run lib/hooks/useBranding.test.ts app/enterprise/components/branding/image.test.ts lib/store/apis/brandingApi.test.ts" }
+  - { name: binary, run: "cd ee && GOWORK=off go build -o tmp/bifrost-branding ./transports/bifrost-http" }
+  - { name: smoke-shell-syntax, run: "bash -n ee/scripts/smoke.sh" }
+  - { name: smoke, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-branding" }
+  - { name: workbench, run: "python3 workbench/tools/build_views.py --check" }
+必存产物:
+  - ee/transports/bifrost-http/handlers/branding/handler.go
+  - ee/transports/bifrost-http/handlers/branding/settings.go
+  - ee/transports/bifrost-http/handlers/branding/validation.go
+  - ee/transports/bifrost-http/handlers/branding/asset.go
+  - ee/framework/configstore/branding/store.go
+  - ee/framework/configstore/branding/migration.go
+  - ee/framework/configstore/branding/table.go
+  - ee/transports/bifrost-http/handlers/branding/branding_test.go
+  - ui/lib/store/apis/brandingApi.test.ts
+  - ee/ui/app/enterprise/components/branding/useBrandingForm.ts
+  - ee/ui/app/enterprise/components/branding/image.ts
+必含符号:
+  - { grep: 'ee_branding_v1', in: 'ee/framework/configstore/branding' }
+禁留标记:
+  - { grep: 'console.log("DEBUG', in: 'ee/ui/app/enterprise/components/branding' }
