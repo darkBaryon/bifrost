@@ -24,6 +24,7 @@
 9. `tools/build_site.py` + `assets/styles.css`:站点名 XHS → Bifrost 开发工作台
 10. **外壳重设计**(workbench外壳重设计 期1,2026-09-02):SCHEMA/build_views 收录「收敛评审」类型(三态 verdict)与风险分级节;视图砍 active/by-case;playbook 跨切模板 gate-card/preflight-facts **删除**、convergence-review **重命名为 收敛评审.md**(frontmatter 对齐 SCHEMA);规范/本仓操作规范.md 占位化并入 AGENTS.md;新增 findings.md 实体台账
 11. 已知 vendor 自带死链:规范/change 两页引用 `../templates/common|change/...`(规范/templates 目录不存在)——上游问题,本地不修
+12. **代码风格与评审指引**(工作台代码风格与评审指引,2026-09-09):新增 `规范/项目/编码规范.md`(本项目 ee 开发约定,非 playbook 内容,升级时保留)、`规范/流程/收敛评审审查方向.md`(评审操作指引)、`templates/收敛评审提示词.md`;`build_views.py` 导航"规范"区加三页;**`规范/机制/` 目录改名 `规范/流程/`**(用户裁决 2026-09-09:"机制"不知所云;与 `规范/流程.md` 执行序页并列,前者是执行序、后者是各步细则),站内链接全部改写,历史 case/evidence 正文里的旧路径按"保留历史"不动;**评审范围分开**(用户裁决 2026-09-09):收敛评审六维→四维(测试健康、非功能移交代码评审),两边范围外发现只「转交」不裁决;新增 `规范/流程/代码评审审查方向.md`、`templates/代码评审提示词.md`,代码评审模板重写
 
 ## 命令速查(在 workbench/ 目录下)
 
