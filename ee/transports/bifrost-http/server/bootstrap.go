@@ -14,7 +14,9 @@ import (
 
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 
+	eeconfig "github.com/darkBaryon/bifrost/ee/framework/configstore/branding"
 	"github.com/darkBaryon/bifrost/ee/transports/bifrost-http/handlers"
+	brandinghandler "github.com/darkBaryon/bifrost/ee/transports/bifrost-http/handlers/branding"
 	"github.com/darkBaryon/bifrost/ee/transports/bifrost-http/lib"
 )
 
@@ -49,14 +51,24 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer) error {
 		return fmt.Errorf("ee: migrate %s: %w", lib.Probe{}.TableName(), err)
 	}
 
+	if s.AuthMiddleware == nil {
+		return errors.New("ee: branding requires admin authentication middleware")
+	}
+	if err := s.Config.ConfigStore.RunMigration(ctx, eeconfig.MigrateBranding); err != nil {
+		return fmt.Errorf("ee: migrate branding: %w", err)
+	}
+
 	// ② 进程内插件: 不经 .so, 上游把它同步进 Config 与 core 的插件链并排序 (纯内存, 不落库).
 	if err := s.SyncLoadedPlugin(ctx, ProbePluginName, probePlugin{}, nil, nil); err != nil {
 		return fmt.Errorf("ee: register plugin %s: %w", ProbePluginName, err)
 	}
 
-	// ③ 路由: 往上游的路由表加 ee 的路径. 无鉴权的只有骨架探针与上游设计即公开的 branding.
+	// ③ 路由: 往上游的路由表加 ee 的路径. 无鉴权的只有骨架探针, 以及 branding 的两条只读路由
+	// (POST /api/branding/get 与 GET 图片, 登录页要读); branding 的写路由包上游 APIMiddleware.
 	handlers.NewProbeHandler(db, ProbePluginName).RegisterRoutes(s.Router)
-	handlers.NewBrandingHandler().RegisterRoutes(s.Router)
+	if err := brandinghandler.NewBrandingHandler(eeconfig.NewBrandingStore(db)).RegisterRoutes(s.Router, s.AuthMiddleware.APIMiddleware()); err != nil {
+		return fmt.Errorf("ee: register branding routes: %w", err)
+	}
 
 	// ④ 全局中间件: 包在上游拼好的整条链外面 (ServerCallbacks 被上游硬编码, 不可替换).
 	s.Server.Handler = handlers.EEHeaderMiddleware(s.Server.Handler)

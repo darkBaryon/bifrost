@@ -30,10 +30,13 @@
             - [代码评审](cases/Logo品牌设置/期1/代码评审1.md)
             - [代码评审 2](cases/Logo品牌设置/期1/代码评审2.md)
             - [代码评审 3](cases/Logo品牌设置/期1/代码评审3.md)
+            - [代码评审](cases/Logo品牌设置/期1/代码评审4.md)
             - [收敛评审](cases/Logo品牌设置/期1/收敛评审1.md)
             - [收敛评审](cases/Logo品牌设置/期1/收敛评审2.md)
             - [收敛评审 3](cases/Logo品牌设置/期1/收敛评审3.md)
             - [收敛评审 4](cases/Logo品牌设置/期1/收敛评审4.md)
+            - [收敛评审](cases/Logo品牌设置/期1/收敛评审5.md)
+            - [验收记录](cases/Logo品牌设置/期1/验收记录.md)
     - UI完整中文化
         - [主页](cases/UI完整中文化/index.md)
         - 期1

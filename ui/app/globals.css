@@ -6,6 +6,8 @@
 @source "../../../bifrost-enterprise/ui/**/*.tsx";
 /* app/enterprise is a symlink the scanner won't follow — point at the real path */
 @source "../../../bifrost-enterprise/enterprise-ui/**/*.tsx";
+/* 自有企业界面直接扫描源码目录，避免覆盖层的忽略规则和符号链接影响样式生成。 */
+@source "../../ee/ui/app/enterprise";
 
 @custom-variant dark (&:is(.dark *));
 

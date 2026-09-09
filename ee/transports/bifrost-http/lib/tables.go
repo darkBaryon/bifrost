@@ -1,5 +1,5 @@
 // Package lib 放 ee 版 transports 的公共件. 骨架期这里放自建表的定义;
-// 当插件与页面需要共用表时, 迁到 ee/framework/configstore/tables (镜像上游).
+// 当插件与页面需要共用表时, 迁到 ee/framework/configstore 下对应的功能子包.
 package lib
 
 import "time"

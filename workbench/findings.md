@@ -1,6 +1,6 @@
 # Finding 台账
 
-手维护(非生成)。条目要件与生命周期见 [规范/机制/finding台账.md](规范/机制/finding台账.md):`观察中 → 已确认 → 已转Case / 已接受`;每次被再次观察到,追加 `triggered_by`。**台账即触发器**——攒到碍眼时由用户打包转 REF Case,不设定期巡检。
+手维护(非生成)。条目要件与生命周期见 [规范/流程/finding台账.md](规范/流程/finding台账.md):`观察中 → 已确认 → 已转Case / 已接受`;每次被再次观察到,追加 `triggered_by`。**台账即触发器**——攒到碍眼时由用户打包转 REF Case,不设定期巡检。
 
 ---
 
@@ -99,7 +99,7 @@ convert_when: "台账超 30 条或出现一次实际漂移事故时,build_views 
 ```yaml
 id: FIND-012
 status: 观察中
-triggered_by: [ee包壳骨架]
+triggered_by: [ee包壳骨架, Logo品牌设置]
 evidence: "ee/transports/bifrost-http/server/bootstrap.go:32,39-64 的 attach 把表/插件/路由/中间件四步串在一个函数,注释已预告 B1 审计中间件、B2 IsEnterprise 都往这里加;现 4 步 64 行不构成问题,但是被指定的惯性点;来源:ee包壳骨架 期1 收敛评审1 挂账1"
 convert_when: "B1 第二次往 attach 加四件套时,先评是否拆成按功能注册(每功能一个 Register(s) 文件,attach 只剩列表)"
 ```
@@ -107,7 +107,7 @@ convert_when: "B1 第二次往 attach 加四件套时,先评是否拆成按功�
 ```yaml
 id: FIND-013
 status: 观察中
-triggered_by: [ee包壳骨架]
+triggered_by: [ee包壳骨架, Logo品牌设置]
 evidence: "骨架探针会随生产二进制发出:ee_probe 表(attach 每次启动 AutoMigrate 建、永不删)、ee-probe 插件、无鉴权 /api/ee/ping、X-Bifrost-EE 响应头、x-bifrost-ee meta,散在 lib/tables.go、lib/shell.go、handlers/probe.go、handlers/middlewares.go、server/probe_plugin.go 五处 + attach 4 行;来源:ee包壳骨架 期1 收敛评审1 挂账2"
 convert_when: "第一个 B 功能落地或第一次对外构建前,决定保留为健康探针(包鉴权)或整体删除(删表需 REF『ee骨架对齐上游建表与构建约定』的迁移体系配 Rollback)"
 ```
@@ -135,3 +135,14 @@ triggered_by: [ee包壳骨架]
 evidence: "上游 server.go Bootstrap 调 RegisterAPIRoutes(s.Ctx, s, ...) 硬编码传 s 自己,ServerCallbacks 参数与其内三处 callbacks.(XxxProvider) 断言(:2198/2201/2320)无法从 ee 替换;03 文档 §1.4 已订正为不可用;来源:方案v3 §8 指定由收敛评审登记,ee包壳骨架 期1 收敛评审1 挂账5"
 convert_when: "任一功能(集群广播、日志脱敏映射、治理路由整体替换)需要此通路时,向上游提 PR 加导出字段,不在 ee 内绕"
 ```
+
+
+## Logo品牌设置复查（2026-09-08）
+
+- FIND-012：本案 bootstrap 净增10行，仍为薄装配；收敛评审1未发现职责失控，继续观察。
+- FIND-013：首个业务功能触发已到达；用户 Gate 1「可以」接受本案保留公共探针现状，交整合阶段处理。本案未关闭此项，正式对外构建前仍须按原口径处置，不据此次延期视为永久豁免。
+- FIND-015：新品牌 smoke 已使用独立临时数据/动态端口/自有PID，但旧骨架 smoke 未改，不关闭旧条目。
+
+## Logo品牌设置复查2（2026-09-09）
+
+收敛评审2（按修订后规范重做）对账：FIND-012 bootstrap 仅改注释与错误前缀，未恶化；FIND-013 探针未动，本轮拒绝顺手改其迁移方式；FIND-014/015/016 未触及。无新增 Finding。

@@ -23,18 +23,9 @@ export function resolveBrandingAssetUrl(url: string | undefined): string {
 }
 
 /**
- * Last known branding state, mirrored in localStorage.
- *
- * The GET is a round trip, and until it lands every branded surface would
- * render the bundled Bifrost defaults — so a client-side navigation into the
- * dashboard, or a reload once past the pre-hydration shell, flashed the wrong
- * logo. Persisting the resolved state lets the first paint use the customer's
- * assets: the URLs are content-versioned and served with a long max-age, so the
- * images themselves come from the browser cache and nothing is fetched.
- *
- * A cached URL can be stale if another admin re-uploaded since — it 404s and
- * shows a broken image for the one frame before the in-flight response replaces
- * it. Acceptable against a guaranteed wrong-logo flash on every load.
+ * 将最近一次品牌设置保存在 localStorage，供 POST 查询返回前的初次渲染使用。
+ * 图片 URL 带内容版本，浏览器仍通过 GET 和 ETag 向服务端验证缓存。
+ * 其他管理员更新或重置后，旧 URL 可能返回 404；查询完成后会换成最新设置，不能保证零闪烁。
  */
 const CACHE_KEY = "bifrost-branding";
 
@@ -120,8 +111,8 @@ export interface BrandingAssets {
 /**
  * Resolves which logo and icon to render.
  *
- * Each slot falls back independently: a deployment that uploaded only a logo
- * keeps the default Bifrost icon. Custom assets are theme-agnostic — a single
+ * An absent icon reuses the custom logo, then falls back to the bundled icon.
+ * Custom assets are theme-agnostic — a single
  * upload serves both light and dark — so `isDark` only selects between the two
  * bundled defaults.
  *
@@ -131,13 +122,24 @@ export interface BrandingAssets {
  * the response is outstanding. The pre-hydration shell is separately rewritten
  * server-side to cover the initial document load, before any of this runs.
  */
+/**
+ * The slot fallback rule on its own, over already-resolved sources ("" when a
+ * slot is unset). Exported so the branding settings preview applies the same
+ * rule to unsaved drafts instead of restating it.
+ */
+export function pickBrandingSources(logo: string, icon: string, isDark: boolean): Pick<BrandingAssets, "logoSrc" | "iconSrc"> {
+	return {
+		logoSrc: logo || (isDark ? DEFAULT_LOGO_DARK : DEFAULT_LOGO_LIGHT),
+		iconSrc: icon || logo || (isDark ? DEFAULT_ICON_DARK : DEFAULT_ICON_LIGHT),
+	};
+}
+
 function toBrandingAssets(branding: BrandingState | undefined, isDark: boolean): BrandingAssets {
-	const hasLogo = Boolean(branding?.has_logo && branding.logo_url);
-	const hasIcon = Boolean(branding?.has_icon && branding.icon_url);
+	const logo = branding?.has_logo && branding.logo_url ? resolveBrandingAssetUrl(branding.logo_url) : "";
+	const icon = branding?.has_icon && branding.icon_url ? resolveBrandingAssetUrl(branding.icon_url) : "";
 
 	return {
-		logoSrc: hasLogo ? resolveBrandingAssetUrl(branding!.logo_url) : isDark ? DEFAULT_LOGO_DARK : DEFAULT_LOGO_LIGHT,
-		iconSrc: hasIcon ? resolveBrandingAssetUrl(branding!.icon_url) : isDark ? DEFAULT_ICON_DARK : DEFAULT_ICON_LIGHT,
+		...pickBrandingSources(logo, icon, isDark),
 		isCustom: Boolean(branding?.enabled),
 		logoAlt: branding?.enabled ? "" : "Bifrost",
 	};

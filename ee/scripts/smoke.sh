@@ -32,7 +32,7 @@ wait_up $OSS_PORT || { tail -20 "$TMP/oss.log"; exit 1; }
 pass=0; fail=0
 check() { if eval "$2"; then echo "PASS $1"; pass=$((pass+1)); else echo "FAIL $1"; fail=$((fail+1)); fi; }
 names() { curl -s "http://localhost:$1/api/providers" | python3 -c 'import sys,json; print(",".join(sorted(p["name"] for p in json.load(sys.stdin)["providers"])))'; }
-ctype() { curl -s -o /dev/null -w '%{content_type}' "http://localhost:$1$2"; }
+ctype() { curl -s -X "${3:-GET}" -o /dev/null -w '%{content_type}' "http://localhost:$1$2"; }
 
 EE_NAMES=$(names $EE_PORT); OSS_NAMES=$(names $OSS_PORT)
 check "T1 providers equal ($EE_NAMES)" '[ -n "$EE_NAMES" ] && [ "$EE_NAMES" = "$OSS_NAMES" ]'
@@ -41,7 +41,7 @@ check "T3 ee_probe table exists" 'sqlite3 "$TMP/ee/config.db" ".tables" | tr -s 
 check "T4 X-Bifrost-EE header" 'curl -s -D - -o /dev/null http://localhost:$EE_PORT/api/version | grep -qi "^x-bifrost-ee: 1"'
 check "T5a plugin ee-probe active" 'grep -q "plugin status: ee-probe - active" "$TMP/ee.log"'
 check "T5b config_plugins has no ee-probe" '[ "$(sqlite3 "$TMP/ee/config.db" "select count(*) from config_plugins where name='"'"'ee-probe'"'"'")" = "0" ]'
-check "T6 /api/branding json enabled=false; OSS text/html" '[[ "$(ctype $EE_PORT /api/branding)" == application/json* ]] && curl -s http://localhost:$EE_PORT/api/branding | grep -q "\"enabled\":false" && [[ "$(ctype $OSS_PORT /api/branding)" == text/html* ]]'
+check "T6 POST /api/branding/get json enabled=false; OSS GET fallback text/html" '[[ "$(ctype $EE_PORT /api/branding/get POST)" == application/json* ]] && curl -s -X POST http://localhost:$EE_PORT/api/branding/get | grep -q "\"enabled\":false" && [[ "$(ctype $OSS_PORT /api/branding)" == text/html* ]]'
 check "T7 shell meta injected in ee only" 'curl -s http://localhost:$EE_PORT/ | grep -q "x-bifrost-ee" && ! curl -s http://localhost:$OSS_PORT/ | grep -q "x-bifrost-ee"'
 check "T8 no error logs in ee" '! grep -q "\"level\":\"error\"" "$TMP/ee.log"'
 
