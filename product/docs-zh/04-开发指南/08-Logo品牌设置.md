@@ -66,7 +66,7 @@ SQLite/二进制验证与 PostgreSQL 迁移验证必须分别记录；浏览器�
 - `ee/ui/app/enterprise/components/branding/`：页面、上传控件和预览各自一份文件；`useBrandingForm.ts` 管理草稿与操作，`image.ts` 读取和校验图片。
 - `ee/ui/app/enterprise/lib/schemas/branding.ts`：保留企业 schema 位置，集中定义上传和表单规则。
 
-布局整理保留了迁移版本和图片保存格式，过程记录见 [Logo品牌设置的评审修改记录](../../workbench/reports/Logo品牌设置.md)。
+布局整理保留了迁移版本和图片保存格式，过程记录见 [Logo品牌设置的评审修改记录](../../../workbench/reports/Logo品牌设置.md)。
 
 接口命名调整后，查询、保存和重置统一使用上述 POST 路径，旧 GET/PUT/DELETE `/api/branding` 不再提供。前后端应一起更新；图片仍通过 GET 读取。handler 测试集中在 `branding/branding_test.go`。
 
@@ -76,4 +76,4 @@ SQLite/二进制验证与 PostgreSQL 迁移验证必须分别记录；浏览器�
 
 品牌页面使用的 Tailwind 类由 `ui/app/globals.css` 中 `@source "../../ee/ui/app/enterprise"` 显式扫描。若升级上游后出现样式缺失，先检查该声明、相对路径及 `make -C ee build-ui` 的产物；不通过生成 `.ignore` 或修改 Git 本机配置处理。
 
-PostgreSQL测试入口、专用测试库与schema隔离约定见[存储包README](../../ee/framework/configstore/branding/README.md#数据库测试)。
+PostgreSQL测试入口、专用测试库与schema隔离约定见[存储包README](../../../ee/framework/configstore/branding/README.md#数据库测试)。

@@ -1,6 +1,6 @@
 # 开发工作台(Workbench)
 
-> 本仓的工程流程以 **[workbench/](../../workbench/)** 为运行载体——需求、方案、评审、验收全部以带 frontmatter 的文档在文件系统流转,并渲染成本地站点。规范全文读 [workbench/规范.md](../../workbench/规范.md);本页只做入口指引。
+> 本仓的工程流程以 **[workbench/](../../../workbench)** 为运行载体——需求、方案、评审、验收全部以带 frontmatter 的文档在文件系统流转,并渲染成本地站点。规范全文读 [workbench/规范.md](../../../workbench/规范.md);本页只做入口指引。
 
 ## 心智模型
 
@@ -23,7 +23,7 @@
 ## 本仓专属约定(规范之外的项目事实)
 
 - 基线表述:`develop @ <sha>`,注明最近上游同步点;上游同步本身走 [02-开发工作流](02-开发工作流.md),不占 case
-- checklist 必过命令的本仓默认值已写在 [模板](../../workbench/templates/checklist.yaml):`go build 三模块 + ui tsc`,高风险档补 `make lint` 与相关 `go test`
+- checklist 必过命令的本仓默认值已写在 [模板](../../../workbench/templates/checklist.yaml):`go build 三模块 + ui tsc`,高风险档补 `make lint` 与相关 `go test`
 - 扩展位置的判断(插件 vs 改源码)见 [03-接线指南](03-接线指南.md)
 - 收敛评审:`.claude/skills/convergence-review`(大改动在 Gate 2 前跑)
-- 采纳来源与升级方式:[workbench/ADOPTION.md](../../workbench/ADOPTION.md)
+- 采纳来源与升级方式:[workbench/ADOPTION.md](../../../workbench/ADOPTION.md)
