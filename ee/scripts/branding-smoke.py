@@ -58,8 +58,8 @@ class Fixture:
         self.url = f'http://127.0.0.1:{port}'
         self.log = (self.root / 'server.log').open('ab')
         # Do not inherit deployment credentials or app-directory overrides.
-        env = {k: v for k, v in os.environ.items() if not k.startswith(('BIFROST_', 'OPENAI_', 'ANTHROPIC_'))}
-        self.proc = subprocess.Popen([self.binary, '-host', '127.0.0.1', '-port', str(port), '-app-dir', str(self.root)], stdout=self.log, stderr=subprocess.STDOUT, env=env)
+        env = {k: v for k, v in os.environ.items() if not k.startswith(('BIFROST_', 'EE_', 'OPENAI_', 'ANTHROPIC_'))}
+        self.proc = subprocess.Popen([self.binary, '-host', '127.0.0.1', '-port', str(port), '-app-dir', str(self.root)], stdout=self.log, stderr=subprocess.STDOUT, env={**env, 'EE_PUBLIC_ORIGIN': self.url})
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             if self.proc.poll() is not None:
@@ -85,7 +85,7 @@ class Fixture:
 
     def request(self, method, path, data=None, anonymous=False, headers=None):
         body = json.dumps(data).encode() if data is not None else None
-        req = urllib.request.Request(self.url + path, data=body, method=method, headers={'Content-Type': 'application/json', **(headers or {})})
+        req = urllib.request.Request(self.url + path, data=body, method=method, headers={'Content-Type': 'application/json', 'Origin': self.url, **(headers or {})})
         opener = self.anonymous if anonymous else self.client
         try:
             response = opener.open(req, timeout=10)
@@ -125,9 +125,9 @@ def smoke(fixture):
         assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'x-bf-vk': 'invalid-test-vk'})[0] == 401
         assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'Authorization': 'Bearer invalid-test-session'})[0] == 401
     fixture.login()
-    expired_token = next(cookie.value for cookie in fixture.cookies if cookie.name == 'token')
+    expired_token = next(cookie.value for cookie in fixture.cookies if cookie.name == 'ee_session')
     with sqlite3.connect(fixture.root / 'config.db') as db:
-        db.execute("UPDATE sessions SET expires_at='2000-01-01 00:00:00'")
+        db.execute("UPDATE ee_identity_sessions SET expires_at='2000-01-01 00:00:00'")
     for action in ('update', 'reset'):
         assert fixture.request('POST', '/api/branding/' + action, {'logo': ''})[0] == 401
         assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'Authorization': 'Bearer ' + expired_token})[0] == 401
@@ -143,9 +143,9 @@ def smoke(fixture):
     assert fixture.request('POST', '/api/branding/update', {'logo': payload['logo'], 'icon': 'invalid'})[0] == 400
     assert fixture.state() == state
     basic = base64.b64encode(f'{fixture.username}:{fixture.password}'.encode()).decode()
-    assert fixture.request('POST', '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Basic ' + basic})[0] == 200
-    token = next(cookie.value for cookie in fixture.cookies if cookie.name == 'token')
-    assert fixture.request('POST', '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Bearer ' + token})[0] == 200
+    assert fixture.request('POST', '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Basic ' + basic})[0] == 401
+    token = next(cookie.value for cookie in fixture.cookies if cookie.name == 'ee_session')
+    assert fixture.request('POST', '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Bearer ' + token})[0] == 401
     state = fixture.state()
     fixture.stop()
     fixture.start()
@@ -158,7 +158,7 @@ def smoke(fixture):
     fixture.stop()
     fixture.start()
     assert not fixture.state()['enabled'], 'reset was not persistent'
-    print('PASS: shared host/embedded UI, probes removed, real auth (cookie/basic/bearer), image bytes/cache, atomic rejection, restart retention, reset + second restart', flush=True)
+    print('PASS: shared host/embedded UI, probes removed, EE cookie auth and rejected legacy basic/bearer, image bytes/cache, atomic rejection, restart retention, reset + second restart', flush=True)
 
 
 def main():

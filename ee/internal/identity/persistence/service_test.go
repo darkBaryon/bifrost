@@ -39,7 +39,7 @@ func testStore(t *testing.T) (*Store, *gorm.DB) {
 		db, err = gorm.Open(postgres.Open(dsn+" search_path="+schema), cfg)
 		t.Cleanup(func() { control.Exec("DROP SCHEMA " + schema + " CASCADE"); sql, _ := control.DB(); sql.Close() })
 	} else {
-		db, err = gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "identity.db")+"?_busy_timeout=1000&_journal_mode=WAL"), cfg)
+		db, err = gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "identity.db")+"?_busy_timeout=1000&_journal_mode=WAL&_foreign_keys=on"), cfg)
 	}
 	if err != nil {
 		t.Fatal(err)
@@ -284,5 +284,187 @@ func TestConcurrentInitialize(t *testing.T) {
 	}
 	if successes != 1 {
 		t.Fatalf("successes=%d", successes)
+	}
+}
+
+// 暂停已完成密码比较的登录，确保重置提交后不会签发旧版本会话。
+type pausedPasswords struct {
+	Passwords
+	compared chan struct{}
+	resume   chan struct{}
+}
+
+func (p pausedPasswords) Compare(h, raw string) (bool, error) {
+	ok, e := p.Passwords.Compare(h, raw)
+	close(p.compared)
+	<-p.resume
+	return ok, e
+}
+func TestLoginRacingReset(t *testing.T) {
+	s, store, _, admin := fixture(t)
+	ctx := context.Background()
+	a, e := s.CreateAccount(ctx, admin.Principal, "alice", "")
+	if e != nil {
+		t.Fatal(e)
+	}
+	p := pausedPasswords{Passwords: Passwords{}, compared: make(chan struct{}), resume: make(chan struct{})}
+	login, e := identity.NewService(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
+	if e != nil {
+		t.Fatal(e)
+	}
+	done := make(chan error, 1)
+	go func() { _, e := login.Login(ctx, "alice", "123456", "peer"); done <- e }()
+	<-p.compared
+	_, e = s.ResetPassword(ctx, admin.Principal, a.ID, "00000000-0000-4000-8000-000000000010")
+	close(p.resume)
+	if e != nil {
+		t.Fatal(e)
+	}
+	requireError(t, <-done, identity.ErrUnauthorized)
+}
+func TestExpiredCredentialsAndDatabaseFailure(t *testing.T) {
+	s, _, db, admin := fixture(t)
+	ctx := context.Background()
+	ticket, e := s.IssueTicket(ctx, admin.Principal)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e = db.Model(&ticketRow{}).Where("1=1").Update("expires_at", time.Now().UTC().Add(-time.Hour)).Error; e != nil {
+		t.Fatal(e)
+	}
+	_, e = s.ConsumeTicket(ctx, ticket)
+	requireError(t, e, identity.ErrUnauthorized)
+	if e = db.Model(&sessionRow{}).Where("id=?", admin.Principal.SessionID).Update("expires_at", time.Now().UTC().Add(-time.Hour)).Error; e != nil {
+		t.Fatal(e)
+	}
+	_, e = s.Authenticate(ctx, admin.Token)
+	requireError(t, e, identity.ErrUnauthorized)
+	sql, _ := db.DB()
+	sql.Close()
+	_, e = s.Authenticate(ctx, admin.Token)
+	requireError(t, e, identity.ErrUnavailable)
+	_, e = s.Login(ctx, "admin", adminPassword, "peer")
+	requireError(t, e, identity.ErrUnavailable)
+}
+func TestPasswordValidationAndIndependentSalt(t *testing.T) {
+	s, store, _, admin := fixture(t)
+	ctx := context.Background()
+	for _, name := range []string{"alice", "bob"} {
+		if _, e := s.CreateAccount(ctx, admin.Principal, name, ""); e != nil {
+			t.Fatal(e)
+		}
+	}
+	a, _ := store.CredentialByName(ctx, "alice")
+	b, _ := store.CredentialByName(ctx, "bob")
+	if a.PasswordHash == b.PasswordHash {
+		t.Fatal("default passwords share hash")
+	}
+	for _, password := range []string{"123456", adminPassword, strings.Repeat("界", 25), strings.Repeat("a", 73), "short", string([]byte{255})} {
+		requireError(t, s.ChangePassword(ctx, admin.Principal, adminPassword, password), identity.ErrInvalid)
+	}
+	if _, e := s.Authenticate(ctx, admin.Token); e != nil {
+		t.Fatal("invalid password changed session", e)
+	}
+}
+func TestTransactionAndMigrationRollback(t *testing.T) {
+	_, store, db, admin := fixture(t)
+	ctx := context.Background()
+	injected := errors.New("forced rollback before commit")
+	e := store.Transaction(ctx, func(tx identity.Tx) error {
+		c, e := tx.Account(admin.Principal.AccountID)
+		if e != nil {
+			return e
+		}
+		c.AuthVersion++
+		if e = tx.SaveAccount(c); e != nil {
+			return e
+		}
+		return injected
+	})
+	if !errors.Is(e, injected) {
+		t.Fatal(e)
+	}
+	c, e := store.CredentialByName(ctx, "admin")
+	if e != nil || c.AuthVersion != admin.Principal.AuthVersion {
+		t.Fatal("transaction was not rolled back", e)
+	}
+	// 回滚专用迁移夹具：删除自己的身份表，预置冲突表使迁移在中途失败。
+	for _, table := range []string{"ee_identity_login_limits", "ee_identity_ws_tickets", "ee_identity_password_events", "ee_identity_sessions", "ee_identity_state", "ee_identity_accounts"} {
+		if e = db.Exec("DROP TABLE " + table).Error; e != nil {
+			t.Fatal(e)
+		}
+	}
+	if e = db.Exec("DELETE FROM migrations WHERE id=?", identityMigrationID).Error; e != nil {
+		t.Fatal(e)
+	}
+	if e = db.Exec("CREATE TABLE ee_identity_sessions (sentinel integer)").Error; e != nil {
+		t.Fatal(e)
+	}
+	if e = MigrateIdentity(ctx, db); e == nil {
+		t.Fatal("broken migration succeeded")
+	}
+	if db.Migrator().HasTable("ee_identity_accounts") || db.Migrator().HasTable("ee_identity_state") {
+		t.Fatal("partial DDL survived migration failure")
+	}
+	var count int64
+	if e = db.Table("migrations").Where("id=?", identityMigrationID).Count(&count).Error; e != nil || count != 0 {
+		t.Fatal("failed migration version persisted", e)
+	}
+	if e = db.Exec("DROP TABLE ee_identity_sessions").Error; e != nil {
+		t.Fatal(e)
+	}
+	if e = MigrateIdentity(ctx, db); e != nil {
+		t.Fatal("migration cannot recover", e)
+	}
+}
+
+func TestDeferredCommitFailure(t *testing.T) {
+	s, store, db, admin := fixture(t)
+	ctx := context.Background()
+	for _, sql := range []string{"CREATE TABLE failure_parent (id integer PRIMARY KEY)", "CREATE TABLE failure_child (parent_id integer REFERENCES failure_parent(id) DEFERRABLE INITIALLY DEFERRED)"} {
+		if e := db.Exec(sql).Error; e != nil {
+			t.Fatal(e)
+		}
+	}
+	before, e := store.CredentialByName(ctx, "admin")
+	if e != nil {
+		t.Fatal(e)
+	}
+	db.Callback().Create().After("gorm:create").Register("fail:commit", func(tx *gorm.DB) {
+		if tx.Statement.Table == "ee_identity_password_events" {
+			if e := tx.Exec("INSERT INTO failure_child(parent_id) VALUES (1)").Error; e != nil {
+				tx.AddError(e)
+			}
+		}
+	})
+	e = s.ChangePassword(ctx, admin.Principal, adminPassword, "Updated-password-2")
+	requireError(t, e, identity.ErrUnavailable)
+	db.Callback().Create().Remove("fail:commit")
+	after, e := store.CredentialByName(ctx, "admin")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if before.PasswordHash != after.PasswordHash || before.AuthVersion != after.AuthVersion {
+		t.Fatal("COMMIT failure persisted password")
+	}
+	if _, e = s.Authenticate(ctx, admin.Token); e != nil {
+		t.Fatal("COMMIT failure revoked original session", e)
+	}
+	events, e := s.ListPasswordEvents(ctx, admin.Principal, "", "", 20)
+	if e != nil || len(events.Items) != 0 {
+		t.Fatal("COMMIT failure persisted success event", e)
+	}
+}
+
+func TestLegacyRejectsMalformedBcrypt(t *testing.T) {
+	store, _ := testStore(t)
+	s := newService(t, store)
+	ctx := context.Background()
+	for _, hash := range []string{"plaintext", "$2a$10$" + strings.Repeat("!", 53), "$2z$10$" + strings.Repeat("a", 53), "$2a$10$" + strings.Repeat("a", 54)} {
+		requireError(t, s.BootstrapLegacy(ctx, &identity.Credential{Account: identity.Account{Username: "admin"}, PasswordHash: hash}), identity.ErrInvalid)
+	}
+	state, e := s.State(ctx)
+	if e != nil || state.Initialized {
+		t.Fatal("bad legacy input initialized identity", e)
 	}
 }

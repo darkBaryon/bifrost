@@ -221,6 +221,10 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				legacyWSToken = c.QueryArgs().Has("token")
 				c.QueryArgs().Del("ticket")
 				c.QueryArgs().Del("token")
+				// An empty parsed Args otherwise falls back to URI's original query.
+				c.URI().SetQueryString(c.QueryArgs().String())
+				// RequestCtx.RequestURI reads the raw header, not the parsed URI.
+				c.Request.SetRequestURIBytes(c.URI().RequestURI())
 			}
 			if public(method, path) || identityhttp.OwnsRoute(method, path) {
 				next(c)

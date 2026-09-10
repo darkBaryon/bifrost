@@ -4,6 +4,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"regexp"
 	"strings"
 	"time"
 
@@ -64,7 +65,13 @@ type Passwords struct{}
 
 func (Passwords) Hash(p string) (string, error)     { return encrypt.Hash(p) }
 func (Passwords) Compare(h, p string) (bool, error) { return encrypt.CompareHash(h, p) }
-func (Passwords) ValidHash(h string) bool           { _, err := bcrypt.Cost([]byte(h)); return err == nil }
+
+var bcryptHashPattern = regexp.MustCompile(`^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$`)
+
+func (Passwords) ValidHash(h string) bool {
+	_, err := bcrypt.Cost([]byte(h))
+	return err == nil && bcryptHashPattern.MatchString(h)
+}
 
 // Store 使用静默SQL日志，避免错误查询输出凭据、哈希和身份信息。
 type Store struct{ db *gorm.DB }

@@ -8,3 +8,5 @@
 | `ui/` | 构建时嵌入的前端产物，源代码位于 `ee/ui/` 及根 `ui/` |
 
 在仓库根运行 `make -C ee build`，产物为 `ee/tmp/bifrost-http`。入口仍复用上游启动行为，上游 main 改动时需核对本文件。
+
+`main.go`同时分发 `identity recover-admin --app-dir <dir>` 离线恢复命令，该路径不启动HTTP监听或profiling。

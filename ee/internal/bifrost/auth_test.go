@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -204,11 +205,11 @@ func TestOriginConflictAndTicketRedaction(t *testing.T) {
 	if c.Response.StatusCode() != 204 {
 		t.Fatal("ticket rejected")
 	}
-	if c.QueryArgs().Has("ticket") {
+	if c.QueryArgs().Has("ticket") || strings.Contains(string(c.RequestURI()), ticket) {
 		t.Fatal("access log would include ticket")
 	}
 	c = request(r, "GET", "/ws?token=legacy-secret&ticket="+ticket, "", "", "https://evil.test", "")
-	if c.QueryArgs().Has("token") || c.QueryArgs().Has("ticket") {
+	if c.QueryArgs().Has("token") || c.QueryArgs().Has("ticket") || strings.Contains(string(c.RequestURI()), "legacy-secret") || strings.Contains(string(c.RequestURI()), ticket) {
 		t.Fatal("rejected handshake leaks URL credentials")
 	}
 }

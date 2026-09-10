@@ -13,10 +13,12 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [cmd/bifrost-http/](cmd/bifrost-http/README.md) | 程序入口与 UI embed |
 | [internal/app/](internal/app/README.md) | 配置、依赖装配与启动接入 |
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
+| [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http与persistence适配 |
+| [internal/bifrost/](internal/bifrost/README.md) | 宿主管理认证替换与兼容策略 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |
 
-双方共享 HTTP Server、Router 和已有数据库连接；EE 内嵌上游 Handler 链，按业务需要增加外层处理。账号、权限等示例模块尚未建立，按具体任务增加。
+双方共享 HTTP Server、Router 和已有数据库连接；EE 内嵌上游 Handler 链，按业务需要增加外层处理。账号认证后端已实现，完整角色权限与认证页面后续开发。
 
 前端继续放在 `ee/ui/`，与 Go 后端保持各自的依赖和构建职责；本次迁移保留现有覆盖方式。
 
@@ -35,6 +37,10 @@ make -C ee smoke   # 构建并执行隔离冒烟
 首次前端构建先在根 `ui/` 执行 `npm ci`。workspace 目标将 EE 加入根 go.work（缺失时初始化），dev/build 同步前端覆盖层。构建产物位于 `cmd/bifrost-http/ui/`，不入库。
 
 冒烟使用临时配置、随机端口和自有进程，验证宿主接入、品牌操作与重启保留。骨架探针接口、空插件、表注册和页面/响应标记已移除；已有数据库中的旧测试表不再使用。
+
+## 账号认证
+
+参见[接口](docs/账号认证接口.md)和[升级与恢复](docs/账号认证升级与恢复.md)。EE管理默认强制认证，旧管理员重新登录，新实例需要初始化密钥；管理脚本迁移为Cookie及同源Origin。
 
 ## 文档
 

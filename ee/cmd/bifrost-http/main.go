@@ -64,6 +64,13 @@ func init() {
 
 // main is the entry point of the application.
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "identity" {
+		if err := eeApp.RecoverAdmin(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	// Parse command line flags
 	flag.Parse()
 
