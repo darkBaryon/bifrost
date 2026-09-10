@@ -1,0 +1,22 @@
+必过命令:
+  - { name: ee-tests, run: "cd ee && GOWORK=off go test ./..." }
+  - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: ee-build-with-ui, run: "make -C ee build" }
+  - { name: isolated-smoke, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: diff-check, run: "git diff --check" }
+必存产物:
+  - ee/cmd/bifrost-http/main.go
+  - ee/internal/app/bootstrap.go
+  - ee/internal/branding/service.go
+  - ee/internal/branding/http/handler.go
+  - ee/internal/branding/persistence/migration.go
+必含符号:
+  - { grep: "func DecodeAsset", in: "ee/internal/branding" }
+禁留标记:
+  - { grep: "github.com/darkBaryon/bifrost/ee/transports", in: "ee" }
+  - { grep: "github.com/darkBaryon/bifrost/ee/framework", in: "ee" }
+  - { grep: "ProbePlugin", in: "ee/internal" }
+  - { grep: "NewProbeHandler", in: "ee/internal" }
+  - { grep: "EEHeaderMiddleware", in: "ee/internal" }
+  - { grep: "EEShellRewriter", in: "ee/internal" }
+  - { grep: "ee_probe", in: "ee/internal" }

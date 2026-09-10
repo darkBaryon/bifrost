@@ -1,4 +1,32 @@
-# Bifrost AI Gateway
+# Bifrost — 本项目入口
+
+本仓库是 `darkBaryon/bifrost`，基于上游 `maximhq/bifrost` 开发自有 EE 应用。仓库同时包含 Bifrost 网关基础代码、自有业务代码，以及产品与开发文档。
+
+## 本项目的三个入口
+
+| 目录 | 职责 | 入口 |
+|---|---|---|
+| `ee/` | 自有应用代码：拥有独立 Go 模块与可执行入口的后端，内嵌 Bifrost HTTP 应用；同时维护自有前端覆盖层 | [EE 说明](ee/README.md) |
+| `product/` | 产品经理、技术负责人级文档：调研、需求、路线图、整体架构、模块边界与技术决策 | [产品与技术文档](product/README.md) |
+| `workbench/` | 具体开发人员级文档：实施方案、代码改动设计、任务步骤、测试、评审与交付记录 | [开发工作台](workbench/README.md) |
+
+`core/`、`framework/`、`transports/`、`plugins/`、`ui/` 等目录承载从上游继承并在本仓维护的网关基础代码。EE 在同一进程中复用完整的 Bifrost HTTP Server、Router、Handler 链和引擎，并接入自有业务。具体关系见 [EE 后端架构](product/架构/EE后端架构.md)。
+
+## 开发前先读
+
+1. 阅读 [AGENTS.md](AGENTS.md) 和工作目录下适用的约定。
+2. 从 [product/README.md](product/README.md) 找到已确认的需求和架构，再进入 [workbench/README.md](workbench/README.md) 查看具体实施与交付记录。
+3. 开发 EE 时阅读 [ee/README.md](ee/README.md)。EE 自有后端采用 **按业务能力分模块、模块内部保留分层** 的架构；现有入口、装配与品牌模块已迁到 `cmd/`、`internal/`，具体位置见 EE 说明。
+
+功能现状以当前代码和已验证的交付记录为依据。产品候选、架构示例和开发草稿不代表已经实现；下方上游文档中的商业版能力也不代表本仓 EE 已具备。
+
+## 上游 Bifrost 说明
+
+以下保留上游的产品介绍、使用方式和生态链接，作为 Bifrost 基础能力参考。其中 `@maximhq/bifrost`、`maximhq/bifrost` 镜像和商业服务入口属于上游；运行本仓 EE 请使用 [EE 开发与构建入口](ee/README.md#开发与构建)。
+
+---
+
+<!-- 以下为保留的上游 Bifrost README 内容。 -->
 
 <a href="https://trendshift.io/repositories/14529?utm_source=repository-badge&amp;utm_medium=badge&amp;utm_campaign=badge-repository-14529" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/14529" alt="maximhq%2Fbifrost | Trendshift" width="250" height="55"/></a>
 

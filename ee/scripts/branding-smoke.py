@@ -105,6 +105,20 @@ class Fixture:
 
 def smoke(fixture):
     fixture.start()
+    # 上游路由与嵌入 UI 正常，骨架探针不再随正式应用装配。
+    code, headers, body = fixture.request('GET', '/api/ee/ping', anonymous=True)
+    assert code == 200 and 'text/html' in headers.get('Content-Type', '')  # 上游 SPA fallback
+    assert b'"probe_rows"' not in body and b'ee-probe' not in body
+    assert headers.get('X-Bifrost-EE') is None
+    code, headers, _ = fixture.request('GET', '/api/version', anonymous=True)
+    assert code == 200 and headers.get('X-Bifrost-EE') is None
+    code, headers, body = fixture.request('GET', '/', anonymous=True)
+    assert code == 200 and 'text/html' in headers.get('Content-Type', '')
+    assert b'x-bifrost-ee' not in body
+    with sqlite3.connect(fixture.root / 'config.db') as db:
+        assert db.execute("SELECT count(*) FROM sqlite_master WHERE type='table' AND name='ee_probe'").fetchone()[0] == 0
+        assert db.execute("SELECT count(*) FROM config_plugins WHERE name='ee-probe'").fetchone()[0] == 0
+    assert 'ee-probe' not in (fixture.root / 'server.log').read_text()
     assert fixture.state() == {'enabled': False, 'has_logo': False, 'has_icon': False}
     for action in ('update', 'reset'):
         assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True)[0] == 401
@@ -144,7 +158,7 @@ def smoke(fixture):
     fixture.stop()
     fixture.start()
     assert not fixture.state()['enabled'], 'reset was not persistent'
-    print('PASS: real auth (cookie/basic/bearer), image bytes/cache, atomic rejection, restart retention, reset + second restart', flush=True)
+    print('PASS: shared host/embedded UI, probes removed, real auth (cookie/basic/bearer), image bytes/cache, atomic rejection, restart retention, reset + second restart', flush=True)
 
 
 def main():
