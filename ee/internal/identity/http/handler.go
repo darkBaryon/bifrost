@@ -112,6 +112,7 @@ func (h *Handler) SameOrigin(c *fasthttp.RequestCtx) bool {
 	}
 	return len(c.Request.Header.Peek("Referer")) != 0
 }
+
 // SetCookie 写入本次会话Cookie，并删除旧共享管理员Cookie；空token表示退出登录。
 func (h *Handler) SetCookie(c *fasthttp.RequestCtx, token string, expires time.Time) {
 	cookie := fasthttp.AcquireCookie()
@@ -134,6 +135,7 @@ func (h *Handler) SetCookie(c *fasthttp.RequestCtx, token string, expires time.T
 	cookie.SetExpire(fasthttp.CookieExpireDelete)
 	c.Response.Header.SetCookie(cookie)
 }
+
 // JSON 输出JSON响应，序列化失败时返回不含内部细节的固定503。
 func JSON(c *fasthttp.RequestCtx, code int, value any) {
 	b, e := json.Marshal(value)
@@ -146,6 +148,7 @@ func JSON(c *fasthttp.RequestCtx, code int, value any) {
 	c.SetContentType("application/json")
 	c.Response.SetBody(b)
 }
+
 // Error 将业务错误映射为HTTP状态，未知故障使用固定错误码。
 func Error(c *fasthttp.RequestCtx, e error) {
 	e = identity.SafeError(e)
@@ -234,6 +237,7 @@ func ValidateJSONObject(body []byte) error {
 	}
 	return nil
 }
+
 // Decode 限制JSON大小、深度及字段；allowEmpty仅供已声明的旧会话接口兼容。
 func Decode(c *fasthttp.RequestCtx, v any, allowEmpty bool) error {
 	if len(c.PostBody()) > maxIdentityBodyBytes || !utf8.Valid(c.PostBody()) {
@@ -313,6 +317,7 @@ func OwnsRoute(method, path string) bool {
 	}
 	return false
 }
+
 // RegisterRoutes 从同一路由表注册端点及宿主中间件。
 func (h *Handler) RegisterRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
 	for _, route := range routes {
