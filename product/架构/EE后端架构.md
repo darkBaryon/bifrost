@@ -2,7 +2,7 @@
 
 [← 产品与技术文档](../README.md) · [编码规范](../../workbench/规范/项目/编码规范.md)
 
-**已确认，2026-09-11。** EE 自有后端采用 **feature-first：按业务能力分模块，模块内部保留分层**。本文约定整体架构；现有入口、装配和品牌模块已完成目录迁移，其余示例模块按需开发。
+**已确认，2026-09-11。** EE 自有后端采用 **feature-first：按业务能力分模块，模块内部保留分层**。本文约定整体架构；现有入口、装配和品牌模块已完成目录迁移，账号认证后端已实现并处于Gate 2前复核阶段，其余示例模块按需开发。
 
 ## 1. 应用边界
 
@@ -19,7 +19,7 @@ HTTP Server
 Bifrost 插件链 → EE 插件适配 → EE 业务服务
 ```
 
-当前通过 `上游 Bootstrap → EE attach` 装配，再调用上游 `Start()`。双方共享 Server、Router 和已有配置存储，前端沿用 UI 覆盖层。骨架探针已移除，当前只装配品牌业务；外层 Handler 和插件在实际功能需要时接入，账号认证与授权仍待开发。
+当前先由EE注入ConsoleAuthFactory，再执行上游Bootstrap（在管理路由注册前装配身份服务），随后EE attach装配品牌并调用上游Start。双方共享Server、Router和配置数据库，推理链保持宿主实现。identity及宿主认证适配已实现，正在独立复核，尚未通过Gate 2；认证页面、项目日志页面和完整RBAC后续开发。实现依据见[账号认证交测包](../../workbench/evidence/账号认证-期1-交测包.md)，本文架构约定本身不作为功能已交付的证据。
 
 图中的“EE 外层 Handler”包装整个请求链，“EE 功能 Handler”处理具体接口。Bifrost 的 Handler 链内嵌在 EE 中，双方通过共享 Router 分发请求。调整 EE 的业务组织时，继续复用上游的协议适配、Provider、推理编排与治理实现。
 
@@ -50,7 +50,7 @@ ee/
 └── Makefile
 ```
 
-现有代码已落在 `cmd/bifrost-http/`、`internal/app/` 与 `internal/branding/`；账号、权限及 `internal/bifrost/` 等模块按需建立。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
+现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`及`internal/bifrost/`；完整角色权限等模块后续按需建立。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
 
 ## 4. 模块内部的职责
 

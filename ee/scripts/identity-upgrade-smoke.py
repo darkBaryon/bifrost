@@ -65,12 +65,57 @@ def scenario(binary, legacy, root, enabled, fallback):
         node.stop()
 
 
+def default_directory_scenarios(binary, root):
+    # HOME/APPDATA/cwd均为自建目录，不读取或修改操作者的真实默认配置。
+    for name in ('incomplete', 'valid', 'absent'):
+        home = root/('default-'+name)
+        config_dir = home/'.config'/'bifrost'
+        cfg = {'providers':{}, 'client':{'enable_logging':False}}
+        if name != 'absent':
+            cfg['auth_config'] = {'is_enabled':True, 'admin_username':'legacy-admin'}
+            if name == 'valid':
+                cfg['auth_config']['admin_password'] = 'legacy-password'
+        node = smoke.Node(binary, config_dir, cfg, 'isolated-setup-token')
+        if name == 'absent':
+            (config_dir/'config.json').unlink()
+        cwd = home/'working-directory'
+        cwd.mkdir()
+        if name != 'incomplete':
+            (cwd/'config.json').write_text(json.dumps({'auth_config':{'admin_username':'unrelated'}}))
+        try:
+            if name == 'incomplete':
+                try:
+                    node.start(default_home=home)
+                except RuntimeError:
+                    assert 'legacy administrator credentials are incomplete' in (config_dir/'server.log').read_text()
+                else:
+                    raise AssertionError('default-directory incomplete credentials did not fail closed')
+                continue
+            node.start(default_home=home)
+            state, _ = node.expect(200, '/api/identity/status', {})
+            assert state['initialized'] == (name == 'valid')
+            if name == 'absent':
+                node.expect(201, '/api/identity/initialize', {'setup_token':node.setup,'username':'legacy-admin','password':'legacy-password'})
+            token = node.login('legacy-admin', 'legacy-password')
+            node.expect(200, '/api/identity/change-password', {'old_password':'legacy-password','new_password':'Changed-password-1'}, token=token)
+            node.stop()
+            cfg['auth_config'] = {'is_enabled':True,'admin_username':'legacy-admin','admin_password':'file-will-not-reset'}
+            save_config(node, cfg)
+            node.start(default_home=home)
+            node.login('legacy-admin', 'Changed-password-1')
+            node.expect(401, '/api/identity/login', {'username':'legacy-admin','password':'file-will-not-reset'}, anonymous=True)
+        finally:
+            node.stop()
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary',required=True)
     parser.add_argument('--legacy-binary',required=True)
     args=parser.parse_args()
     root=Path(tempfile.mkdtemp(prefix='bifrost-identity-upgrade-'))
+    print('Isolated evidence:',root, flush=True)
+    default_directory_scenarios(args.binary, root)
     for enabled,fallback in ((True,False),(False,False),(True,True)):
         scenario(args.binary,args.legacy_binary,root/f'case-{enabled}-{fallback}',enabled,fallback)
     # 残缺迁移输入、缺DB均不能退回匿名；不带初始化密钥不能建首个账号。

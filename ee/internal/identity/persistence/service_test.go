@@ -419,6 +419,7 @@ func TestTransactionAndMigrationRollback(t *testing.T) {
 }
 
 func TestDeferredCommitFailure(t *testing.T) {
+	output := captureDiagnostics(t)
 	s, store, db, admin := fixture(t)
 	ctx := context.Background()
 	for _, sql := range []string{"CREATE TABLE failure_parent (id integer PRIMARY KEY)", "CREATE TABLE failure_child (parent_id integer REFERENCES failure_parent(id) DEFERRABLE INITIALLY DEFERRED)"} {
@@ -430,15 +431,25 @@ func TestDeferredCommitFailure(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
+	injected := false
 	db.Callback().Create().After("gorm:create").Register("fail:commit", func(tx *gorm.DB) {
 		if tx.Statement.Table == "ee_identity_password_events" {
-			if e := tx.Exec("INSERT INTO failure_child(parent_id) VALUES (1)").Error; e != nil {
+			// 新Statement仍复用当前事务，避免继承Create的绑定参数；PG须真正延迟到COMMIT失败。
+			if e := tx.Session(&gorm.Session{NewDB: true}).Exec("INSERT INTO failure_child(parent_id) VALUES (1)").Error; e != nil {
 				tx.AddError(e)
+			} else {
+				injected = true
 			}
 		}
 	})
 	e = s.ChangePassword(ctx, admin.Principal, adminPassword, "Updated-password-2")
 	requireError(t, e, identity.ErrUnavailable)
+	if !injected {
+		t.Fatal("fixture failed before deferred constraint was inserted")
+	}
+	if !strings.Contains(output.String(), "stage=transaction.commit") {
+		t.Fatal("commit failure diagnosis missing: " + output.String())
+	}
 	db.Callback().Create().Remove("fail:commit")
 	after, e := store.CredentialByName(ctx, "admin")
 	if e != nil {

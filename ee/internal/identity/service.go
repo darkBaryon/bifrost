@@ -592,7 +592,7 @@ func (s *Service) IssueTicket(ctx context.Context, p Principal) (string, error) 
 		if _, e := s.manager(ctx, tx, p); e != nil {
 			return e
 		}
-		return tx.InsertTicket(Ticket{Hash: tokenHash(raw), SessionID: p.SessionID, ExpiresAt: now().Add(30 * time.Second)})
+		return tx.InsertTicket(Ticket{Hash: tokenHash(raw), SessionID: p.SessionID, ExpiresAt: now().Add(WSTicketTTL)})
 	})
 	return raw, SafeError(e)
 }

@@ -27,6 +27,15 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
+// requestLogTarget never logs websocket credentials, even when an outer
+// middleware returns before the authentication handler is reached.
+func requestLogTarget(ctx *fasthttp.RequestCtx) string {
+	if string(ctx.Path()) == "/ws" {
+		return "/ws"
+	}
+	return string(ctx.RequestURI())
+}
+
 var loggingSkipPaths = []string{"/health", "/_next", "/api/dev/"}
 var realtimeTransportPaths = buildRealtimeTransportPathSet()
 
@@ -141,7 +150,7 @@ func (c *CorsMiddleware) Middleware() schemas.BifrostHTTPMiddleware {
 					}
 					logBuilder := logger.LogHTTPRequest(level, "request completed").
 						Str("http.method", string(ctx.Method())).
-						Str("http.target", string(ctx.RequestURI())).
+						Str("http.target", requestLogTarget(ctx)).
 						Int("http.status_code", statusCode).
 						Int64("http.request_duration_ms", time.Since(startTime).Milliseconds()).
 						Str("http.remote_addr", ctx.RemoteAddr().String()).

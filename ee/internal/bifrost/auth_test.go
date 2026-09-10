@@ -4,8 +4,8 @@ package bifrost
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -178,7 +178,7 @@ func TestCookieAndStrictJSON(t *testing.T) {
 	}
 }
 
-func TestOriginConflictAndTicketRedaction(t *testing.T) {
+func TestOriginConflictAndTicketValidation(t *testing.T) {
 	a, v := testAdapter(t)
 	for _, tc := range []struct {
 		origin, referer string
@@ -205,12 +205,13 @@ func TestOriginConflictAndTicketRedaction(t *testing.T) {
 	if c.Response.StatusCode() != 204 {
 		t.Fatal("ticket rejected")
 	}
-	if c.QueryArgs().Has("ticket") || strings.Contains(string(c.RequestURI()), ticket) {
-		t.Fatal("access log would include ticket")
+	c = request(r, "GET", "/ws?ticket="+ticket, "", "", a.HTTP.Origin, "")
+	if c.Response.StatusCode() != 401 {
+		t.Fatal("consumed ticket replayed")
 	}
 	c = request(r, "GET", "/ws?token=legacy-secret&ticket="+ticket, "", "", "https://evil.test", "")
-	if c.QueryArgs().Has("token") || c.QueryArgs().Has("ticket") || strings.Contains(string(c.RequestURI()), "legacy-secret") || strings.Contains(string(c.RequestURI()), ticket) {
-		t.Fatal("rejected handshake leaks URL credentials")
+	if c.Response.StatusCode() != 403 {
+		t.Fatal("cross-origin handshake accepted")
 	}
 }
 
@@ -299,5 +300,22 @@ func TestTemporaryTokenScopes(t *testing.T) {
 	a.APIMiddleware()(func(c *fasthttp.RequestCtx) { t.Error("disabled temp auth accepted") })(&c)
 	if c.Response.StatusCode() != 401 {
 		t.Fatal("temp auth flag ignored")
+	}
+}
+
+func TestDefaultDirectoryLegacyValidation(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("APPDATA", home)
+	dir := server.GetDefaultConfigDir("")
+	if e := os.MkdirAll(dir, 0700); e != nil {
+		t.Fatal(e)
+	}
+	if e := os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"auth_config":{"admin_username":"admin"}}`), 0600); e != nil {
+		t.Fatal(e)
+	}
+	// 与Bootstrap相同的目录解析必须能发现默认目录内的残缺配置。
+	if e := validateLegacyFile(server.GetDefaultConfigDir("")); e == nil {
+		t.Fatal("incomplete default-directory credentials accepted")
 	}
 }

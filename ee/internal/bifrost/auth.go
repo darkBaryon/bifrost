@@ -54,6 +54,7 @@ func OptionsFromEnvironment(setupToken string) (identity.Options, error) {
 
 // NewAuthAdapter 在宿主注册路由前迁移并装配身份；无DB或非法部署配置时拒绝启动。
 func NewAuthAdapter(ctx context.Context, s *server.BifrostHTTPServer) (*AuthAdapter, error) {
+	ctx = identity.WithDiagnosticOperation(ctx, "identity.bootstrap")
 	if s.Config == nil || s.Config.ConfigStore == nil || s.Config.ConfigStore.DB() == nil {
 		return nil, errors.New("EE identity requires a database config store")
 	}
@@ -85,7 +86,7 @@ func NewAuthAdapter(ctx context.Context, s *server.BifrostHTTPServer) (*AuthAdap
 		return nil, e
 	}
 	if !state.Initialized {
-		if e = validateLegacyFile(s.AppDir); e != nil {
+		if e = validateLegacyFile(server.GetDefaultConfigDir(s.AppDir)); e != nil {
 			return nil, e
 		}
 		old, e := s.Config.ConfigStore.GetAuthConfig(ctx)
@@ -212,20 +213,9 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			c.RemoveUserValue(principalKey{})
 			c.RemoveUserValue(handlers.WebSocketAuthorizeContextKey)
 			method, path := string(c.Method()), string(c.Path())
-			// Access logging runs outside this middleware. Remove URL credentials
-			// before every return, including rejected handshakes.
-			var wsTicket string
-			var legacyWSToken bool
-			if path == "/ws" {
-				wsTicket = string(c.QueryArgs().Peek("ticket"))
-				legacyWSToken = c.QueryArgs().Has("token")
-				c.QueryArgs().Del("ticket")
-				c.QueryArgs().Del("token")
-				// An empty parsed Args otherwise falls back to URI's original query.
-				c.URI().SetQueryString(c.QueryArgs().String())
-				// RequestCtx.RequestURI reads the raw header, not the parsed URI.
-				c.Request.SetRequestURIBytes(c.URI().RequestURI())
-			}
+			ctx := identityhttp.OperationContext(c, "console.authenticate")
+			wsTicket := string(c.QueryArgs().Peek("ticket"))
+			legacyWSToken := c.QueryArgs().Has("token")
 			if public(method, path) || identityhttp.OwnsRoute(method, path) {
 				next(c)
 				return
@@ -246,15 +236,15 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 					return
 				}
 				if wsTicket != "" {
-					p, e = a.HTTP.Service.ConsumeTicket(c, wsTicket)
+					p, e = a.HTTP.Service.ConsumeTicket(ctx, wsTicket)
 				} else {
-					p, e = a.HTTP.Service.Authenticate(c, string(c.Request.Header.Cookie(identityhttp.CookieName)))
+					p, e = a.HTTP.Service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
 				}
 			} else {
-				p, e = a.HTTP.Service.Authenticate(c, string(c.Request.Header.Cookie(identityhttp.CookieName)))
+				p, e = a.HTTP.Service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
 			}
 			if e == nil {
-				e = a.HTTP.Service.RequireAccountManager(c, p)
+				e = a.HTTP.Service.RequireAccountManager(ctx, p)
 			}
 			if e != nil {
 				if temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
@@ -276,6 +266,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			if path == "/ws" {
 				sessionID := p.SessionID
 				c.SetUserValue(handlers.WebSocketAuthorizeContextKey, func(ctx context.Context) error {
+					ctx = identity.WithDiagnosticOperation(ctx, "identity.websocket")
 					p, e := a.HTTP.Service.ValidateSession(ctx, sessionID)
 					if e != nil {
 						return e
@@ -284,7 +275,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				})
 			}
 			if path == "/api/config" && (method == "GET" || method == "PUT") {
-				projection, e := a.projection(c, p)
+				projection, e := a.projection(ctx, p)
 				if e != nil {
 					identityhttp.Error(c, e)
 					return

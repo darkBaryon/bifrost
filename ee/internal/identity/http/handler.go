@@ -3,6 +3,7 @@ package identityhttp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -27,6 +28,15 @@ type Handler struct {
 	Service *identity.Service
 	Origin  string
 	secure  bool
+}
+
+// OperationContext correlates safe database diagnostics with the existing access log request_id.
+func OperationContext(c *fasthttp.RequestCtx, operation string) context.Context {
+	ctx := identity.WithDiagnosticOperation(c, operation)
+	_, id := identity.DiagnosticOperation(ctx)
+	c.Request.Header.Set("x-request-id", id)
+	c.Response.Header.Set("X-Request-ID", id)
+	return ctx
 }
 
 func NewHandler(s *identity.Service, origin string) (*Handler, error) {
@@ -217,13 +227,14 @@ func (h *Handler) RegisterRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddl
 	r.GET("/api/session/is-auth-enabled", lib.ChainMiddlewares(h.status, m...))
 }
 func (h *Handler) status(c *fasthttp.RequestCtx) {
+	ctx := OperationContext(c, "identity.status")
 	c.Response.Header.Set("Cache-Control", "no-store")
-	state, e := h.Service.State(c)
+	state, e := h.Service.State(ctx)
 	if e != nil {
 		Error(c, e)
 		return
 	}
-	p, e := h.Service.Authenticate(c, string(c.Request.Header.Cookie(CookieName)))
+	p, e := h.Service.Authenticate(ctx, string(c.Request.Header.Cookie(CookieName)))
 	if e != nil && !errors.Is(e, identity.ErrUnauthorized) {
 		Error(c, e)
 		return
@@ -232,6 +243,7 @@ func (h *Handler) status(c *fasthttp.RequestCtx) {
 }
 func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 	return func(c *fasthttp.RequestCtx) {
+		ctx := OperationContext(c, "identity."+action)
 		c.Response.Header.Set("Cache-Control", "no-store")
 		if !h.SameOrigin(c) {
 			Error(c, identity.ErrForbidden)
@@ -244,7 +256,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 				Error(c, identity.ErrUnauthorized)
 				return
 			}
-			p, e = h.Service.Authenticate(c, string(c.Request.Header.Cookie(CookieName)))
+			p, e = h.Service.Authenticate(ctx, string(c.Request.Header.Cookie(CookieName)))
 			if e != nil {
 				Error(c, e)
 				return
@@ -267,7 +279,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			}
 			if e = Decode(c, &q, false); e == nil {
 				var a identity.Account
-				a, e = h.Service.Initialize(c, q.SetupToken, q.Username, q.Password)
+				a, e = h.Service.Initialize(ctx, q.SetupToken, q.Username, q.Password)
 				result = map[string]any{"account": a}
 				code = 201
 			}
@@ -278,10 +290,10 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			}
 			if e = Decode(c, &q, false); e == nil {
 				var v identity.IssuedSession
-				v, e = h.Service.Login(c, q.Username, q.Password, c.RemoteIP().String())
+				v, e = h.Service.Login(ctx, q.Username, q.Password, c.RemoteIP().String())
 				if e == nil {
 					var a identity.Account
-					a, e = h.Service.Me(c, v.Principal)
+					a, e = h.Service.Me(ctx, v.Principal)
 					if e == nil {
 						h.SetCookie(c, v.Token, v.ExpiresAt)
 						result = map[string]any{"message": "Login successful", "account": a, "must_change_password": v.Principal.MustChangePassword, "expires_at": v.ExpiresAt}
@@ -291,7 +303,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 		case "logout":
 			var q struct{}
 			if e = Decode(c, &q, legacy); e == nil {
-				e = h.Service.Logout(c, string(c.Request.Header.Cookie(CookieName)))
+				e = h.Service.Logout(ctx, string(c.Request.Header.Cookie(CookieName)))
 				if e == nil {
 					h.SetCookie(c, "", time.Unix(1, 0))
 					result = map[string]string{"message": "Logout successful"}
@@ -301,7 +313,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			var q struct{}
 			if e = Decode(c, &q, false); e == nil {
 				var a identity.Account
-				a, e = h.Service.Me(c, p)
+				a, e = h.Service.Me(ctx, p)
 				result = map[string]any{"account": a}
 			}
 		case "change-password":
@@ -310,7 +322,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 				New string `json:"new_password"`
 			}
 			if e = Decode(c, &q, false); e == nil {
-				e = h.Service.ChangePassword(c, p, q.Old, q.New)
+				e = h.Service.ChangePassword(ctx, p, q.Old, q.New)
 				if e == nil {
 					h.SetCookie(c, "", time.Unix(1, 0))
 					result = map[string]string{"message": "Password changed; log in again"}
@@ -323,7 +335,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			}
 			if e = Decode(c, &q, false); e == nil {
 				var a identity.Account
-				a, e = h.Service.CreateAccount(c, p, q.Username, q.DisplayName)
+				a, e = h.Service.CreateAccount(ctx, p, q.Username, q.DisplayName)
 				result = map[string]any{"account": a}
 				code = 201
 			}
@@ -333,7 +345,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 				Limit  int    `json:"limit"`
 			}
 			if e = Decode(c, &q, false); e == nil {
-				result, e = h.Service.ListAccounts(c, p, q.Cursor, q.Limit)
+				result, e = h.Service.ListAccounts(ctx, p, q.Cursor, q.Limit)
 			}
 		case "set-status":
 			var q struct {
@@ -341,10 +353,10 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 				Status string `json:"status"`
 			}
 			if e = Decode(c, &q, false); e == nil {
-				e = h.Service.SetAccountStatus(c, p, q.ID, q.Status)
+				e = h.Service.SetAccountStatus(ctx, p, q.ID, q.Status)
 				if e == nil {
 					var a identity.Account
-					a, e = h.Service.Account(c, p, q.ID)
+					a, e = h.Service.Account(ctx, p, q.ID)
 					result = map[string]any{"account": a}
 				}
 			}
@@ -355,7 +367,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			}
 			if e = Decode(c, &q, false); e == nil {
 				var v identity.PasswordEvent
-				v, e = h.Service.ResetPassword(c, p, q.ID, q.OperationID)
+				v, e = h.Service.ResetPassword(ctx, p, q.ID, q.OperationID)
 				result = map[string]string{"event_id": v.ID, "result": v.Result}
 			}
 		case "password-events":
@@ -365,14 +377,14 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 				Limit  int    `json:"limit"`
 			}
 			if e = Decode(c, &q, false); e == nil {
-				result, e = h.Service.ListPasswordEvents(c, p, q.Target, q.Cursor, q.Limit)
+				result, e = h.Service.ListPasswordEvents(ctx, p, q.Target, q.Cursor, q.Limit)
 			}
 		case "ws-ticket":
 			var q struct{}
 			if e = Decode(c, &q, legacy); e == nil {
 				var token string
-				token, e = h.Service.IssueTicket(c, p)
-				result = map[string]any{"ticket": token, "expires_in": 30}
+				token, e = h.Service.IssueTicket(ctx, p)
+				result = map[string]any{"ticket": token, "expires_in": int(identity.WSTicketTTL / time.Second)}
 			}
 		}
 		if e != nil {

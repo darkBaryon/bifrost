@@ -34,6 +34,23 @@ func SafeError(err error) error {
 	return ErrUnavailable
 }
 
+// WSTicketTTL 是签发和HTTP响应共用的票据有效期。
+const WSTicketTTL = 30 * time.Second
+
+type diagnosticOperationKey struct{}
+type diagnosticOperation struct{ Name, ID string }
+
+// WithDiagnosticOperation 为一次入口操作分配关联ID，不携带凭据或HTTP对象。
+func WithDiagnosticOperation(ctx context.Context, name string) context.Context {
+	return context.WithValue(ctx, diagnosticOperationKey{}, diagnosticOperation{Name: name, ID: randomID()})
+}
+func DiagnosticOperation(ctx context.Context) (string, string) {
+	if v, ok := ctx.Value(diagnosticOperationKey{}).(diagnosticOperation); ok {
+		return v.Name, v.ID
+	}
+	return "identity", "none"
+}
+
 // Principal 仅携带身份句柄，不能凭调用方构造的字段跳过服务端校验。
 type Principal struct {
 	AccountID          string `json:"account_id"`

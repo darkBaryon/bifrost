@@ -3,6 +3,8 @@ package persistence
 
 import (
 	"context"
+	"time"
+
 	upstream "github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/migrator"
 	"gorm.io/gorm"
@@ -13,6 +15,22 @@ const identityMigrationID = "ee_identity_v1"
 const identityMigrationLock int64 = 8342761902
 
 func MigrateIdentity(ctx context.Context, db *gorm.DB) error {
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		err = migrateIdentityOnce(ctx, db)
+		if !sqliteBusy(err) {
+			return databaseFailure(ctx, "migration", err)
+		}
+		select {
+		case <-ctx.Done():
+			return databaseFailure(ctx, "migration", ctx.Err())
+		case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
+		}
+	}
+	return databaseFailure(ctx, "migration", err)
+}
+
+func migrateIdentityOnce(ctx context.Context, db *gorm.DB) error {
 	return db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}).WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if tx.Dialector.Name() == "postgres" {
 			if e := tx.Exec("SET LOCAL lock_timeout = '10s'").Error; e != nil {

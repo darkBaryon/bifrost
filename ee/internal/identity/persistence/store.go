@@ -94,12 +94,12 @@ func conflict(err error) error {
 func (s *Store) State(ctx context.Context) (identity.State, error) {
 	var r stateRow
 	e := s.db.WithContext(ctx).First(&r, 1).Error
-	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(e)
+	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(databaseFailure(ctx, "state.read", e))
 }
 func (s *Store) CredentialByName(ctx context.Context, name string) (identity.Credential, error) {
 	var r accountRow
 	e := s.db.WithContext(ctx).Where("username = ?", name).First(&r).Error
-	return r.Credential, notFound(e)
+	return r.Credential, notFound(databaseFailure(ctx, "account.read", e))
 }
 
 // authRecord 在一个SQL语句中读取会话及账号，避免跨查询读出不一致版本。
@@ -124,19 +124,23 @@ func authRecord(db *gorm.DB, column, value string) (identity.AuthRecord, error) 
 	return identity.AuthRecord{Credential: row.Credential, Session: identity.Session{ID: row.SessionID, TokenHash: row.TokenHash, AccountID: row.SessionAccountID, IssuedAuthVersion: row.IssuedAuthVersion, ExpiresAt: row.SessionExpiresAt, CreatedAt: row.SessionCreatedAt, RevokedAt: row.SessionRevokedAt}}, nil
 }
 func (s *Store) AuthByHash(ctx context.Context, h string) (identity.AuthRecord, error) {
-	return authRecord(s.db.WithContext(ctx), "s.token_hash", h)
+	v, e := authRecord(s.db.WithContext(ctx), "s.token_hash", h)
+	return v, databaseFailure(ctx, "session.read", e)
 }
 func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, error) {
-	return authRecord(s.db.WithContext(ctx), "s.id", id)
+	v, e := authRecord(s.db.WithContext(ctx), "s.id", id)
+	return v, databaseFailure(ctx, "session.read", e)
 }
 
 type transaction struct {
 	db    *gorm.DB
 	state identity.State
+	stage string
 }
 
 func (t *transaction) State() identity.State { return t.state }
 func (t *transaction) SaveState(s identity.State) error {
+	t.stage = "state.save"
 	e := t.db.Model(&stateRow{}).Where("id = 1").Updates(map[string]any{"initialized": s.Initialized, "chief_account_id": s.ChiefAccountID}).Error
 	if e == nil {
 		t.state = s
@@ -144,45 +148,57 @@ func (t *transaction) SaveState(s identity.State) error {
 	return e
 }
 func (t *transaction) Account(id string) (identity.Credential, error) {
+	t.stage = "account.read"
 	var r accountRow
 	e := t.db.Where("id = ?", id).First(&r).Error
 	return r.Credential, notFound(e)
 }
 func (t *transaction) AccountByName(name string) (identity.Credential, error) {
+	t.stage = "account.read"
 	var r accountRow
 	e := t.db.Where("username = ?", name).First(&r).Error
 	return r.Credential, notFound(e)
 }
 func (t *transaction) InsertAccount(c identity.Credential) error {
+	t.stage = "account.insert"
 	return conflict(t.db.Create(&accountRow{c}).Error)
 }
 func (t *transaction) SaveAccount(c identity.Credential) error {
+	t.stage = "account.update"
 	return t.db.Save(&accountRow{c}).Error
 }
 func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
+	t.stage = "session.read"
 	return authRecord(t.db, "s.id", id)
 }
 func (t *transaction) InsertSession(s identity.Session) error {
+	t.stage = "session.insert"
 	return t.db.Create(&sessionRow{s}).Error
 }
 func (t *transaction) RevokeSession(id string, at time.Time) error {
+	t.stage = "session.revoke"
 	return t.db.Model(&sessionRow{}).Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", at).Error
 }
 func (t *transaction) RevokeSessions(id string, at time.Time) error {
+	t.stage = "sessions.revoke"
 	return t.db.Model(&sessionRow{}).Where("account_id = ? AND revoked_at IS NULL", id).Update("revoked_at", at).Error
 }
 func (t *transaction) Event(id string) (identity.PasswordEvent, error) {
+	t.stage = "password_event.read"
 	var r eventRow
 	e := t.db.Where("operation_id = ?", id).First(&r).Error
 	return r.PasswordEvent, notFound(e)
 }
 func (t *transaction) InsertEvent(e identity.PasswordEvent) error {
+	t.stage = "password_event.insert"
 	return conflict(t.db.Create(&eventRow{e}).Error)
 }
 func (t *transaction) InsertTicket(v identity.Ticket) error {
+	t.stage = "ticket.insert"
 	return t.db.Create(&ticketRow{Hash: v.Hash, SessionID: v.SessionID, ExpiresAt: v.ExpiresAt}).Error
 }
 func (t *transaction) ConsumeTicket(hash string, at time.Time) (string, error) {
+	t.stage = "ticket.consume"
 	result := t.db.Model(&ticketRow{}).Where("hash = ? AND consumed_at IS NULL AND expires_at > ?", hash, at).Update("consumed_at", at)
 	if result.Error != nil {
 		return "", result.Error
@@ -195,9 +211,12 @@ func (t *transaction) ConsumeTicket(hash string, at time.Time) (string, error) {
 	return r.SessionID, e
 }
 func (s *Store) Transaction(ctx context.Context, fn func(identity.Tx) error) error {
+	var last error
+	phase := "transaction.begin"
 	for attempt := 0; attempt < 3; attempt++ {
+		phase = "transaction.begin"
 		e := s.db.WithContext(ctx).Transaction(func(db *gorm.DB) error {
-			// 先写单例取得SQLite写锁/PG行锁，再读取参与业务校验的状态。
+			phase = "transaction.lock"
 			result := db.Model(&stateRow{}).Where("id = 1").UpdateColumn("revision", gorm.Expr("revision + 1"))
 			if result.Error != nil {
 				return result.Error
@@ -209,22 +228,32 @@ func (s *Store) Transaction(ctx context.Context, fn func(identity.Tx) error) err
 			if e := db.First(&row, 1).Error; e != nil {
 				return e
 			}
-			return fn(&transaction{db: db, state: identity.State{Initialized: row.Initialized, ChiefAccountID: row.ChiefAccountID}})
-		})
-		if e == nil || (!strings.Contains(e.Error(), "database is locked") && !strings.Contains(e.Error(), "database table is locked")) {
+			tx := &transaction{db: db, state: identity.State{Initialized: row.Initialized, ChiefAccountID: row.ChiefAccountID}, stage: "transaction.operation"}
+			e := fn(tx)
+			phase = tx.stage
+			if e == nil {
+				phase = "transaction.commit"
+			}
 			return e
+		})
+		if !sqliteBusy(e) {
+			return databaseFailure(ctx, phase, e)
 		}
+		last = e
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return databaseFailure(ctx, phase, ctx.Err())
 		case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
 		}
 	}
+	databaseFailure(ctx, phase, last)
 	return identity.ErrUnavailable
 }
 func (s *Store) ReserveLogin(ctx context.Context, nameHash, ipHash string, at time.Time) error {
 	return s.Transaction(ctx, func(tx identity.Tx) error {
-		db := tx.(*transaction).db
+		t := tx.(*transaction)
+		t.stage = "login_limit.reserve"
+		db := t.db
 		// 删除旧限流窗口；凭据与审计记录不参与此清理。
 		if e := db.Where("window_start < ?", at.Add(-time.Hour)).Delete(&limitRow{}).Error; e != nil {
 			return e
@@ -266,7 +295,7 @@ func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]ident
 	for _, r := range rows {
 		out = append(out, r.Credential)
 	}
-	return out, e
+	return out, databaseFailure(ctx, "accounts.list", e)
 }
 func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n int) ([]identity.PasswordEvent, error) {
 	rows := []eventRow{}
@@ -282,7 +311,7 @@ func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n 
 	for _, r := range rows {
 		out = append(out, r.PasswordEvent)
 	}
-	return out, e
+	return out, databaseFailure(ctx, "password_events.list", e)
 }
 
 var _ identity.Repository = (*Store)(nil)

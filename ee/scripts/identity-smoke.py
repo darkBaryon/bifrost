@@ -17,6 +17,7 @@ import shlex
 import socket
 import sqlite3
 import struct
+import sys
 import subprocess
 import tempfile
 import time
@@ -54,11 +55,19 @@ class Node:
     def new_client(cookies=None):
         return urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cookies if cookies is not None else http.cookiejar.CookieJar()))
 
-    def start(self):
+    def start(self, *, default_home=None):
         env = {k: v for k, v in os.environ.items() if not k.startswith(('BIFROST_', 'EE_', 'OPENAI_', 'ANTHROPIC_', 'AWS_', 'AZURE_'))}
         env.update(EE_PUBLIC_ORIGIN=self.url, BIFROST_SETUP_TOKEN=self.setup)
         self.log = (self.root / 'server.log').open('ab')
-        self.process = subprocess.Popen([self.binary, '-host', '127.0.0.1', '-port', str(self.port), '-app-dir', str(self.root)], env=env, stdout=self.log, stderr=subprocess.STDOUT)
+        command = [self.binary, '-host', '127.0.0.1', '-port', str(self.port)]
+        cwd = None
+        if default_home is None:
+            command += ['-app-dir', str(self.root)]
+        else:
+            env.update(HOME=str(default_home), APPDATA=str(Path(default_home)/'.config'))
+            cwd = Path(default_home)/'working-directory'
+            cwd.mkdir(exist_ok=True)
+        self.process = subprocess.Popen(command, cwd=cwd, env=env, stdout=self.log, stderr=subprocess.STDOUT)
         deadline = time.monotonic() + 60
         while time.monotonic() < deadline:
             if self.process.poll() is not None:
@@ -184,6 +193,20 @@ def exercise(nodes, dbconfig, dsn):
     a.expect(200, '/api/identity/change-password', {'old_password':'123456','new_password':'Alice-password-1'}, token=alice)
     b.expect(401, '/api/identity/me', {}, token=alice)
     alice = a.login('alice', 'Alice-password-1')
+    if dbconfig['type'] == 'sqlite':
+        # 真实driver故障须有可关联的安全诊断，同时保持密码/会话/事件原子回滚。
+        with sqlite3.connect(dbconfig['config']['path']) as db:
+            db.execute("CREATE TRIGGER smoke_event_failure BEFORE INSERT ON ee_identity_password_events BEGIN SELECT RAISE(ABORT, 'private-driver-error'); END")
+        try:
+            _, headers = a.expect(503, '/api/accounts/reset-password', {'account_id':alice_id,'operation_id':str(uuid.uuid4())}, token=admin)
+            diagnostic = (a.root/'server.log').read_text()
+            assert 'operation=identity.reset-password stage=password_event.insert incident_id='+headers['X-Request-ID'] in diagnostic
+            assert 'kind=sqlite code=19/' in diagnostic
+            assert 'private-driver-error' not in diagnostic
+            a.expect(200, '/api/identity/me', {}, token=alice)
+        finally:
+            with sqlite3.connect(dbconfig['config']['path']) as db:
+                db.execute('DROP TRIGGER smoke_event_failure')
     op = str(uuid.uuid4())
     event, _ = b.expect(200, '/api/accounts/reset-password', {'account_id':alice_id,'operation_id':op}, token=admin)
     a.expect(401, '/api/identity/me', {}, token=alice)
@@ -217,6 +240,11 @@ def exercise(nodes, dbconfig, dsn):
     assert stored['client_config']['log_retention_days'] == 37, 'rejected auth edit partially wrote settings'
     a.expect(400, '/api/config', {'AUTH_CONFIG':{'is_enabled':False}}, method='PUT', token=admin)
     ticket, _ = a.expect(200, '/api/identity/ws-ticket', {}, token=admin)
+    assert ticket['expires_in'] == 30
+    # 解压和OPTIONS可在认证前返回；同一张未消费票据随后仍须可正常握手。
+    a.expect(400, '/ws?ticket='+ticket['ticket'], method='GET', raw=b'not gzip', headers={'Content-Encoding':'gzip'})
+    a.expect(200, '/ws?ticket='+ticket['ticket'], method='OPTIONS')
+    a.expect(401, '/ws?token=legacy-private-token', method='GET')
     with contextlib.closing(websocket(b, ticket['ticket'])) as ws:
         notification = {'title':'identity-test','message':'test notification','severity':'info','audience':'roles','role_ids':[987654]}
         b.expect(201, '/api/notifications', notification, token=admin)
@@ -253,7 +281,7 @@ def exercise(nodes, dbconfig, dsn):
             assert all(len(h)==64 and h not in (admin,alice,recovered) for h in hashes)
     for node in nodes:
         log = (node.root/'server.log').read_bytes()
-        for secret in (admin, admin_new, alice, recovered, ticket['ticket'], node.setup):
+        for secret in (admin, admin_new, alice, recovered, ticket['ticket'], node.setup, 'legacy-private-token'):
             assert secret.encode() not in log, 'application log contains a credential'
     print('PASS: initialization race, local accounts, mandatory password change, cross-node revoke, idempotent reset, queryable events, configuration compatibility, WS revoke, offline recovery and restart')
 
@@ -267,6 +295,8 @@ def main():
     nodes=[]
     control=None
     database=None
+    database_created=False
+    succeeded=False
     try:
         if args.database=='postgres':
             control=os.environ.get('IDENTITY_TEST_POSTGRES_DSN')
@@ -275,6 +305,7 @@ def main():
             fields=dict(part.split('=',1) for part in shlex.split(control))
             database='identity_smoke_'+uuid.uuid4().hex
             psql(control,'CREATE DATABASE '+database)
+            database_created=True
             dbconfig={'enabled':True,'type':'postgres','config':{'host':fields['host'],'port':fields.get('port','5432'),'user':fields['user'],'password':fields.get('password',''),'db_name':database,'ssl_mode':fields.get('sslmode','disable')}}
         else:
             dbconfig={'enabled':True,'type':'sqlite','config':{'path':str(root/'config.db')}}
@@ -286,12 +317,17 @@ def main():
         for node in nodes:
             node.start()
         exercise(nodes,dbconfig,control)
-        print('Isolated evidence:',root)
+        succeeded=True
     finally:
         for node in nodes:
             node.stop()
-        if control and database:
-            psql(control,'DROP DATABASE '+database+' WITH (FORCE)')
+        print('Isolated evidence:',root, file=sys.stderr)
+        if control and database_created:
+            if succeeded:
+                psql(control,'DROP DATABASE '+database+' WITH (FORCE)')
+            else:
+                print('Failure database retained:',database, file=sys.stderr)
+                print('After inspecting evidence, explicitly drop only this test database using the original test connection.', file=sys.stderr)
 
 
 if __name__=='__main__':

@@ -58,7 +58,7 @@ func RecoverAdmin(args []string) error {
 			return errors.New("existing SQLite configuration database is required")
 		}
 	}
-	ctx := context.Background()
+	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.recover-admin")
 	log := bifrost.NewDefaultLogger(schemas.LogLevelError)
 	store, e := configstore.NewConfigStore(ctx, config.Store, log)
 	if e != nil {

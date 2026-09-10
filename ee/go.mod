@@ -4,6 +4,7 @@ go 1.27.0
 
 require (
 	github.com/fasthttp/router v1.5.4
+	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/maximhq/bifrost/core v1.8.3
 	github.com/maximhq/bifrost/framework v1.6.0
@@ -125,7 +126,6 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.9.2 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jaswdr/faker/v2 v2.8.0 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
