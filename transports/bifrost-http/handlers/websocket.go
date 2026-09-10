@@ -26,6 +26,10 @@ const websocketWriteTimeout = 10 * time.Second
 // connection has already been handed back to the transport.
 var errWebSocketClientClosed = errors.New("websocket client is closed")
 
+// WebSocketAuthorizeContextKey carries an optional connection revalidation callback.
+// The callback must only capture durable identifiers, never a pooled RequestCtx.
+const WebSocketAuthorizeContextKey = "bifrost.websocket.authorize"
+
 // WebSocketClient represents a connected WebSocket client with its own mutex
 type WebSocketClient struct {
 	conn       *websocket.Conn
@@ -33,6 +37,7 @@ type WebSocketClient struct {
 	roleID     uint
 	hasRole    bool
 	localAdmin bool
+	authorize  func(context.Context) error
 
 	// closed is set under mu once the connection's owning handler is done with
 	// it. It cannot be inferred from conn: fasthttp hands the upgrade handler a
@@ -137,20 +142,29 @@ func isLocalhost(host string) bool {
 // connectStream handles WebSocket connections for real-time streaming
 func (h *WebSocketHandler) connectStream(ctx *fasthttp.RequestCtx) {
 	upgrader := h.getUpgrader()
+	// Copy request metadata before the hijack callback outlives RequestCtx.
+	roleID, hasRole := notificationRoleID(ctx)
+	localAdmin, _ := ctx.UserValue(schemas.IsLocalAdminContextKey).(bool)
+	authorize, _ := ctx.UserValue(WebSocketAuthorizeContextKey).(func(context.Context) error)
 	err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
 		// Read safety & liveness
 		ws.SetReadLimit(50 << 20) // 50 MiB
 		ws.SetReadDeadline(time.Now().Add(60 * time.Second))
-		ws.SetPongHandler(func(string) error {
-			ws.SetReadDeadline(time.Now().Add(60 * time.Second))
-			return nil
-		})
 		// Create a new client with its own mutex
 		client := &WebSocketClient{
 			conn: ws,
 		}
-		client.roleID, client.hasRole = notificationRoleID(ctx)
-		client.localAdmin, _ = ctx.UserValue(schemas.IsLocalAdminContextKey).(bool)
+		client.roleID, client.hasRole = roleID, hasRole
+		client.localAdmin = localAdmin
+		client.authorize = authorize
+		ws.SetPongHandler(func(string) error {
+			client.mu.Lock()
+			defer client.mu.Unlock()
+			if client.closed {
+				return errWebSocketClientClosed
+			}
+			return ws.SetReadDeadline(time.Now().Add(60 * time.Second))
+		})
 
 		// Register new client
 		h.mu.Lock()
@@ -236,6 +250,18 @@ func (h *WebSocketHandler) writeSafely(client *WebSocketClient, write func(conn 
 		}
 	}()
 
+	if client.authorize != nil {
+		checkCtx, cancel := context.WithTimeout(h.ctx, 2*time.Second)
+		err := client.authorize(checkCtx)
+		cancel()
+		if err != nil {
+			// fasthttp hijackConn.Close is a no-op until the handler returns.
+			// Interrupt its read loop so revoked connections are actually released.
+			_ = conn.UnderlyingConn().SetReadDeadline(time.Now())
+			discard()
+			return fmt.Errorf("websocket session is no longer valid")
+		}
+	}
 	if err := write(conn); err != nil {
 		discard()
 		return err

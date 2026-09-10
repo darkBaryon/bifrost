@@ -204,6 +204,12 @@ type MCPLogRedactionMappingResolverProvider interface {
 	GetMCPLogRedactionMappingResolver() handlers.MCPLogRedactionMappingResolver
 }
 
+// ConsoleAuthProvider allows an embedder to replace console authentication without changing inference.
+type ConsoleAuthProvider interface {
+	APIMiddleware() schemas.BifrostHTTPMiddleware
+	RegisterSessionRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
+}
+
 // BifrostHTTPServer represents a HTTP server instance.
 type BifrostHTTPServer struct {
 	Ctx    *schemas.BifrostContext
@@ -240,6 +246,10 @@ type BifrostHTTPServer struct {
 	devPprofHandler     *handlers.DevPprofHandler
 	IntegrationHandler  *handlers.IntegrationHandler
 
+	// ConsoleAuthFactory runs after auth dependencies exist and before routes are registered.
+	// A nil factory preserves the OSS behavior; a configured factory must return a provider.
+	ConsoleAuthFactory   func(context.Context, *BifrostHTTPServer) (ConsoleAuthProvider, error)
+	consoleAuth          ConsoleAuthProvider
 	AuthMiddleware       *handlers.AuthMiddleware
 	CORSMiddleware       *handlers.CorsMiddleware
 	TracingMiddleware    *handlers.TracingMiddleware
@@ -2295,7 +2305,9 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	if pluginsHandler != nil {
 		pluginsHandler.RegisterRoutes(s.Router, middlewares...)
 	}
-	if sessionHandler != nil {
+	if s.consoleAuth != nil {
+		s.consoleAuth.RegisterSessionRoutes(s.Router, middlewares...)
+	} else if sessionHandler != nil {
 		sessionHandler.RegisterRoutes(s.Router, middlewares...)
 	}
 	if promptsHandler != nil {
@@ -2730,9 +2742,30 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 			}
 			return fmt.Errorf("failed to initialize auth middleware: %v", err)
 		}
-		if ctx.Value(schemas.BifrostContextKeyIsEnterprise) == nil {
-			apiMiddlewares = append(apiMiddlewares, s.AuthMiddleware.APIMiddleware())
+	}
+	if s.ConsoleAuthFactory != nil {
+		s.consoleAuth, err = s.ConsoleAuthFactory(ctx, s)
+		if err == nil && s.consoleAuth == nil {
+			err = fmt.Errorf("console auth factory returned no provider")
 		}
+		if err != nil {
+			if s.WSTicketStore != nil {
+				s.WSTicketStore.Stop()
+				s.WSTicketStore = nil
+			}
+			if s.TempTokenSweepWorker != nil {
+				s.TempTokenSweepWorker.Stop()
+				s.TempTokenSweepWorker = nil
+			}
+			if s.OAuth2SweepWorker != nil {
+				s.OAuth2SweepWorker.stop()
+				s.OAuth2SweepWorker = nil
+			}
+			return fmt.Errorf("initialize console authentication: %w", err)
+		}
+		apiMiddlewares = append(apiMiddlewares, s.consoleAuth.APIMiddleware())
+	} else if ctx.Value(schemas.BifrostContextKeyIsEnterprise) == nil && s.AuthMiddleware != nil {
+		apiMiddlewares = append(apiMiddlewares, s.AuthMiddleware.APIMiddleware())
 	}
 	// Add semantic cache plugin embedding request executor if it exists
 	semanticCachePlugin, err := lib.FindPluginAs[*semanticcache.Plugin](s.Config, semanticcache.PluginName)
