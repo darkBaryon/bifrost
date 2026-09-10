@@ -106,8 +106,8 @@ convert_when: "B1 第二次往 attach 加四件套时,先评是否拆成按功�
 
 ```yaml
 id: FIND-013
-status: 观察中
-triggered_by: [ee包壳骨架, Logo品牌设置]
+status: 已转Case
+triggered_by: [ee包壳骨架, Logo品牌设置, EE现有代码架构迁移]
 evidence: "骨架探针会随生产二进制发出:ee_probe 表(attach 每次启动 AutoMigrate 建、永不删)、ee-probe 插件、无鉴权 /api/ee/ping、X-Bifrost-EE 响应头、x-bifrost-ee meta,散在 lib/tables.go、lib/shell.go、handlers/probe.go、handlers/middlewares.go、server/probe_plugin.go 五处 + attach 4 行;来源:ee包壳骨架 期1 收敛评审1 挂账2"
 convert_when: "第一个 B 功能落地或第一次对外构建前,决定保留为健康探针(包鉴权)或整体删除(删表需 REF『ee骨架对齐上游建表与构建约定』的迁移体系配 Rollback)"
 ```
@@ -122,8 +122,8 @@ convert_when: "下次合并上游若 main.go 有改动,在 ee 的 checklist 加�
 
 ```yaml
 id: FIND-015
-status: 观察中
-triggered_by: [ee包壳骨架]
+status: 已转Case
+triggered_by: [ee包壳骨架, EE现有代码架构迁移]
 evidence: "ee/scripts/smoke.sh 依赖本机状态:个人 ~/.config/bifrost/config.db(T1 要求 provider 集合非空)、固定端口 18080/18081、lsof 按端口 kill(可能误杀无关进程)、sqlite3/python3;仅能单人本机跑,不可进 CI;来源:ee包壳骨架 期1 收敛评审1 挂账4"
 convert_when: "第二个人要跑或要进 CI 时,改为脚本自建最小 config.json + 动态端口 + 只杀自己起的 pid"
 ```
@@ -146,3 +146,8 @@ convert_when: "任一功能(集群广播、日志脱敏映射、治理路由整�
 ## Logo品牌设置复查2（2026-09-09）
 
 收敛评审2（按修订后规范重做）对账：FIND-012 bootstrap 仅改注释与错误前缀，未恶化；FIND-013 探针未动，本轮拒绝顺手改其迁移方式；FIND-014/015/016 未触及。无新增 Finding。
+
+## EE 现有代码架构迁移（2026-09-11）
+
+- FIND-013 转入本案：用户明确要求移除骨架探针，已删除接口、空插件、表注册及响应/页面标记；既有数据库旧表不再使用，不执行删表。
+- FIND-015 转入本案：删除旧 smoke.sh，make smoke 使用自建临时配置、随机端口和仅清理自有 PID 的品牌冒烟。

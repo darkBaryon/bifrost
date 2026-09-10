@@ -2,6 +2,16 @@
 
 > Context for AI agents (Claude Code, Copilot, Cursor, etc.) working on this codebase. Read this fully before making changes.
 
+## 本仓定位（先读）
+
+本仓是 `darkBaryon/bifrost`，基于上游 `maximhq/bifrost` 开发自有 EE 应用。项目总入口是 [README.md](README.md)。本文件后续保留了大量上游说明；理解本仓任务时，先识别以下自有目录：
+
+- [ee/](ee/README.md)：自有应用代码。独立 Go 模块与可执行入口，在同一进程中内嵌完整的 Bifrost HTTP 应用，使用共享 Server、Router 和嵌套的 Handler 链。
+- [product/](product/README.md)：产品经理、技术负责人级文档，包含需求、整体架构、模块边界与长期技术决策。
+- [workbench/](workbench/README.md)：具体开发人员的实施、测试、评审与交付文档。
+
+EE 自有后端按 [EE 后端架构](product/架构/EE后端架构.md) 组织：按业务能力分模块，模块内部保留分层。现有入口、装配与品牌模块已迁到 `ee/cmd/`、`ee/internal/`，新业务沿用本仓架构。核实功能现状时查看当前代码与交付证据，不能将上游商业版介绍、产品候选或架构示例当成本仓已实现能力。EE 的运行与构建入口见 [ee/README.md](ee/README.md)。
+
 ## What is Bifrost?
 
 Bifrost is a high-performance AI gateway that unifies 20+ LLM providers behind a single OpenAI-compatible API with ~11µs overhead at 5,000 RPS. It also serves as an MCP (Model Context Protocol) gateway, turning static chat models into tool-calling agents.
@@ -1024,7 +1034,8 @@ cd ui && npm run build
 
 ## 本地产品与工程文档入口
 
-- 产品调研、需求与产品方案：`product/README.md`；写作遵循 `product/AGENTS.md`。
+- 产品经理和技术负责人级文档（产品调研、需求、路线图、整体架构、技术选型与长期决策）：`product/README.md`；写作遵循 `product/AGENTS.md`。
 - 原 `docs-zh/` 已整理到 `product/`：参考资料在 `product/docs-zh/`，公共调研在 `product/竞品调研/`，具体需求在 `product/需求/`。不要重新创建根目录 `docs-zh/`。
-- 架构设计、实施、评审、验收：`workbench/README.md` 与 `workbench/AGENTS.md`，保持独立。
+- 具体开发人员级文档（实施方案、代码改动设计、任务步骤、测试、评审、验收与交付）：`workbench/README.md` 与 `workbench/AGENTS.md`。
+- EE 自有后端结构遵循 `product/架构/EE后端架构.md`，编码细节遵循 `workbench/规范/项目/编码规范.md`；新增功能先读，历史镜像目录不作为新模块的组织要求。
 - 产品与工程以文档引用交接，不另建统一流程或复制业务规则；功能分支带回旧路径文档时先比较内容再按新路径整合。

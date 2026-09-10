@@ -10,7 +10,7 @@
 
 `brandingFileSchema` 检查文件大小和声明类型；图片的实际解码和像素校验由页面的 `image.ts` 完成。`brandingFormSchema` 校验待提交草稿：缺字段保持原图，空字符串表示移除。
 
-上传限制与[服务端校验](../../../../../transports/bifrost-http/handlers/branding/validation.go)保持一致。前端校验用于及时提示，服务端仍独立校验请求。
+上传限制与[服务端校验](../../../../../internal/branding/asset.go)保持一致。前端校验用于及时提示，服务端仍独立校验请求。
 
 ## 文件说明
 

@@ -1,7 +1,7 @@
 # Bifrost 中文参考资料
 
 > 原 `docs-zh` 的源码导读与学习资料，现作为 `product` 的参考资料保留。各篇内容按其编写时的代码版本理解；历史说明不自动代表当前实现。
-> 产品调研、需求与路线图从 [产品入口](../README.md) 阅读；架构设计与工程交付从 [Workbench](../../workbench/README.md) 阅读。
+> 产品调研、需求、路线图与整体架构从 [产品与技术文档入口](../README.md) 阅读；具体实施、测试、评审与交付从 [Workbench](../../workbench/README.md) 阅读。
 
 ## Bifrost 是什么
 
