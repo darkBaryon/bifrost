@@ -1,0 +1,26 @@
+# 本期实施完成后的合同；起草方案时不执行尚不存在的业务测试。
+必过命令:
+  - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: ee-tests-race, run: "cd ee && GOWORK=off go test -race ./..." }
+  - { name: host-regression, run: "cd ee && GOWORK=off go test -race github.com/maximhq/bifrost/transports/bifrost-http/handlers github.com/maximhq/bifrost/transports/bifrost-http/server" }
+  - { name: ui-dependencies, run: "cd ui && npm ci" }
+  - { name: ui-embed, run: "make -C ee build-ui" }
+  - { name: ee-binary, run: "cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http" }
+  - { name: identity-sqlite-http, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database sqlite" }
+  - { name: identity-postgres-two-nodes, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database postgres" }
+  - { name: branding-regression, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: workbench, run: "python3 workbench/tools/build_views.py --check" }
+  - { name: diff-whitespace, run: "git diff --check" }
+必存产物:
+  - ee/internal/identity/README.md
+  - ee/internal/identity/http/README.md
+  - ee/internal/identity/persistence/README.md
+  - ee/internal/bifrost/README.md
+  - ee/scripts/identity-smoke.py
+  - ee/docs/账号认证接口.md
+  - ee/docs/账号认证升级与恢复.md
+必含符号:
+  - { grep: "ConsoleAuthFactory", in: "transports/bifrost-http/server" }
+  - { grep: "WebSocketAuthorizeContextKey", in: "transports/bifrost-http/handlers" }
+  - { grep: "ee_identity_v1", in: "ee/internal/identity/persistence" }
+禁留标记: []
