@@ -1,9 +1,10 @@
-// 本文件投递当前版本的品牌图片，并处理缓存与条件请求。
+// 本文件读取当前品牌图片，处理不存在的版本及 HTTP 缓存。
 package brandinghttp
 
 import (
 	"strings"
 
+	upstream "github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/valyala/fasthttp"
 )
 
@@ -12,13 +13,25 @@ func (h *BrandingHandler) asset(ctx *fasthttp.RequestCtx) {
 	ctx.Response.Header.Set("Cache-Control", "no-store")
 	slot, _ := ctx.UserValue("slot").(string)
 	hash, _ := ctx.UserValue("hash").(string)
-	asset, err := h.service.Asset(ctx, slot, hash)
+	if (slot != "logo" && slot != "icon") || len(hash) != 64 {
+		upstream.SendError(ctx, fasthttp.StatusNotFound, "branding asset not found")
+		return
+	}
+	settings, err := h.store.Read(ctx)
 	if err != nil {
 		brandingError(ctx, err)
 		return
 	}
+	data, mime, currentHash := settings.Logo, settings.LogoMIME, settings.LogoHash
+	if slot == "icon" {
+		data, mime, currentHash = settings.Icon, settings.IconMIME, settings.IconHash
+	}
+	if len(data) == 0 || currentHash != hash {
+		upstream.SendError(ctx, fasthttp.StatusNotFound, "branding asset not found")
+		return
+	}
 	etag := `"` + hash + `"`
-	ctx.Response.Header.SetContentType(asset.MIME())
+	ctx.Response.Header.SetContentType(mime)
 	ctx.Response.Header.Set("X-Content-Type-Options", "nosniff")
 	ctx.Response.Header.Set("Cache-Control", "public, max-age=0, must-revalidate")
 	ctx.Response.Header.Set("ETag", etag)
@@ -29,5 +42,5 @@ func (h *BrandingHandler) asset(ctx *fasthttp.RequestCtx) {
 			return
 		}
 	}
-	ctx.SetBody(asset.Data())
+	ctx.SetBody(data)
 }

@@ -1,18 +1,12 @@
-# 品牌业务
+# 品牌设置
 
-本模块负责部署级 Logo 与小图标的业务规则，按 [EE 后端架构](../../../product/架构/EE后端架构.md) 组织。
+本模块负责部署级 Logo 和小图标。保存流程是：HTTP 解析请求 → 校验两张图片 → Store 原子保存；不设中转 Service 或 Repository。
 
-`http/` 解析字段并调用业务包；`Service` 通过 `Repository` 操作存储；`persistence/` 实现该接口。具体依赖由 [app](../app/README.md) 注入，业务根包只使用标准库。
-
-| 文件 | 职责 |
+| 文件或目录 | 职责 |
 |---|---|
-| [settings.go](settings.go) | Settings 与局部修改 Patch |
-| [asset.go](asset.go) | 图片值对象、Base64/data URI 解码、格式/MIME/容量/尺寸校验 |
-| [errors.go](errors.go) | 校验错误与图片不存在错误 |
-| [repository.go](repository.go) | 读取与原子局部更新的窄接口 |
-| [service.go](service.go) | 设置读取、空操作检查、重置与当前版本图片选择 |
-| [service_test.go](service_test.go) | 验证有效图片不可变、空操作、原子重置、故障与资源版本边界 |
+| [image.go](image.go) | 普通图片结构、解码、格式/大小/尺寸校验及校验错误 |
+| [image_test.go](image_test.go) | 图片解码、空串清除及损坏输入拒绝 |
+| [http/](http/README.md) | 设置接口和图片响应 |
+| [persistence/](persistence/README.md) | 品牌表、事务读写及迁移 |
 
-Patch 中 nil 表示保持，零值 Asset 表示清除；非空图片由 DecodeAsset 校验后构造，Data 返回副本。HTTP 按 Logo、Icon 顺序构造两张图片，全部通过后才保存，保留原有错误优先级与两图原子性。
-
-[HTTP 接口](http/README.md) · [存储与迁移](persistence/README.md)
+HTTP 先完整校验 Logo，再校验 Icon，两图都通过才写入。存储参数中 nil 保持原图，空图片清除；图片字节是普通数据，不提供不可变对象包装。app 注入具体 Store，业务校验不依赖 HTTP 或数据库类型。

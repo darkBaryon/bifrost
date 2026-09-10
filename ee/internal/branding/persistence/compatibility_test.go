@@ -21,7 +21,7 @@ func TestLegacyDatabaseCompatibility(t *testing.T) {
 	if err := db.Exec(string(fixture)).Error; err != nil {
 		t.Fatal(err)
 	}
-	var before, after brandingRow
+	var before, after Settings
 	if err := db.First(&before, 1).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -38,8 +38,8 @@ func TestLegacyDatabaseCompatibility(t *testing.T) {
 		t.Fatal("migration changed old schema, image bytes, hashes or timestamp")
 	}
 	settings, err := NewBrandingStore(db).Read(context.Background())
-	if err != nil || !reflect.DeepEqual(settings, before.settings()) {
-		t.Fatal("row-to-domain conversion changed old settings")
+	if err != nil || !reflect.DeepEqual(settings, before) {
+		t.Fatal("store read changed old settings")
 	}
 	var versions []string
 	if err := db.Table("migrations").Pluck("id", &versions).Error; err != nil || len(versions) != 1 || versions[0] != "ee_branding_v1" {

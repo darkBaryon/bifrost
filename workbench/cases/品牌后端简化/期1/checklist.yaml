@@ -1,0 +1,17 @@
+必过命令:
+  - { name: ee-tests, run: "cd ee && GOWORK=off go test ./..." }
+  - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: ee-build, run: "cd ee && mkdir -p tmp && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http" }
+  - { name: smoke, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: docs, run: "python3 workbench/tools/build_views.py --check" }
+  - { name: diff, run: "git diff --check" }
+必存产物:
+  - ee/internal/branding/image.go
+  - ee/internal/branding/http/handler.go
+  - ee/internal/branding/http/assets.go
+  - ee/internal/branding/persistence/store.go
+  - ee/internal/branding/persistence/migration.go
+禁留标记:
+  - { grep: "NewService", in: "ee/internal" }
+  - { grep: "branding.Repository", in: "ee/internal" }
+  - { grep: "brandingRow", in: "ee/internal/branding" }

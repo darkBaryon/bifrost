@@ -61,9 +61,9 @@ SQLite/二进制验证与 PostgreSQL 迁移验证必须分别记录；浏览器�
 
 ## 代码位置
 
-- `ee/internal/branding/`：`asset.go` 校验图片，`service.go` 负责品牌操作与当前资源选择，`repository.go` 声明存储接口。
-- `ee/internal/branding/http/`：`handler.go` 注册路由，`settings.go` 处理设置读写与响应，`validation.go` 解析字段并调用业务图片校验，`asset.go` 投递图片。
-- `ee/internal/branding/persistence/`：`store.go` 处理持久化，`migration.go` 处理版本化迁移，`table.go` 定义 `ee_branding` 表。
+- `ee/internal/branding/image.go`：普通图片结构与校验函数。
+- `ee/internal/branding/http/`：`handler.go` 集中路由、设置读写与字段解析；`assets.go` 读取当前图片并处理缓存。
+- `ee/internal/branding/persistence/`：`store.go` 集中表、参数和事务读写；`migration.go` 处理版本化迁移。
 - `ee/ui/app/enterprise/components/branding/`：页面、上传控件和预览各自一份文件；`useBrandingForm.ts` 管理草稿与操作，`image.ts` 读取和校验图片。
 - `ee/ui/app/enterprise/lib/schemas/branding.ts`：保留企业 schema 位置，集中定义上传和表单规则。
 

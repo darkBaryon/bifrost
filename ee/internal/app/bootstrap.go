@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/darkBaryon/bifrost/ee/internal/branding"
 	brandinghandler "github.com/darkBaryon/bifrost/ee/internal/branding/http"
 	eeconfig "github.com/darkBaryon/bifrost/ee/internal/branding/persistence"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
@@ -40,7 +39,7 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer) error {
 	}
 
 	// 品牌读取供登录页使用，写入路由使用上游管理员认证。
-	if err := brandinghandler.NewBrandingHandler(branding.NewService(eeconfig.NewBrandingStore(db))).RegisterRoutes(s.Router, s.AuthMiddleware.APIMiddleware()); err != nil {
+	if err := brandinghandler.NewBrandingHandler(eeconfig.NewBrandingStore(db)).RegisterRoutes(s.Router, s.AuthMiddleware.APIMiddleware()); err != nil {
 		return fmt.Errorf("ee: register branding routes: %w", err)
 	}
 
