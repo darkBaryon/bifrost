@@ -37,6 +37,13 @@ func SafeError(err error) error {
 // WSTicketTTL 是签发和HTTP响应共用的票据有效期。
 const WSTicketTTL = 30 * time.Second
 
+// 登录限流的窗口与阈值由存储执行，HTTP据同一窗口生成Retry-After。
+const (
+	LoginRateWindow          = time.Minute
+	LoginAttemptsPerIP       = 30
+	LoginAttemptsPerUsername = 5
+)
+
 type diagnosticOperationKey struct{}
 type diagnosticOperation struct{ Name, ID string }
 

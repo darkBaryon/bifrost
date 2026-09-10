@@ -10,7 +10,7 @@ import (
 	"mime"
 	"net"
 	"net/url"
-	"strings"
+	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -23,6 +23,53 @@ import (
 
 const CookieName = "ee_session"
 
+const (
+	legacyCookieName        = "token"
+	deleteCookieMaxAge      = -1       // fasthttp用负数表示立即删除Cookie。
+	maxIdentityBodyBytes    = 16 << 10 // 身份请求的字节上限，配置接口另用宿主限制。
+	maxJSONDepth            = 64       // 包含对象和数组的递归深度上限。
+	passwordAuthType        = "password"
+	messageLoginSuccessful  = "Login successful"
+	messageLogoutSuccessful = "Logout successful"
+	messagePasswordChanged  = "Password changed; log in again"
+)
+
+type errorDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message,omitempty"`
+}
+type errorResponse struct {
+	Error errorDetail `json:"error"`
+}
+type messageResponse struct {
+	Message string `json:"message"`
+}
+type accountResponse struct {
+	Account identity.Account `json:"account"`
+}
+type statusResponse struct {
+	Initialized        bool   `json:"initialized"`
+	AuthType           string `json:"auth_type"`
+	IsAuthEnabled      bool   `json:"is_auth_enabled"`
+	HasValidToken      bool   `json:"has_valid_token"`
+	HasValidSession    bool   `json:"has_valid_session"`
+	MustChangePassword bool   `json:"must_change_password"`
+}
+type loginResponse struct {
+	Message            string           `json:"message"`
+	Account            identity.Account `json:"account"`
+	MustChangePassword bool             `json:"must_change_password"`
+	ExpiresAt          time.Time        `json:"expires_at"`
+}
+type resetPasswordResponse struct {
+	EventID string `json:"event_id"`
+	Result  string `json:"result"`
+}
+type ticketResponse struct {
+	Ticket    string `json:"ticket"`
+	ExpiresIn int    `json:"expires_in"`
+}
+
 // Handler 保存已验证的外部origin，拒绝信任请求中的代理头。
 type Handler struct {
 	Service *identity.Service
@@ -30,7 +77,7 @@ type Handler struct {
 	secure  bool
 }
 
-// OperationContext correlates safe database diagnostics with the existing access log request_id.
+// OperationContext 将安全数据库诊断与现有访问日志的request_id关联。
 func OperationContext(c *fasthttp.RequestCtx, operation string) context.Context {
 	ctx := identity.WithDiagnosticOperation(c, operation)
 	_, id := identity.DiagnosticOperation(ctx)
@@ -65,6 +112,7 @@ func (h *Handler) SameOrigin(c *fasthttp.RequestCtx) bool {
 	}
 	return len(c.Request.Header.Peek("Referer")) != 0
 }
+// SetCookie 写入本次会话Cookie，并删除旧共享管理员Cookie；空token表示退出登录。
 func (h *Handler) SetCookie(c *fasthttp.RequestCtx, token string, expires time.Time) {
 	cookie := fasthttp.AcquireCookie()
 	defer fasthttp.ReleaseCookie(cookie)
@@ -76,47 +124,50 @@ func (h *Handler) SetCookie(c *fasthttp.RequestCtx, token string, expires time.T
 	cookie.SetSameSite(fasthttp.CookieSameSiteLaxMode)
 	cookie.SetExpire(expires)
 	if token == "" {
-		cookie.SetMaxAge(-1)
+		cookie.SetMaxAge(deleteCookieMaxAge)
 	}
 	c.Response.Header.SetCookie(cookie)
 	// 清理旧共享管理员Cookie，绝不读取它作为EE凭据。
-	cookie.SetKey("token")
+	cookie.SetKey(legacyCookieName)
 	cookie.SetValue("")
-	cookie.SetMaxAge(-1)
-	cookie.SetExpire(time.Unix(1, 0))
+	cookie.SetMaxAge(deleteCookieMaxAge)
+	cookie.SetExpire(fasthttp.CookieExpireDelete)
 	c.Response.Header.SetCookie(cookie)
 }
+// JSON 输出JSON响应，序列化失败时返回不含内部细节的固定503。
 func JSON(c *fasthttp.RequestCtx, code int, value any) {
 	b, e := json.Marshal(value)
 	if e != nil {
-		code = 503
-		b = []byte(`{"error":{"code":"unavailable"}}`)
+		code = fasthttp.StatusServiceUnavailable
+		// 固定字符串结构不会序列化失败，复用业务错误码，保留原降级响应形状。
+		b, _ = json.Marshal(errorResponse{Error: errorDetail{Code: identity.ErrUnavailable.Error()}})
 	}
 	c.SetStatusCode(code)
 	c.SetContentType("application/json")
 	c.Response.SetBody(b)
 }
+// Error 将业务错误映射为HTTP状态，未知故障使用固定错误码。
 func Error(c *fasthttp.RequestCtx, e error) {
 	e = identity.SafeError(e)
-	code := 503
+	code := fasthttp.StatusServiceUnavailable
 	switch e {
 	case identity.ErrUnauthorized:
-		code = 401
+		code = fasthttp.StatusUnauthorized
 	case identity.ErrForbidden:
-		code = 403
+		code = fasthttp.StatusForbidden
 	case identity.ErrInvalid:
-		code = 400
+		code = fasthttp.StatusBadRequest
 	case identity.ErrConflict:
-		code = 409
+		code = fasthttp.StatusConflict
 	case identity.ErrNotFound:
-		code = 404
+		code = fasthttp.StatusNotFound
 	case identity.ErrLimited:
-		code = 429
+		code = fasthttp.StatusTooManyRequests
 	}
-	if code == 429 {
-		c.Response.Header.Set("Retry-After", "60")
+	if code == fasthttp.StatusTooManyRequests {
+		c.Response.Header.Set("Retry-After", strconv.Itoa(int(identity.LoginRateWindow/time.Second)))
 	}
-	JSON(c, code, map[string]any{"error": map[string]string{"code": e.Error(), "message": e.Error()}})
+	JSON(c, code, errorResponse{Error: errorDetail{Code: e.Error(), Message: e.Error()}})
 }
 
 // ValidateJSONObject 拒绝重复键和多个JSON值，避免预检与宿主解析器歧义。
@@ -125,7 +176,7 @@ func ValidateJSONObject(body []byte) error {
 	d.UseNumber()
 	var walk func(int) error
 	walk = func(depth int) error {
-		if depth > 64 {
+		if depth > maxJSONDepth {
 			return identity.ErrInvalid
 		}
 		token, e := d.Token()
@@ -183,8 +234,9 @@ func ValidateJSONObject(body []byte) error {
 	}
 	return nil
 }
+// Decode 限制JSON大小、深度及字段；allowEmpty仅供已声明的旧会话接口兼容。
 func Decode(c *fasthttp.RequestCtx, v any, allowEmpty bool) error {
-	if len(c.PostBody()) > 16<<10 || !utf8.Valid(c.PostBody()) {
+	if len(c.PostBody()) > maxIdentityBodyBytes || !utf8.Valid(c.PostBody()) {
 		return identity.ErrInvalid
 	}
 	media, _, e := mime.ParseMediaType(string(c.Request.Header.ContentType()))
@@ -208,27 +260,66 @@ func Decode(c *fasthttp.RequestCtx, v any, allowEmpty bool) error {
 	return nil
 }
 
-var actions = map[string]string{
-	"/api/identity/status": "status", "/api/identity/initialize": "initialize", "/api/identity/login": "login", "/api/identity/logout": "logout", "/api/identity/me": "me", "/api/identity/change-password": "change-password", "/api/accounts/create": "create", "/api/accounts/list": "list", "/api/accounts/set-status": "set-status", "/api/accounts/reset-password": "reset-password", "/api/identity/password-events": "password-events", "/api/identity/ws-ticket": "ws-ticket",
-	"/api/session/login": "login", "/api/session/logout": "logout", "/api/session/ws-ticket": "ws-ticket",
+// operation 只标识本包端点；路径、兼容空体和匿名访问规则在同一张路由表中声明。
+type operation string
+
+const (
+	operationStatus         operation = "status"
+	operationInitialize     operation = "initialize"
+	operationLogin          operation = "login"
+	operationLogout         operation = "logout"
+	operationMe             operation = "me"
+	operationChangePassword operation = "change-password"
+	operationCreate         operation = "create"
+	operationList           operation = "list"
+	operationSetStatus      operation = "set-status"
+	operationResetPassword  operation = "reset-password"
+	operationPasswordEvents operation = "password-events"
+	operationWSTicket       operation = "ws-ticket"
+)
+
+type routeDefinition struct {
+	method, path   string
+	operation      operation
+	allowAnonymous bool // 默认要求登录；新增路由须显式声明匿名能力。
+	allowEmptyBody bool // 仅旧会话兼容接口允许没有请求体。
 }
 
+var routes = [...]routeDefinition{
+	{method: fasthttp.MethodPost, path: "/api/identity/status", operation: operationStatus, allowAnonymous: true},
+	{method: fasthttp.MethodPost, path: "/api/identity/initialize", operation: operationInitialize, allowAnonymous: true},
+	{method: fasthttp.MethodPost, path: "/api/identity/login", operation: operationLogin, allowAnonymous: true},
+	{method: fasthttp.MethodPost, path: "/api/identity/logout", operation: operationLogout, allowAnonymous: true},
+	{method: fasthttp.MethodPost, path: "/api/identity/me", operation: operationMe},
+	{method: fasthttp.MethodPost, path: "/api/identity/change-password", operation: operationChangePassword},
+	{method: fasthttp.MethodPost, path: "/api/accounts/create", operation: operationCreate},
+	{method: fasthttp.MethodPost, path: "/api/accounts/list", operation: operationList},
+	{method: fasthttp.MethodPost, path: "/api/accounts/set-status", operation: operationSetStatus},
+	{method: fasthttp.MethodPost, path: "/api/accounts/reset-password", operation: operationResetPassword},
+	{method: fasthttp.MethodPost, path: "/api/identity/password-events", operation: operationPasswordEvents},
+	{method: fasthttp.MethodPost, path: "/api/identity/ws-ticket", operation: operationWSTicket},
+	{method: fasthttp.MethodPost, path: "/api/session/login", operation: operationLogin, allowAnonymous: true},
+	{method: fasthttp.MethodPost, path: "/api/session/logout", operation: operationLogout, allowAnonymous: true, allowEmptyBody: true},
+	{method: fasthttp.MethodPost, path: "/api/session/ws-ticket", operation: operationWSTicket, allowEmptyBody: true},
+	{method: fasthttp.MethodGet, path: "/api/session/is-auth-enabled", operation: operationStatus, allowAnonymous: true},
+}
+
+// OwnsRoute 精确判断方法与路径，供宿主将请求交给本包端点自行认证。
 func OwnsRoute(method, path string) bool {
-	if method == "GET" && path == "/api/session/is-auth-enabled" {
-		return true
+	for _, route := range routes {
+		if route.method == method && route.path == path {
+			return true
+		}
 	}
-	_, ok := actions[path]
-	return method == "POST" && ok
+	return false
 }
+// RegisterRoutes 从同一路由表注册端点及宿主中间件。
 func (h *Handler) RegisterRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
-	for path, action := range actions {
-		r.POST(path, lib.ChainMiddlewares(h.endpoint(action, strings.HasPrefix(path, "/api/session/")), m...))
+	for _, route := range routes {
+		r.Handle(route.method, route.path, lib.ChainMiddlewares(h.endpoint(route), m...))
 	}
-	r.GET("/api/session/is-auth-enabled", lib.ChainMiddlewares(h.status, m...))
 }
-func (h *Handler) status(c *fasthttp.RequestCtx) {
-	ctx := OperationContext(c, "identity.status")
-	c.Response.Header.Set("Cache-Control", "no-store")
+func (h *Handler) status(ctx context.Context, c *fasthttp.RequestCtx) {
 	state, e := h.Service.State(ctx)
 	if e != nil {
 		Error(c, e)
@@ -239,19 +330,19 @@ func (h *Handler) status(c *fasthttp.RequestCtx) {
 		Error(c, e)
 		return
 	}
-	JSON(c, 200, map[string]any{"initialized": state.Initialized, "auth_type": "password", "is_auth_enabled": true, "has_valid_token": e == nil, "has_valid_session": e == nil, "must_change_password": e == nil && p.MustChangePassword})
+	JSON(c, fasthttp.StatusOK, statusResponse{Initialized: state.Initialized, AuthType: passwordAuthType, IsAuthEnabled: true, HasValidToken: e == nil, HasValidSession: e == nil, MustChangePassword: e == nil && p.MustChangePassword})
 }
-func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
+func (h *Handler) endpoint(route routeDefinition) fasthttp.RequestHandler {
 	return func(c *fasthttp.RequestCtx) {
-		ctx := OperationContext(c, "identity."+action)
+		ctx := OperationContext(c, "identity."+string(route.operation))
 		c.Response.Header.Set("Cache-Control", "no-store")
-		if !h.SameOrigin(c) {
+		if route.method != fasthttp.MethodGet && !h.SameOrigin(c) {
 			Error(c, identity.ErrForbidden)
 			return
 		}
 		var p identity.Principal
 		var e error
-		if action != "status" && action != "login" && action != "initialize" && action != "logout" {
+		if !route.allowAnonymous {
 			if len(c.Request.Header.Peek("Authorization")) != 0 {
 				Error(c, identity.ErrUnauthorized)
 				return
@@ -263,15 +354,19 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			}
 		}
 		var result any
-		code := 200
-		switch action {
-		case "status":
-			var q struct{}
-			if e = Decode(c, &q, false); e == nil {
-				h.status(c)
+		code := fasthttp.StatusOK
+		switch route.operation {
+		case operationStatus:
+			if route.method == fasthttp.MethodGet {
+				h.status(ctx, c)
 				return
 			}
-		case "initialize":
+			var q struct{}
+			if e = Decode(c, &q, false); e == nil {
+				h.status(ctx, c)
+				return
+			}
+		case operationInitialize:
 			var q struct {
 				SetupToken string `json:"setup_token"`
 				Username   string `json:"username"`
@@ -280,10 +375,10 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			if e = Decode(c, &q, false); e == nil {
 				var a identity.Account
 				a, e = h.Service.Initialize(ctx, q.SetupToken, q.Username, q.Password)
-				result = map[string]any{"account": a}
-				code = 201
+				result = accountResponse{Account: a}
+				code = fasthttp.StatusCreated
 			}
-		case "login":
+		case operationLogin:
 			var q struct {
 				Username string `json:"username"`
 				Password string `json:"password"`
@@ -296,27 +391,27 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 					a, e = h.Service.Me(ctx, v.Principal)
 					if e == nil {
 						h.SetCookie(c, v.Token, v.ExpiresAt)
-						result = map[string]any{"message": "Login successful", "account": a, "must_change_password": v.Principal.MustChangePassword, "expires_at": v.ExpiresAt}
+						result = loginResponse{Message: messageLoginSuccessful, Account: a, MustChangePassword: v.Principal.MustChangePassword, ExpiresAt: v.ExpiresAt}
 					}
 				}
 			}
-		case "logout":
+		case operationLogout:
 			var q struct{}
-			if e = Decode(c, &q, legacy); e == nil {
+			if e = Decode(c, &q, route.allowEmptyBody); e == nil {
 				e = h.Service.Logout(ctx, string(c.Request.Header.Cookie(CookieName)))
 				if e == nil {
-					h.SetCookie(c, "", time.Unix(1, 0))
-					result = map[string]string{"message": "Logout successful"}
+					h.SetCookie(c, "", fasthttp.CookieExpireDelete)
+					result = messageResponse{Message: messageLogoutSuccessful}
 				}
 			}
-		case "me":
+		case operationMe:
 			var q struct{}
 			if e = Decode(c, &q, false); e == nil {
 				var a identity.Account
 				a, e = h.Service.Me(ctx, p)
-				result = map[string]any{"account": a}
+				result = accountResponse{Account: a}
 			}
-		case "change-password":
+		case operationChangePassword:
 			var q struct {
 				Old string `json:"old_password"`
 				New string `json:"new_password"`
@@ -324,11 +419,11 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			if e = Decode(c, &q, false); e == nil {
 				e = h.Service.ChangePassword(ctx, p, q.Old, q.New)
 				if e == nil {
-					h.SetCookie(c, "", time.Unix(1, 0))
-					result = map[string]string{"message": "Password changed; log in again"}
+					h.SetCookie(c, "", fasthttp.CookieExpireDelete)
+					result = messageResponse{Message: messagePasswordChanged}
 				}
 			}
-		case "create":
+		case operationCreate:
 			var q struct {
 				Username    string `json:"username"`
 				DisplayName string `json:"display_name"`
@@ -336,10 +431,10 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			if e = Decode(c, &q, false); e == nil {
 				var a identity.Account
 				a, e = h.Service.CreateAccount(ctx, p, q.Username, q.DisplayName)
-				result = map[string]any{"account": a}
-				code = 201
+				result = accountResponse{Account: a}
+				code = fasthttp.StatusCreated
 			}
-		case "list":
+		case operationList:
 			var q struct {
 				Cursor string `json:"cursor"`
 				Limit  int    `json:"limit"`
@@ -347,7 +442,7 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			if e = Decode(c, &q, false); e == nil {
 				result, e = h.Service.ListAccounts(ctx, p, q.Cursor, q.Limit)
 			}
-		case "set-status":
+		case operationSetStatus:
 			var q struct {
 				ID     string `json:"account_id"`
 				Status string `json:"status"`
@@ -357,10 +452,10 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 				if e == nil {
 					var a identity.Account
 					a, e = h.Service.Account(ctx, p, q.ID)
-					result = map[string]any{"account": a}
+					result = accountResponse{Account: a}
 				}
 			}
-		case "reset-password":
+		case operationResetPassword:
 			var q struct {
 				ID          string `json:"account_id"`
 				OperationID string `json:"operation_id"`
@@ -368,9 +463,9 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			if e = Decode(c, &q, false); e == nil {
 				var v identity.PasswordEvent
 				v, e = h.Service.ResetPassword(ctx, p, q.ID, q.OperationID)
-				result = map[string]string{"event_id": v.ID, "result": v.Result}
+				result = resetPasswordResponse{EventID: v.ID, Result: v.Result}
 			}
-		case "password-events":
+		case operationPasswordEvents:
 			var q struct {
 				Target string `json:"target_id"`
 				Cursor string `json:"cursor"`
@@ -379,13 +474,15 @@ func (h *Handler) endpoint(action string, legacy bool) fasthttp.RequestHandler {
 			if e = Decode(c, &q, false); e == nil {
 				result, e = h.Service.ListPasswordEvents(ctx, p, q.Target, q.Cursor, q.Limit)
 			}
-		case "ws-ticket":
+		case operationWSTicket:
 			var q struct{}
-			if e = Decode(c, &q, legacy); e == nil {
+			if e = Decode(c, &q, route.allowEmptyBody); e == nil {
 				var token string
 				token, e = h.Service.IssueTicket(ctx, p)
-				result = map[string]any{"ticket": token, "expires_in": int(identity.WSTicketTTL / time.Second)}
+				result = ticketResponse{Ticket: token, ExpiresIn: int(identity.WSTicketTTL / time.Second)}
 			}
+		default:
+			e = identity.ErrInvalid
 		}
 		if e != nil {
 			Error(c, e)

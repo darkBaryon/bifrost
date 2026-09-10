@@ -152,7 +152,7 @@ func (a *AuthAdapter) RegisterSessionRoutes(r *router.Router, m ...schemas.Bifro
 	a.HTTP.RegisterRoutes(r, m...)
 }
 func public(method, path string) bool {
-	if method != "GET" {
+	if method != fasthttp.MethodGet {
 		return false
 	}
 	switch path {
@@ -170,9 +170,9 @@ func temporaryRoute(method, path string) bool {
 		return false
 	}
 	if parts[1] == "oauth" && parts[2] == "per-user" && parts[3] == "flows" && parts[4] != "" {
-		return method == "GET" && (len(parts) == 5 || (len(parts) == 6 && parts[5] == "start"))
+		return method == fasthttp.MethodGet && (len(parts) == 5 || (len(parts) == 6 && parts[5] == "start"))
 	}
-	return len(parts) == 5 && parts[4] != "" && (method == "GET" || method == "PUT") && ((parts[1] == "mcp" && parts[2] == "per-user-headers" && parts[3] == "flows") || (parts[1] == "oauth2" && parts[2] == "consent" && parts[3] == "flows"))
+	return len(parts) == 5 && parts[4] != "" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) && ((parts[1] == "mcp" && parts[2] == "per-user-headers" && parts[3] == "flows") || (parts[1] == "oauth2" && parts[2] == "consent" && parts[3] == "flows"))
 }
 func (a *AuthAdapter) authorizeTemporary(c *fasthttp.RequestCtx) error {
 	if a.host == nil || a.host.TempTokens == nil {
@@ -257,7 +257,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				identityhttp.Error(c, e)
 				return
 			}
-			if method != "GET" && method != "HEAD" && method != "OPTIONS" && !a.HTTP.SameOrigin(c) {
+			if method != fasthttp.MethodGet && method != fasthttp.MethodHead && method != fasthttp.MethodOptions && !a.HTTP.SameOrigin(c) {
 				identityhttp.Error(c, identity.ErrForbidden)
 				return
 			}
@@ -274,20 +274,20 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 					return a.HTTP.Service.RequireAccountManager(ctx, p)
 				})
 			}
-			if path == "/api/config" && (method == "GET" || method == "PUT") {
+			if path == "/api/config" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) {
 				projection, e := a.projection(ctx, p)
 				if e != nil {
 					identityhttp.Error(c, e)
 					return
 				}
-				if method == "PUT" {
+				if method == fasthttp.MethodPut {
 					if e = a.checkConfig(c, projection); e != nil {
 						identityhttp.Error(c, e)
 						return
 					}
 				}
 				next(c)
-				if method == "GET" && c.Response.StatusCode() == 200 {
+				if method == fasthttp.MethodGet && c.Response.StatusCode() == fasthttp.StatusOK {
 					body, e := sjson.SetBytes(c.Response.Body(), "auth_config", projection)
 					if e == nil {
 						body, e = sjson.SetBytes(body, "client_config.whitelisted_routes", []string{})

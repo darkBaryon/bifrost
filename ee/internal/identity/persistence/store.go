@@ -261,7 +261,7 @@ func (s *Store) ReserveLogin(ctx context.Context, nameHash, ipHash string, at ti
 		for _, v := range []struct {
 			key string
 			max int
-		}{{"ip:" + ipHash, 30}, {"name:" + nameHash, 5}} {
+		}{{"ip:" + ipHash, identity.LoginAttemptsPerIP}, {"name:" + nameHash, identity.LoginAttemptsPerUsername}} {
 			r := limitRow{Key: v.key, WindowStart: at}
 			if e := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&r).Error; e != nil {
 				return e
@@ -269,7 +269,7 @@ func (s *Store) ReserveLogin(ctx context.Context, nameHash, ipHash string, at ti
 			if e := db.Where("key = ?", v.key).First(&r).Error; e != nil {
 				return e
 			}
-			if !r.WindowStart.Add(time.Minute).After(at) {
+			if !r.WindowStart.Add(identity.LoginRateWindow).After(at) {
 				r.WindowStart = at
 				r.Count = 0
 			}

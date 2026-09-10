@@ -319,3 +319,57 @@ func TestDefaultDirectoryLegacyValidation(t *testing.T) {
 		t.Fatal("incomplete default-directory credentials accepted")
 	}
 }
+
+// 路径/匿名状态取自批准的HTTP契约，不依赖生产路由表构造预期。
+func TestIdentityRouteContract(t *testing.T) {
+	a, _ := testAdapter(t)
+	r := router.New()
+	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	for _, tt := range []struct {
+		path, body string
+		status     int
+	}{
+		{"/api/identity/status", "{}", 200},
+		{"/api/identity/initialize", `{"setup_token":"setup","username":"another","password":"Another-password-1"}`, 409},
+		{"/api/identity/login", `{"username":"admin","password":"Admin-password-1"}`, 200},
+		{"/api/identity/logout", "{}", 200},
+		{"/api/identity/me", "{}", 401},
+		{"/api/identity/change-password", "{}", 401},
+		{"/api/accounts/create", "{}", 401},
+		{"/api/accounts/list", "{}", 401},
+		{"/api/accounts/set-status", "{}", 401},
+		{"/api/accounts/reset-password", "{}", 401},
+		{"/api/identity/password-events", "{}", 401},
+		{"/api/identity/ws-ticket", "{}", 401},
+		{"/api/session/login", `{"username":"admin","password":"Admin-password-1"}`, 200},
+		{"/api/session/logout", "", 200},
+		{"/api/session/ws-ticket", "", 401},
+	} {
+		t.Run(tt.path, func(t *testing.T) {
+			if !identityhttp.OwnsRoute(fasthttp.MethodPost, tt.path) || identityhttp.OwnsRoute(fasthttp.MethodGet, tt.path) {
+				t.Fatal("method ownership changed")
+			}
+			c := request(r, fasthttp.MethodPost, tt.path, tt.body, "", "https://evil.invalid", "")
+			if c.Response.StatusCode() != 403 {
+				t.Fatal("POST bypassed source check", c.Response.StatusCode())
+			}
+			c = request(r, fasthttp.MethodPost, tt.path, tt.body, "", a.HTTP.Origin, "")
+			if c.Response.StatusCode() != tt.status {
+				t.Fatal("anonymous contract changed", c.Response.StatusCode())
+			}
+		})
+	}
+	for _, path := range []string{"/api/identity/status/", "/api/identity/unknown", "/api/session/is-auth-enabled"} {
+		if identityhttp.OwnsRoute(fasthttp.MethodPost, path) {
+			t.Fatal("unknown POST claimed", path)
+		}
+	}
+	c := request(r, fasthttp.MethodGet, "/api/session/is-auth-enabled", "", "", "", "")
+	if c.Response.StatusCode() != 200 || !identityhttp.OwnsRoute(fasthttp.MethodGet, "/api/session/is-auth-enabled") {
+		t.Fatal("legacy public status changed")
+	}
+	c = request(r, fasthttp.MethodPost, "/api/identity/logout", "", "", a.HTTP.Origin, "")
+	if c.Response.StatusCode() != 400 {
+		t.Fatal("new logout accidentally accepts legacy empty body")
+	}
+}
