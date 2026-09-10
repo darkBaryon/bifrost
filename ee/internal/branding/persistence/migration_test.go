@@ -4,6 +4,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,13 +18,18 @@ func TestBrandingMigrationAtomicFailure(t *testing.T) {
 	for _, stage := range []string{"ee_branding", "migrations"} {
 		t.Run(stage, func(t *testing.T) {
 			db := testDB(t, filepath.Join(t.TempDir(), "config.db"))
+			failures := 0
 			db.Callback().Create().Before("gorm:create").Register("test:migration-failure", func(tx *gorm.DB) {
 				if tx.Statement.Table == stage {
+					failures++
 					tx.AddError(errors.New("injected migration failure"))
 				}
 			})
 			if err := MigrateBranding(context.Background(), db); err == nil {
 				t.Fatal("expected migration failure")
+			}
+			if failures != 1 {
+				t.Fatal("non-busy failure was retried", failures)
 			}
 			if db.Migrator().HasTable(&brandingRow{}) {
 				t.Fatal("DDL survived failed transaction")
@@ -99,6 +105,66 @@ func TestBrandingCanceledMigration(t *testing.T) {
 	}
 	if err := MigrateBranding(context.Background(), db); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestBrandingMigrationInternalRetry(t *testing.T) {
+	if os.Getenv("BRANDING_TEST_POSTGRES_DSN") != "" {
+		t.Skip("SQLite 专用重试测试")
+	}
+	for _, failures := range []int{1, 3} {
+		t.Run(fmt.Sprintf("busy-%d", failures), func(t *testing.T) {
+			db := testDB(t, filepath.Join(t.TempDir(), "config.db"))
+			attempts := 0
+			db.Callback().Create().Before("gorm:create").Register("test:transient-busy", func(tx *gorm.DB) {
+				if tx.Statement.Table == "ee_branding" {
+					attempts++
+					if attempts <= failures {
+						tx.AddError(sqlite3.Error{Code: sqlite3.ErrBusy, ExtendedCode: sqlite3.ErrBusySnapshot})
+					}
+				}
+			})
+			err := MigrateBranding(context.Background(), db)
+			if failures == 3 {
+				var busy sqlite3.Error
+				if attempts != 3 || !errors.As(err, &busy) || db.Migrator().HasTable(&brandingRow{}) {
+					t.Fatal("exhausted retry lost failure or left partial migration", attempts, err)
+				}
+				return
+			}
+			if err != nil || attempts != 2 {
+				t.Fatal("transient lock did not retry the whole transaction", attempts, err)
+			}
+			if err = MigrateBranding(context.Background(), db); err != nil {
+				t.Fatal(err)
+			}
+			for _, table := range []string{"ee_branding", "migrations"} {
+				var count int64
+				if err = db.Table(table).Count(&count).Error; err != nil || count != 1 {
+					t.Fatal("retry duplicated singleton or migration version", table, count, err)
+				}
+			}
+		})
+	}
+}
+
+func TestBrandingMigrationCancelRetry(t *testing.T) {
+	db := testDB(t, filepath.Join(t.TempDir(), "config.db"))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	attempts := 0
+	db.Callback().Create().Before("gorm:create").Register("test:cancel-retry", func(tx *gorm.DB) {
+		if tx.Statement.Table == "ee_branding" {
+			attempts++
+			cancel()
+			tx.AddError(sqlite3.Error{Code: sqlite3.ErrBusy, ExtendedCode: sqlite3.ErrBusySnapshot})
+		}
+	})
+	if err := MigrateBranding(ctx, db); !errors.Is(err, context.Canceled) || attempts != 1 {
+		t.Fatal("cancel did not stop migration retry", attempts, err)
+	}
+	if db.Migrator().HasTable(&brandingRow{}) {
+		t.Fatal("cancelled retry left partial migration")
 	}
 }
 

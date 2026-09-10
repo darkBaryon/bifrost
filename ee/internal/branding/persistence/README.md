@@ -2,7 +2,7 @@
 
 本包实现 [品牌 Repository](../repository.go)，由 [app](../../app/README.md) 注入已有数据库连接。业务服务决定操作范围，本包用同一事务更新指定图片并回读结果。
 
-数据库仍为 `ee_branding` 单例表，ID=1；迁移 ID 为 `ee_branding_v1`。表、初始记录和版本共同提交或回滚，PostgreSQL 使用既有事务锁协调多节点迁移。连接由上游管理，本包不关闭。
+数据库仍为 `ee_branding` 单例表，ID=1；迁移 ID 为 `ee_branding_v1`。表、初始记录和版本共同提交或回滚，PostgreSQL 使用既有事务锁协调多节点迁移。SQLite仅对busy/locked回滚整笔后有限重试（最多3次），非锁错误不重试；取消或耗尽仍明确失败。连接由上游管理，本包不关闭。
 
 | 文件 | 职责 |
 |---|---|

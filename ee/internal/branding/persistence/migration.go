@@ -3,7 +3,10 @@ package persistence
 
 import (
 	"context"
+	"errors"
+	"time"
 
+	"github.com/mattn/go-sqlite3"
 	upstream "github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/migrator"
 	"gorm.io/gorm"
@@ -19,6 +22,22 @@ const brandingAdvisoryLockKey = 8342761901
 // MigrateBranding 使用 ConfigStore.RunMigration 提供的连接执行品牌迁移。
 // 表、初始单例和版本记录由同一个外层事务提交或回滚。
 func MigrateBranding(ctx context.Context, db *gorm.DB) error {
+	for attempt := 0; ; attempt++ {
+		err := migrateBrandingOnce(ctx, db)
+		var busy sqlite3.Error
+		if attempt == 2 || !errors.As(err, &busy) || (busy.Code != sqlite3.ErrBusy && busy.Code != sqlite3.ErrLocked) {
+			return err
+		}
+		// 宿主后台写入可能令SQLite读事务无法升级为写事务；先回滚再整笔重试。
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
+		}
+	}
+}
+
+func migrateBrandingOnce(ctx context.Context, db *gorm.DB) error {
 	return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if tx.Dialector.Name() == "postgres" {
 			if err := tx.Exec("SET LOCAL lock_timeout = '10s'").Error; err != nil {
