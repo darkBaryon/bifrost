@@ -73,12 +73,12 @@ func brandingRequest(r *router.Router, method, path, body string, headers map[st
 	r.Handler(ctx)
 	return ctx
 }
-func decodeResponse(t *testing.T, ctx *fasthttp.RequestCtx) brandingResponse {
+func decodeResponse(t *testing.T, ctx *fasthttp.RequestCtx) settingsResponse {
 	t.Helper()
 	if ctx.Response.StatusCode() != 200 {
 		t.Fatalf("status=%d body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
 	}
-	var response brandingResponse
+	var response settingsResponse
 	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@
 必存产物:
   - ee/internal/branding/image.go
   - ee/internal/branding/http/handler.go
-  - ee/internal/branding/http/assets.go
+  - ee/internal/branding/http/dto.go
   - ee/internal/branding/persistence/store.go
   - ee/internal/branding/persistence/migration.go
 禁留标记:

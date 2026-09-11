@@ -10,11 +10,9 @@
 | [store.go](store.go) | 表与修改参数、读取/原子更新/重置及图片 hash 派生 |
 | [store_test.go](store_test.go) | 持久化、并发合并、清除、重连与写后读失败回滚 |
 | [migration_test.go](migration_test.go) | 迁移失败回滚、锁冲突重试与取消 |
-| [compatibility_test.go](compatibility_test.go) | 验证旧库字段、数据、hash、时间和迁移版本不变 |
-| [testdata/legacy.sql](testdata/legacy.sql) | 迁移前代码生成的 SQLite 快照，仅含合成数据 |
 
 ## 数据库测试
 
 默认使用临时 SQLite。专用 PostgreSQL 测试库通过键值格式的 `BRANDING_TEST_POSTGRES_DSN` 指定；在 `ee/` 下执行 `GOWORK=off go test -count=1 -v ./internal/branding/persistence`。
 
-测试会为每个测试路径建立独立 schema，并在结束后删除；测试账号须有创建 schema 权限。只在相应后端运行专用锁测试，SQLite 历史快照测试在 PostgreSQL 模式下跳过。
+测试会为每个测试路径建立独立 schema，并在结束后删除；测试账号须有创建 schema 权限。只在相应后端运行专用锁测试。
