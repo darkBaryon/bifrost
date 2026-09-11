@@ -23,17 +23,11 @@ var (
 	msgImageDimensions = fmt.Sprintf("image dimensions exceed %d px or %d million pixels", maxEdgePx, maxPixels/1_000_000)
 )
 
-// Asset 是已验证图片；字段私有以避免绕过内容校验，零值用于清除图片。
+// Asset 保存解码后的图片字节和内容识别出的 MIME 类型，空图片用于清除。
 type Asset struct {
-	data []byte
-	mime string
+	Data []byte
+	MIME string
 }
-
-// Data 返回图片副本，调用方修改返回值不会改变已验证内容。
-func (a Asset) Data() []byte { return bytes.Clone(a.data) }
-
-// MIME 返回经内容识别的图片类型；清除图片时为空。
-func (a Asset) MIME() string { return a.mime }
 
 // DecodeAsset 接受 Base64 或 data URI，空串表示清除；失败不产生可保存的值。
 func DecodeAsset(encoded, mime string) (*Asset, error) {
@@ -79,5 +73,14 @@ func DecodeAsset(encoded, mime string) (*Asset, error) {
 	if _, _, err := image.Decode(bytes.NewReader(data)); err != nil {
 		return nil, &ValidationError{Message: "image is damaged or incomplete"}
 	}
-	return &Asset{data: data, mime: actualMIME}, nil
+	return &Asset{Data: data, MIME: actualMIME}, nil
 }
+
+// ValidationError 是可向用户说明的图片输入错误，TooLarge 区分容量超限。
+type ValidationError struct {
+	Message  string
+	TooLarge bool
+}
+
+// Error 返回可公开的校验说明。
+func (e *ValidationError) Error() string { return e.Message }

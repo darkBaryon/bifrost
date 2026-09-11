@@ -4,6 +4,6 @@
 
 | 文件 | 职责 |
 |---|---|
-| [bootstrap.go](bootstrap.go) | 上游 Bootstrap → attach：品牌迁移、注入品牌服务、注册路由 |
+| [bootstrap.go](bootstrap.go) | 上游 Bootstrap → attach：品牌迁移、注入品牌存储、注册路由 |
 
-品牌依赖为 `HTTP → Service → Repository`，由本包创建具体 Store 并注入。品牌见 [branding](../branding/README.md)。双方复用同一个 Server、Router 和数据库连接；本包不重复创建或关闭共享资源。
+本包创建品牌 Store 并直接注入 HTTP Handler，图片校验由品牌根包的函数负责。品牌见 [branding](../branding/README.md)。双方复用同一个 Server、Router 和数据库连接；本包不重复创建或关闭共享资源。

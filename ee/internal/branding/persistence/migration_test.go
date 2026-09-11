@@ -25,7 +25,7 @@ func TestBrandingMigrationAtomicFailure(t *testing.T) {
 			if err := MigrateBranding(context.Background(), db); err == nil {
 				t.Fatal("expected migration failure")
 			}
-			if db.Migrator().HasTable(&brandingRow{}) {
+			if db.Migrator().HasTable(&Settings{}) {
 				t.Fatal("DDL survived failed transaction")
 			}
 			db.Callback().Create().Remove("test:migration-failure")
@@ -75,7 +75,7 @@ func TestBrandingSQLiteBusyAndRetry(t *testing.T) {
 	if _, err := conn.ExecContext(ctx, "ROLLBACK"); err != nil {
 		t.Fatal(err)
 	}
-	if second.Migrator().HasTable(&brandingRow{}) {
+	if second.Migrator().HasTable(&Settings{}) {
 		t.Fatal("busy migration left branding table")
 	}
 	if err := MigrateBranding(ctx, second); err != nil {
@@ -94,7 +94,7 @@ func TestBrandingCanceledMigration(t *testing.T) {
 	if err := MigrateBranding(ctx, db); !errors.Is(err, context.Canceled) {
 		t.Fatalf("expected canceled: %v", err)
 	}
-	if db.Migrator().HasTable(&brandingRow{}) {
+	if db.Migrator().HasTable(&Settings{}) {
 		t.Fatal("canceled migration left a table")
 	}
 	if err := MigrateBranding(context.Background(), db); err != nil {
@@ -121,7 +121,7 @@ func TestBrandingPostgresLockAndRetry(t *testing.T) {
 	if err := MigrateBranding(ctx, db); err == nil {
 		t.Fatal("持锁时迁移不应成功")
 	}
-	if db.Migrator().HasTable(&brandingRow{}) {
+	if db.Migrator().HasTable(&Settings{}) {
 		t.Fatal("取消后不应残留品牌表")
 	}
 	if err := tx.Rollback().Error; err != nil {
