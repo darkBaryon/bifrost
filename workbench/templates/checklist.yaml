@@ -13,6 +13,11 @@
 必含符号:                  # 本期新增接口/导出必须落地（grep 命中 ≥1）
   - { grep: "<新函数/类型名>", in: "<模块目录>" }
 
+收敛评审:                  # tools/convergence_review.py 读取，据此机械生成提示词；实施方不另写
+  风险等级: L3             # L1 / L2 / L3，与需求定档一致
+  基线: <Gate 1 批准的基线 commit>
+  开发指南: []             # 本期对外接口、运维文档路径，可空
+
 禁留标记:                  # 调试残留 / 越界功能，全仓须 0 命中
   - { grep: "fmt.Println(\"DEBUG", in: "core" }
   - { grep: "console.log(\"DEBUG", in: "ui/lib" }

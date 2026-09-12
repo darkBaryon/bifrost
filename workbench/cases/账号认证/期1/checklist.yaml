@@ -23,4 +23,8 @@
   - { grep: "ConsoleAuthFactory", in: "transports/bifrost-http/server" }
   - { grep: "WebSocketAuthorizeContextKey", in: "transports/bifrost-http/handlers" }
   - { grep: "ee_identity_v1", in: "ee/internal/identity/persistence" }
+收敛评审:
+  风险等级: L3
+  基线: 3e15a640d89902772445d3fb4c04023e58828eba
+  开发指南: [ee/docs/账号认证接口.md, ee/docs/账号认证升级与恢复.md]
 禁留标记: []
