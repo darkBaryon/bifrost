@@ -1,16 +1,30 @@
 # 身份存储
 
-复用宿主 ConfigStore 的 GORM 连接，连接关闭由宿主负责。SQL 日志静默；在操作边界经 app 注入的宿主 logger 记录安全 driver 码、操作阶段和关联 ID，禁止凭据、SQL 或 driver 原文。
+用 GORM 在上游的配置数据库上实现 `identity.Repository` 与 `identity.Tx`。连接由宿主持有并关闭；SQL 日志静默，故障只记操作名、阶段、关联 ID 和驱动错误码。
 
-| 文件 | 职责 |
+## 做什么
+
+- 六张 `ee_identity_*` 表的行结构与业务类型互转；改行结构等于改表，须走新迁移版本。
+- 每个写事务先 `UPDATE state SET revision = revision + 1` 拿写锁（SQLite 库级、PostgreSQL 行锁），身份模块的写因此串行。
+- 会话验证用一条 JOIN 同时读会话与账号；票据消费靠 `UPDATE ... WHERE consumed_at IS NULL` 保证只成功一次；登录限流桶原子预占。
+- 写入新会话/票据前删除已到期的行（FIND-020）；限流桶写入时删除过期窗口。
+- SQLite 与上游共用文件时的 busy/locked 整笔重试；两种驱动的唯一键冲突统一成 `ErrConflict`。
+
+运维自查行数：`SELECT COUNT(*) FROM ee_identity_sessions; SELECT COUNT(*) FROM ee_identity_ws_tickets;`——正常应在两位数以内，超过万行再评估加索引。
+
+## 不做什么
+
+bcrypt 在 [hasher](../hasher/README.md)；业务规则在 [identity](../README.md)。
+
+## 文件
+
+| 文件 | 内容 |
 |---|---|
-| [rows.go](rows.go) | 六张表的行结构及与业务类型的转换 |
-| [store.go](store.go) | 读取、锁定 state 的事务、限流预占、分页、bcrypt 适配 |
-| [migration.go](migration.go) | `ee_identity_v1` 版本化迁移、独立 PG 迁移锁、建表与索引 |
-| [diagnostics.go](diagnostics.go) | 本包所需的 `Logger` 接口、安全故障分类日志、SQLite busy 判断与整笔重试 |
-| [service_test.go](service_test.go) | 真实 SQLite/PG 生命周期、失败回滚、初始化竞争、幂等及会话撤销 |
-| [diagnostics_test.go](diagnostics_test.go) | 诊断关联与脱敏、迁移有限重试 |
+| [rows.go](rows.go) | 行结构与转换 |
+| [store.go](store.go) | 读取、事务、限流、分页、过期清理 |
+| [migration.go](migration.go) | `ee_identity_v1` 建表与索引，PostgreSQL 迁移锁 |
+| [diagnostics.go](diagnostics.go) | `Logger` 接口、安全故障日志、busy 重试 |
+| [service_test.go](service_test.go) | 业务规则端到端（经真实 Store） |
+| [accounts_page_test.go](accounts_page_test.go) / [cleanup_test.go](cleanup_test.go) / [diagnostics_test.go](diagnostics_test.go) | 分页、过期清理、诊断 |
 
-行结构与业务类型分开定义：改业务字段不会改变表结构，改行结构须走新的迁移版本。唯一键冲突按驱动错误类型识别（PostgreSQL `23505`、SQLite `ErrConstraintUnique`）。所有写事务先更新 `state.revision`，SQLite 取得写锁，PostgreSQL 取得行锁；限流桶由服务给出键、阈值与窗口，本包原子预占。
-
-测试默认独立 SQLite 文件，设置 `IDENTITY_TEST_POSTGRES_DSN` 后使用专用 PG 测试库内独立 schema，结束只清理自己的 schema。
+测试默认用临时 SQLite；设置 `IDENTITY_TEST_POSTGRES_DSN` 后在专用 PostgreSQL 库的独立 schema 里跑，结束只清理自己的 schema。

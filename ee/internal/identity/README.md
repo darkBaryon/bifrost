@@ -1,16 +1,27 @@
 # 账号认证
 
-管理本地账号、密码、会话和密码操作记录。登录身份与推理 VK 独立；本期主管理员可管理全局，普通成员只使用本人能力。
+本地账号系统：账号、密码、会话、密码操作记录。只依赖标准库，不知道 HTTP、数据库和上游；存储与哈希由 [app](../app/README.md) 按本包定义的接口注入。
 
-| 文件或目录 | 职责 |
+## 做什么
+
+三条线共用一个 `core`（仓储、bcrypt 并发槽、假哈希、会话与权限判定），由 `New` 一次装配成 `Services`：
+
+- `SessionService`：登录（限流、bcrypt 比对、事务内重读后签发）、Cookie 验证、WebSocket 重验、登出、一次性票据。
+- `AccountService`：初始化、旧管理员导入、建号、启停、分页列表。
+- `PasswordService`：本人改密、管理员重置（按 operation_id 幂等）、离线恢复、密码事件查询；三条路径共用 `replacePassword`。
+
+贯穿规则：账号 `AuthVersion` 每次改密或改状态 +1，会话签发时记下版本，不一致即失效；所有写操作在锁定 `state` 的事务里进行；错误只有 7 个业务值，其余折叠为 `unavailable`；谁能管账号由可替换的 `AccountPolicy` 决定（现为主管理员）。
+
+## 不做什么
+
+HTTP 在 [http/](http/README.md)，SQL 在 [persistence/](persistence/README.md)，bcrypt 在 [hasher/](hasher/README.md)，接上游在 [host](../host/README.md)。
+
+## 文件
+
+| 文件 | 内容 |
 |---|---|
-| [model.go](model.go) | 业务类型、对外枚举与业务限制的命名常量、业务错误、存储/哈希/策略接口、诊断关联 |
-| [service.go](service.go) | 服务构造、共享辅助函数与会话规则：登录签发、验证、重验、登出、WS 票据 |
-| [accounts.go](accounts.go) | 账号操作：旧账号导入、初始化、建号、启停、分页列表 |
-| [passwords.go](passwords.go) | 密码变更三条路径（本人改密、管理员重置、离线恢复）与密码事件查询 |
-| [http/](http/README.md) | 路由、严格 JSON、同源检查、Cookie 与请求/响应结构 |
-| [persistence/](persistence/README.md) | 共享数据库上的行结构、迁移、事务与限流 |
-
-规则集中在服务：每个需要身份的操作都按会话 ID 重新读取并核对账号与版本（`current`），受限会话（仍需改密）只能使用本人资料、改密和登出（`fullSession`），管理权限再交给可替换的 `AccountPolicy`。本人改密、管理员重置和离线恢复共用 `replacePassword`：写新哈希、升版本、撤销全部会话、记录事件，一起提交。
-
-业务类型不带序列化标签；HTTP 与存储各自定义结构并转换。原始 token 只在签发时返回给 HTTP 适配，库内只存摘要。依赖由 [app](../app/README.md) 通过构造函数注入。
+| [model.go](model.go) | 类型、枚举、限制常量、错误值、`Repository`/`Tx`/`PasswordHasher`/`AccountPolicy` 接口 |
+| [core.go](core.go) | `core`、`Services`、`New`、共享判定与分页辅助 |
+| [session.go](session.go) | 会话线 |
+| [accounts.go](accounts.go) | 账号线 |
+| [passwords.go](passwords.go) | 密码线 |

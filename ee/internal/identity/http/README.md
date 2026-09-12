@@ -1,14 +1,25 @@
 # 身份 HTTP 接口
 
-本包集中维护身份模块的 HTTP 适配：路由声明、严格 JSON 解码、同源检查、Cookie、安全错误映射和业务调用。账号规则通过 `identity.Service` 执行，不在这里操作数据库。
+把 `identity.Services` 翻译成 HTTP：路由表、JSON、Cookie、同源检查、错误码。不含业务判断，不碰数据库。
 
-| 文件 | 职责 |
+## 做什么
+
+- 路由表是唯一来源，`RegisterRoutes` 注册、`OwnsRoute` 供宿主判断"这条路由是不是你的"；旧 `/api/session/*` 四条指向同样的端点。
+- 每个端点外套一层 `serve`：禁缓存、非 GET 查同源、非匿名端点验 Cookie；端点本身只做"解码 → 调服务 → 装响应"。
+- JSON 严格：拒绝未知字段、重复键、过深嵌套、超 16KB；请求与响应结构（DTO）和业务类型分开定义。
+- 7 个业务错误映射 7 个状态码，其余一律 503；限流附 `Retry-After`。
+- token 只经 `Set-Cookie` 交付（HttpOnly、SameSite=Lax、HTTPS 时 Secure），响应体不含 token。
+
+## 不做什么
+
+账号规则在 [identity](../README.md)；宿主中间件与 `IsLocalAdmin` 标记在 [host](../../host/README.md)。
+
+## 文件
+
+| 文件 | 内容 |
 |---|---|
-| [handler.go](handler.go) | 路由表（`OwnsRoute` 与 `RegisterRoutes` 共用）、端点共同的前置规则、各端点适配 |
-| [protocol.go](protocol.go) | 协议管道：部署 origin 校验、同源检查、Cookie、严格 JSON 解码、错误映射 |
-| [dto.go](dto.go) | 请求与响应结构、业务类型到响应字段的转换 |
-| [handler_test.go](handler_test.go) | 严格 JSON 限制、错误映射与序列化降级契约 |
-
-每条路由直接绑定端点方法，并显式声明匿名能力与旧接口的空正文兼容；新增路由默认要求会话。精确路由归属、所有 POST 的来源拒绝及匿名/会话边界由 [../../bifrost/auth_test.go](../../bifrost/auth_test.go) 的 `TestIdentityRouteContract` 验证，业务全流程由宿主适配测试和真实 HTTP 冒烟覆盖。
-
-新接口统一 POST，保留上游会话兼容路径及旧登出/票据的空正文能力；`GET /api/session/is-auth-enabled` 维持公开状态查询。部署 origin 由 `ValidateOrigin` 统一校验，非回环部署必须 HTTPS；不信任代理头，不把会话 token 放进 JSON。`limit` 省略取默认值，显式 0 或越界返回 400。
+| [handler.go](handler.go) | 路由表、`serve`、`OwnsRoute`、`RegisterRoutes` |
+| [session.go](session.go) / [accounts.go](accounts.go) / [passwords.go](passwords.go) | 按线的端点 |
+| [protocol.go](protocol.go) | origin 校验、同源检查、Cookie、严格 JSON、错误映射 |
+| [dto.go](dto.go) | 请求/响应结构与转换，按 共同/会话/账号/密码 四段 |
+| [handler_test.go](handler_test.go) / [dto_test.go](dto_test.go) | 错误映射与 JSON 限制契约；账号响应键集合 |
