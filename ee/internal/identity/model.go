@@ -246,7 +246,7 @@ type Tx interface {
 	ConsumeTicket(string, time.Time) (string, error)
 }
 
-// PasswordHasher 由存储适配注入宿主的 bcrypt 实现。
+// PasswordHasher 抽象密码哈希，由装配层注入；bcrypt 实现在 identity/hasher。
 type PasswordHasher interface {
 	Hash(string) (string, error)
 	Compare(string, string) (bool, error)

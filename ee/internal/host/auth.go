@@ -38,15 +38,22 @@ type legacyImporter interface {
 	BootstrapLegacy(ctx context.Context, username, passwordHash string) error
 }
 
+// identityRoutes 是接入身份 HTTP 层需要的能力，由 identityhttp.Handler 满足：注册端点、提供部署 origin 与同源判断。
+type identityRoutes interface {
+	Origin() string
+	SameOrigin(*fasthttp.RequestCtx) bool
+	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
+}
+
 // AuthAdapter 实现宿主的 ConsoleAuthProvider；依赖由 app 装配后注入，宿主对象只用于临时令牌与配置读取。
 type AuthAdapter struct {
 	service consoleSessions
-	http    *identityhttp.Handler
+	http    identityRoutes
 	host    *server.BifrostHTTPServer
 }
 
-// NewAuthAdapter 由 app 在身份服务与 HTTP 适配构造完成后调用；只接收会话线，建号、重置、恢复对本包不可见。
-func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler *identityhttp.Handler) *AuthAdapter {
+// NewAuthAdapter 由 app 在身份服务与 HTTP 适配构造完成后调用；只接收会话线与路由接入能力，建号、重置、恢复对本包不可见。
+func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler identityRoutes) *AuthAdapter {
 	return &AuthAdapter{service: sessions, http: handler, host: host}
 }
 
