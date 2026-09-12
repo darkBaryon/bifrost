@@ -10,13 +10,15 @@ templates/代码评审提示词.md 与 checklist.yaml 的「收敛评审」段�
 声明修改与受影响区域，并把最新收敛评审记录的「转代码评审」栏原样交给评审者处置。每轮都是新会话，
 模型与推理强度固定为 gpt-6-astra / high。
 
-评审者以 workspace-write 沙箱运行（要跑测试与自包含冒烟，产物写到本轮 TMPDIR）；脚本在运行前后
-比对工作树与 HEAD，评审者一旦改动了 workbench 之外的跟踪文件或提交，本轮判失败、记录不落盘。
+评审者以 workspace-write 沙箱运行（开 network_access 才能跑本地 HTTP 冒烟，产物写到本轮 TMPDIR）；结束时
+校验工作树干净且候选到 HEAD 之间 workbench 之外零差异，评审者一旦改动了跟踪文件，本轮判失败、记录不落盘。
+实施方在评审期间提交 workbench 过程记录不影响校验。
 
 用法（在项目根执行）:
     python3 workbench/tools/code_review.py start --config <checklist.yaml> --round <R> [--since <commit>] [--dry-run]
     python3 workbench/tools/code_review.py status --config <checklist.yaml> --round <R>
     python3 workbench/tools/code_review.py wait --config <checklist.yaml> --round <R> [--timeout <秒>]
+    python3 workbench/tools/code_review.py finalize --config <checklist.yaml> --round <R>   # 落盘失败后（如校验误判）重做落盘
 """
 from __future__ import annotations
 
@@ -121,9 +123,17 @@ class Run:
         self.meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def tree_state(repo: Path) -> str:
-    """评审者不得改动的部分：HEAD 与 workbench 之外的工作树状态。"""
-    return git(repo, "rev-parse", "HEAD") + "\n" + git(repo, "status", "--porcelain", "--", ".", ":(exclude)workbench")
+def tree_changed(repo: Path, candidate: str) -> str:
+    """评审者不得改动 workbench 之外的任何跟踪文件：工作树须干净，候选到 HEAD 之间 workbench 之外须零差异。
+    实施方在评审期间提交 workbench 过程记录是允许的，不算改动。返回空串表示未改动，否则返回说明。"""
+    dirty = git(repo, "status", "--porcelain", "--", ".", ":(exclude)workbench")
+    if dirty:
+        return "工作树有未提交改动：\n" + dirty
+    head = git(repo, "rev-parse", "HEAD")
+    committed = git(repo, "diff", "--name-only", f"{candidate}..{head}", "--", ".", ":(exclude)workbench")
+    if committed:
+        return f"候选 {candidate[:9]} 到 HEAD {head[:9]} 之间 workbench 之外有改动：\n" + committed
+    return ""
 
 
 def build_prompt(run: Run, cfg: dict, repo: Path, since: str | None) -> tuple[str, str]:
@@ -206,7 +216,7 @@ def cmd_start(args) -> int:
     (run.dir / "prompt.md").write_text(prompt, encoding="utf-8")
     run.save({"case": run.case, "phase": run.phase, "round": run.round, "candidate": head,
               "since": args.since, "model": MODEL, "effort": EFFORT, "repo": str(repo),
-              "record": str(run.record), "tree": tree_state(repo), "status": "starting", "started": time.time()})
+              "record": str(run.record), "status": "starting", "started": time.time()})
     with open(run.dir / "runner.log", "w", encoding="utf-8") as log:
         subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_run", "--config",
                           str(Path(args.config).resolve()), "--round", str(args.round)], cwd=repo, stdin=subprocess.DEVNULL,
@@ -240,12 +250,22 @@ def cmd_run(args) -> int:
             run.save(meta)
             return 1
     meta.update(finished=time.time(), thread_id=next((e.get("thread_id") for e in events(run.stream) if e.get("type") == "thread.started"), None))
+    if proc.returncode != 0:
+        meta.update(status="failed", reason=f"评审会话未正常结束（退出码 {proc.returncode}）")
+        run.save(meta)
+        return 1
+    return finalize(run, meta)
+
+
+def finalize(run: Run, meta: dict) -> int:
+    """把已保存的最终回复落盘为记录；校验评审者未改动工作树。可由 finalize 子命令重跑（例如运行期间 HEAD 因 workbench 提交变化后）。"""
+    repo = Path(meta["repo"])
     try:
-        if proc.returncode != 0 or not run.last.exists():
-            raise ValueError(f"评审会话未正常结束（退出码 {proc.returncode}）")
-        after = tree_state(repo)
-        if after != meta["tree"]:
-            raise ValueError("评审者改动了 HEAD 或 workbench 之外的工作树，记录不落盘；请先 git status 核查")
+        if not run.last.exists():
+            raise ValueError("没有最终回复文件 last.md")
+        changed = tree_changed(repo, meta["candidate"])
+        if changed:
+            raise ValueError("评审者改动了 workbench 之外的工作树，记录不落盘；" + changed)
         body = run.last.read_text(encoding="utf-8").strip()
         verdicts = VERDICT_RE.findall(body)
         if not verdicts:
@@ -255,7 +275,7 @@ def cmd_run(args) -> int:
             "---", f"title: {run.case} 期{run.phase} 代码评审 #{run.round}", "type: 代码评审", f"case: {run.case}",
             f"phase: {run.phase}", f"round: {run.round}", f"verdict: {verdict}", f"created: {datetime.date.today().isoformat()}", "---", "",
             f"> 独立评审者：Codex 新会话（{MODEL} / {EFFORT}），由 tools/code_review.py 启动，与实施上下文隔离；以下为其最终回复原文。",
-            f"> 基线 {meta['since'] or '（见 checklist 基线）'} 到候选 {meta['candidate']}；评审前后 HEAD 与 workbench 之外的工作树均未变动。", "",
+            f"> 基线 {meta['since'] or '（见 checklist 基线）'} 到候选 {meta['candidate']}；评审前后 workbench 之外的工作树与提交均未变动。", "",
             body, ""])
         with open(run.record, "x", encoding="utf-8") as f:
             f.write(record)
@@ -264,6 +284,20 @@ def cmd_run(args) -> int:
         meta.update(status="failed", reason=str(e))
     run.save(meta)
     return 0 if meta["status"] == "done" else 1
+
+
+def cmd_finalize(args) -> int:
+    run = Run(Path(args.config), args.round)
+    if not run.meta_file.exists():
+        print("没有运行记录", file=sys.stderr)
+        return 1
+    meta = run.meta()
+    if meta.get("status") == "done":
+        print("已落盘，无需重做", file=sys.stderr)
+        return 0
+    rc = finalize(run, meta)
+    print(describe(progress(run)))
+    return rc
 
 
 def events(stream: Path) -> list[dict]:
@@ -330,7 +364,7 @@ def cmd_wait(args) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description="代码评审启动器")
     sub = ap.add_subparsers(dest="command", required=True)
-    for name in ("start", "status", "wait", "_run"):
+    for name in ("start", "status", "wait", "finalize", "_run"):
         p = sub.add_parser(name)
         p.add_argument("--config", required=True, help="cases/<案子>/期<N>/checklist.yaml")
         p.add_argument("--round", required=True, type=int)
@@ -341,7 +375,7 @@ def main() -> int:
         if name == "wait":
             p.add_argument("--timeout", type=int, default=RUN_TIMEOUT_SECONDS)
     args = ap.parse_args()
-    return {"start": cmd_start, "status": cmd_status, "wait": cmd_wait, "_run": cmd_run}[args.command](args)
+    return {"start": cmd_start, "status": cmd_status, "wait": cmd_wait, "finalize": cmd_finalize, "_run": cmd_run}[args.command](args)
 
 
 if __name__ == "__main__":
