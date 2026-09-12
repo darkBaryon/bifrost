@@ -1,6 +1,11 @@
 // Package pricing 管理国内官方模型价格与启动期覆盖同步，不依赖宿主或存储类型。
 package pricing
 
+import "errors"
+
+// ErrConfig 标识必须拒绝启动的部署配置错误，与存储故障和价格文件无效区分。
+var ErrConfig = errors.New("invalid pricing configuration")
+
 // Currency 是官网价格使用的币种。
 type Currency string
 

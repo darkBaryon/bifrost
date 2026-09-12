@@ -34,13 +34,13 @@ const (
 // OverrideRow 是存储与目录共用的业务快照，不含上游类型或持久化标签。
 // 非本功能行的其他作用域字段保留，以便比较时不会忽略管理员修改。
 type OverrideRow struct {
-	ID, Name                                string
-	ScopeKind                               ScopeKind
-	ProviderID, ProviderKeyID, VirtualKeyID string
-	MatchType                               MatchType
-	Pattern                                 string
-	RequestTypes                            []RequestType
-	PricingPatchJSON, ConfigHash            string
+	ID, Name                                        string
+	ScopeKind                                       ScopeKind
+	ProviderID, ProviderKeyID, VirtualKeyID, UserID string
+	MatchType                                       MatchType
+	Pattern                                         string
+	RequestTypes                                    []RequestType
+	PricingPatchJSON, ConfigHash                    string
 }
 
 func overrideID(provider, model string) string {

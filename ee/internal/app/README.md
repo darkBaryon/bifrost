@@ -19,3 +19,9 @@
 | [bootstrap.go](bootstrap.go) | `Bootstrap` 与 `attach` |
 | [identity.go](identity.go) | 环境变量、`newIdentity`、`assembleIdentity` |
 | [recovery.go](recovery.go) | 离线恢复子命令 |
+
+## 国内定价装配
+
+`pricing.go` 在品牌路由接入之后、宿主 Start 监听之前读取定价环境变量，装配 `pricing` 与 `pricing/persistence` 并同步一次。汇率、有效文件上的手工映射与厂商多命中错误通过 `ErrConfig` 分类拒启；价格文件无效或同步失败记宿主日志继续启动。共享资源仍由宿主管理。
+
+`pricing_test.go` 校验汇率独立拒启、无效文件先跳过映射和目录缺失告警的顺序，并经真实 `attach` 验证多命中拒启、厂商存储失败继续启动。

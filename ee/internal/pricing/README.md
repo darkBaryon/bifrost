@@ -10,3 +10,5 @@
 | `data/cn-prices.json` | 随版本发布的价格目录；当前步骤为空骨架 |
 | `vendors.go` / `vendors_test.go` | 官方域名匹配、手工映射优先和原始厂商名保留 |
 | `overrides.go` / `overrides_test.go` | 美元/token 换算、UUID v5 与精确匹配覆盖 |
+| `sync.go` / `sync_test.go` | 启动同步、所有权核验、逐行幂等与失败测试 |
+| `persistence/` | 上游 ConfigStore / ModelCatalog 适配，依赖方向指向本根包 |

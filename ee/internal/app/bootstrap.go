@@ -13,7 +13,7 @@ import (
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
 
-// Bootstrap 取代上游 main 里的 s.Bootstrap(ctx) 调用：先注入身份装配工厂，再执行上游装配，最后接入品牌。
+// Bootstrap 取代上游 main 里的 s.Bootstrap(ctx) 调用：先注入身份装配工厂，再执行上游装配，最后接入品牌与国内定价。
 // log 是入口按 -log-level/-log-style 配置好的宿主 logger，EE 自有代码的日志都经它输出。
 func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log schemas.Logger) error {
 	var auth *eehost.AuthAdapter
@@ -34,12 +34,12 @@ func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log sche
 	if auth == nil {
 		return errors.New("ee: console auth factory was not invoked by the host")
 	}
-	return attach(ctx, s, auth.APIMiddleware())
+	return attach(ctx, s, auth.APIMiddleware(), log)
 }
 
 // attach 在上游 Bootstrap 之后、Start 之前运行。此时上游对象已装配完成但尚未监听，
 // Router / Server.Handler / Config / 插件链都是可改的活数据。
-func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schemas.BifrostHTTPMiddleware) error {
+func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schemas.BifrostHTTPMiddleware, log schemas.Logger) error {
 	if s.Config == nil || s.Config.ConfigStore == nil {
 		return errors.New("ee requires the config store (database mode); config_store.enabled=false is not supported")
 	}
@@ -55,5 +55,5 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schema
 	if err := brandinghandler.NewBrandingHandler(eeconfig.NewBrandingStore(db)).RegisterRoutes(s.Router, auth); err != nil {
 		return fmt.Errorf("ee: register branding routes: %w", err)
 	}
-	return nil
+	return assemblePricing(ctx, s.Config.ConfigStore, s.Config.ModelCatalog, log)
 }

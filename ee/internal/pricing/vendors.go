@@ -32,11 +32,11 @@ func ParseVendorMap(raw string, file PriceFile) (map[string]string, error) {
 	for _, item := range strings.Split(raw, ",") {
 		parts := strings.Split(item, "=")
 		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
-			return nil, fmt.Errorf("invalid vendor mapping %q", item)
+			return nil, fmt.Errorf("%w: invalid vendor mapping %q", ErrConfig, item)
 		}
 		key, value := strings.ToLower(strings.TrimSpace(parts[0])), strings.TrimSpace(parts[1])
 		if _, exists := result[key]; exists {
-			return nil, fmt.Errorf("duplicate vendor mapping %q", key)
+			return nil, fmt.Errorf("%w: duplicate vendor mapping %q", ErrConfig, key)
 		}
 		result[key] = value
 	}
@@ -53,7 +53,7 @@ func validateVendorMap(mapping map[string]string, file PriceFile) error {
 	}
 	for _, id := range mapping {
 		if !ids[id] {
-			return fmt.Errorf("unknown vendor id %q", id)
+			return fmt.Errorf("%w: unknown vendor id %q", ErrConfig, id)
 		}
 	}
 	return nil
@@ -96,7 +96,7 @@ func matchVendors(providers []Provider, file PriceFile, mapping map[string]strin
 				allowed = strings.ToLower(allowed)
 				if host != "" && (host == allowed || strings.HasSuffix(host, "."+allowed)) {
 					if matched != "" && matched != v.ID {
-						return nil, nil, fmt.Errorf("provider %s host %s matches multiple vendors", p.Name, host)
+						return nil, nil, fmt.Errorf("%w: provider %s host %s matches multiple vendors", ErrConfig, p.Name, host)
 					}
 					matched = v.ID
 					break
