@@ -2,28 +2,31 @@
 """Isolated branding smoke: fresh config, own PID only, no personal database.
 
 --serve keeps a fresh fixture alive for browser testing until interrupted.
+The EE process fixture is shared with identity-smoke.py; this script only adds
+the legacy administrator configuration and the branding assertions.
 """
 import argparse
 import base64
 import contextlib
-import http.cookiejar
+import importlib.util
 import json
 import os
 from pathlib import Path
 import secrets
-import socket
 import sqlite3
 import struct
-import subprocess
 import tempfile
 import time
-import urllib.error
-import urllib.request
 import zlib
+
+spec = importlib.util.spec_from_file_location('identity_smoke', Path(__file__).with_name('identity-smoke.py'))
+identity_smoke = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(identity_smoke)
 
 
 # Small geometric JPEG fixture kept as a file (no runtime imaging dependency).
 JPEG = (Path(__file__).resolve().parent / 'testdata' / 'branding-icon.jpg').read_bytes()
+
 
 def png(width=96, height=32):
     def chunk(kind, data):
@@ -32,11 +35,10 @@ def png(width=96, height=32):
     return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('!IIBBBBB', width, height, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(pixels)) + chunk(b'IEND', b'')
 
 
-class Fixture:
+class Fixture(identity_smoke.Node):
+    """A Node started from a legacy shared-administrator configuration, as an upgraded deployment would be."""
+
     def __init__(self, binary, root):
-        self.binary, self.root = str(Path(binary).resolve()), Path(root)
-        self.proc = None
-        self.log = None
         self.username = 'branding-test'
         self.password = secrets.token_urlsafe(24)
         config = {
@@ -44,75 +46,30 @@ class Fixture:
             'governance': {'auth_config': {'admin_username': self.username, 'admin_password': self.password, 'is_enabled': True}},
             'providers': {},
         }
-        self.root.mkdir(parents=True, exist_ok=True)
-        (self.root / 'config.json').write_text(json.dumps(config))
-        os.chmod(self.root / 'config.json', 0o600)
-        self.cookies = http.cookiejar.CookieJar()
-        self.client = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cookies), urllib.request.ProxyHandler({}))
-        self.anonymous = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-
-    def start(self):
-        with socket.socket() as sock:
-            sock.bind(('127.0.0.1', 0))
-            port = sock.getsockname()[1]
-        self.url = f'http://127.0.0.1:{port}'
-        self.log = (self.root / 'server.log').open('ab')
-        # Do not inherit deployment credentials or app-directory overrides.
-        env = {k: v for k, v in os.environ.items() if not k.startswith(('BIFROST_', 'EE_', 'OPENAI_', 'ANTHROPIC_'))}
-        self.proc = subprocess.Popen([self.binary, '-host', '127.0.0.1', '-port', str(port), '-app-dir', str(self.root)], stdout=self.log, stderr=subprocess.STDOUT, env={**env, 'EE_PUBLIC_ORIGIN': self.url})
-        deadline = time.monotonic() + 60
-        while time.monotonic() < deadline:
-            if self.proc.poll() is not None:
-                raise RuntimeError('test server exited; see isolated server.log')
-            try:
-                if self.request('POST', '/api/branding/get', anonymous=True)[0] == 200:
-                    return
-            except (OSError, urllib.error.URLError):
-                pass
-            time.sleep(0.15)
-        raise RuntimeError('test server startup timed out')
-
-    def stop(self):
-        if self.proc is not None and self.proc.poll() is None:
-            self.proc.terminate()
-            try:
-                self.proc.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                self.proc.kill()
-                self.proc.wait(timeout=5)
-        if self.log:
-            self.log.close()
-
-    def request(self, method, path, data=None, anonymous=False, headers=None):
-        body = json.dumps(data).encode() if data is not None else None
-        req = urllib.request.Request(self.url + path, data=body, method=method, headers={'Content-Type': 'application/json', 'Origin': self.url, **(headers or {})})
-        opener = self.anonymous if anonymous else self.client
-        try:
-            response = opener.open(req, timeout=10)
-        except urllib.error.HTTPError as error:
-            response = error
-        with response:
-            return response.status, response.headers, response.read()
+        super().__init__(binary, root, config, '')
 
     def state(self):
-        status, headers, body = self.request('POST', '/api/branding/get', anonymous=True)
+        status, value, headers = self.call('/api/branding/get', {}, anonymous=True)
         assert status == 200 and headers.get('Cache-Control') == 'no-store'
-        return json.loads(body)
+        return value
 
     def login(self):
-        assert self.request('POST', '/api/session/login', {'username': self.username, 'password': self.password})[0] == 200
+        return super().login(self.username, self.password)
+
+    def session_cookie(self):
+        return next(cookie.value for cookie in self.cookies if cookie.name == 'ee_session')
 
 
 def smoke(fixture):
     fixture.start()
     # 上游路由与嵌入 UI 正常，骨架探针不再随正式应用装配。
-    code, headers, body = fixture.request('GET', '/api/ee/ping', anonymous=True)
+    code, body, headers = fixture.call('/api/ee/ping', method='GET', anonymous=True)
     assert code == 200 and 'text/html' in headers.get('Content-Type', '')  # 上游 SPA fallback
     assert b'"probe_rows"' not in body and b'ee-probe' not in body
     assert headers.get('X-Bifrost-EE') is None
-    code, headers, _ = fixture.request('GET', '/api/version', anonymous=True)
+    code, _, headers = fixture.call('/api/version', method='GET', anonymous=True)
     assert code == 200 and headers.get('X-Bifrost-EE') is None
-    code, headers, body = fixture.request('GET', '/', anonymous=True)
+    code, body, headers = fixture.call('/', method='GET', anonymous=True)
     assert code == 200 and 'text/html' in headers.get('Content-Type', '')
     assert b'x-bifrost-ee' not in body
     with sqlite3.connect(fixture.root / 'config.db') as db:
@@ -121,40 +78,39 @@ def smoke(fixture):
     assert 'ee-probe' not in (fixture.root / 'server.log').read_text()
     assert fixture.state() == {'enabled': False, 'has_logo': False, 'has_icon': False}
     for action in ('update', 'reset'):
-        assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True)[0] == 401
-        assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'x-bf-vk': 'invalid-test-vk'})[0] == 401
-        assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'Authorization': 'Bearer invalid-test-session'})[0] == 401
+        fixture.expect(401, '/api/branding/' + action, {'logo': ''}, anonymous=True)
+        fixture.expect(401, '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'x-bf-vk': 'invalid-test-vk'})
+        fixture.expect(401, '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'Authorization': 'Bearer invalid-test-session'})
     fixture.login()
-    expired_token = next(cookie.value for cookie in fixture.cookies if cookie.name == 'ee_session')
+    expired_token = fixture.session_cookie()
     with sqlite3.connect(fixture.root / 'config.db') as db:
         db.execute("UPDATE ee_identity_sessions SET expires_at='2000-01-01 00:00:00'")
     for action in ('update', 'reset'):
-        assert fixture.request('POST', '/api/branding/' + action, {'logo': ''})[0] == 401
-        assert fixture.request('POST', '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'Authorization': 'Bearer ' + expired_token})[0] == 401
+        fixture.expect(401, '/api/branding/' + action, {'logo': ''})
+        fixture.expect(401, '/api/branding/' + action, {'logo': ''}, anonymous=True, headers={'Authorization': 'Bearer ' + expired_token})
     fixture.login()
     data, icon = png(), JPEG
     payload = {'logo': base64.b64encode(data).decode(), 'icon': base64.b64encode(icon).decode()}
-    assert fixture.request('POST', '/api/branding/update', payload)[0] == 200
+    fixture.expect(200, '/api/branding/update', payload)
     state = fixture.state()
     for slot, expected in [('logo', data), ('icon', icon)]:
-        code, headers, body = fixture.request('GET', state[slot + '_url'], anonymous=True)
+        code, body, headers = fixture.call(state[slot + '_url'], method='GET', anonymous=True)
         assert code == 200 and body == expected and headers.get('X-Content-Type-Options') == 'nosniff'
-        assert fixture.request('GET', state[slot + '_url'], anonymous=True, headers={'If-None-Match': headers['ETag']})[0] == 304
-    assert fixture.request('POST', '/api/branding/update', {'logo': payload['logo'], 'icon': 'invalid'})[0] == 400
+        fixture.expect(304, state[slot + '_url'], method='GET', anonymous=True, headers={'If-None-Match': headers['ETag']})
+    fixture.expect(400, '/api/branding/update', {'logo': payload['logo'], 'icon': 'invalid'})
     assert fixture.state() == state
     basic = base64.b64encode(f'{fixture.username}:{fixture.password}'.encode()).decode()
-    assert fixture.request('POST', '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Basic ' + basic})[0] == 401
-    token = next(cookie.value for cookie in fixture.cookies if cookie.name == 'ee_session')
-    assert fixture.request('POST', '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Bearer ' + token})[0] == 401
+    fixture.expect(401, '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Basic ' + basic})
+    fixture.expect(401, '/api/branding/update', {'icon': payload['icon']}, anonymous=True, headers={'Authorization': 'Bearer ' + fixture.session_cookie()})
     state = fixture.state()
     fixture.stop()
     fixture.start()
     assert fixture.state() == state, 'restart changed image state'
-    assert fixture.request('GET', state['logo_url'], anonymous=True)[2] == data
+    assert fixture.call(state['logo_url'], method='GET', anonymous=True)[1] == data
     fixture.login()
-    assert fixture.request('POST', '/api/branding/reset')[0] == 200
+    fixture.expect(200, '/api/branding/reset', {})
     assert not fixture.state()['enabled']
-    assert fixture.request('GET', state['logo_url'], anonymous=True)[0] == 404
+    fixture.expect(404, state['logo_url'], method='GET', anonymous=True)
     fixture.stop()
     fixture.start()
     assert not fixture.state()['enabled'], 'reset was not persistent'
@@ -180,7 +136,7 @@ def main():
                     info.write_text(json.dumps({'url': fixture.url, 'root': str(fixture.root), 'username': fixture.username, 'password': fixture.password}))
                     os.chmod(info, 0o600)
                 print('Browser fixture ready at ' + fixture.url, flush=True)
-                while fixture.proc.poll() is None:
+                while fixture.process.poll() is None:
                     time.sleep(0.5)
             else:
                 smoke(fixture)

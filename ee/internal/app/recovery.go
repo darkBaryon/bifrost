@@ -20,6 +20,9 @@ import (
 	"golang.org/x/term"
 )
 
+// maxPasswordLineBytes 是从 stdin 读一行密码的上限：最长可接受的密码加行尾的 CRLF；更长的输入读到上限即止，随后被密码规则拒绝。
+const maxPasswordLineBytes = int64(identity.MaxPasswordBytes + len("\r\n"))
+
 // RecoverAdmin 只恢复已经存在的chief；调用者须先停止全部使用该库的实例。
 func RecoverAdmin(args []string) error {
 	if len(args) == 0 || args[0] != "recover-admin" {
@@ -68,7 +71,7 @@ func RecoverAdmin(args []string) error {
 	if e != nil {
 		return e
 	}
-	svc, e := newIdentityService(store.DB(), options)
+	svc, e := newIdentityService(store.DB(), options, log)
 	if e != nil {
 		return e
 	}
@@ -82,7 +85,7 @@ func RecoverAdmin(args []string) error {
 		}
 		password = string(raw)
 	} else {
-		raw, err := bufio.NewReader(io.LimitReader(os.Stdin, 1025)).ReadString('\n')
+		raw, err := bufio.NewReader(io.LimitReader(os.Stdin, maxPasswordLineBytes)).ReadString('\n')
 		if err != nil && err != io.EOF {
 			return errors.New("cannot read password")
 		}

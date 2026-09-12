@@ -15,16 +15,25 @@ import (
 )
 
 // Bootstrap 取代上游 main 里的 s.Bootstrap(ctx) 调用：先注入身份装配工厂，再执行上游装配，最后接入品牌。
-func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer) error {
+// log 是入口按 -log-level/-log-style 配置好的宿主 logger，EE 自有代码的日志都经它输出。
+func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log schemas.Logger) error {
 	var auth *eehost.AuthAdapter
-	// 宿主在认证依赖就绪后、注册管理路由前调用该工厂。
+	// 宿主在认证依赖就绪后、注册管理路由前调用该工厂。失败时返回真正的 nil 接口，
+	// 不把 nil 指针装进接口，宿主的 provider 为 nil 判定才能生效。
 	s.ConsoleAuthFactory = func(ctx context.Context, host *bifrostServer.BifrostHTTPServer) (bifrostServer.ConsoleAuthProvider, error) {
-		var err error
-		auth, err = assembleIdentity(ctx, host)
-		return auth, err
+		adapter, err := assembleIdentity(ctx, host, log)
+		if err != nil {
+			return nil, err
+		}
+		auth = adapter
+		return adapter, nil
 	}
 	if err := s.Bootstrap(ctx); err != nil {
 		return err
+	}
+	// 宿主 Bootstrap 无条件调用工厂；若上游改变这一点，这里在启动期明确失败，而不是请求期解引用 nil。
+	if auth == nil {
+		return errors.New("ee: console auth factory was not invoked by the host")
 	}
 	return attach(ctx, s, auth.APIMiddleware())
 }
@@ -38,9 +47,6 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schema
 	db := s.Config.ConfigStore.DB()
 	if db == nil {
 		return errors.New("ee: config store returned a nil *gorm.DB")
-	}
-	if auth == nil {
-		return errors.New("ee: branding requires admin authentication middleware")
 	}
 	// 复用上游配置数据库，由品牌存储适配负责自己的表迁移。
 	if err := s.Config.ConfigStore.RunMigration(ctx, eeconfig.MigrateBranding); err != nil {

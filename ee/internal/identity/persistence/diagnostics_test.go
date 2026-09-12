@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,17 +17,21 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-func captureDiagnostics(t *testing.T) *bytes.Buffer {
-	t.Helper()
-	var b bytes.Buffer
-	old := log.Writer()
-	log.SetOutput(&b)
-	t.Cleanup(func() { log.SetOutput(old) })
-	return &b
+// recordedLogs 代替宿主 logger 收集存储诊断，每次 Error 追加一行。
+type recordedLogs struct{ bytes.Buffer }
+
+func (r *recordedLogs) Error(msg string, args ...any) { fmt.Fprintf(r, msg+"\n", args...) }
+
+// captureDiagnostics 清空并返回 store 注入的诊断记录，供随后的断言读取。
+func captureDiagnostics(store *Store) *bytes.Buffer {
+	r := store.log.(*recordedLogs)
+	r.Reset()
+	return &r.Buffer
 }
+
 func TestSafeDiagnostics(t *testing.T) {
-	s, _, db, admin := fixture(t)
-	output := captureDiagnostics(t)
+	s, store, db, admin := fixture(t)
+	output := captureDiagnostics(store)
 	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.change-password")
 	_, id := identity.DiagnosticOperation(ctx)
 	secret := "credential-that-must-never-be-logged"
@@ -58,6 +62,7 @@ func TestSafeDiagnostics(t *testing.T) {
 		t.Fatal("query failure not diagnosed")
 	}
 }
+
 func TestMigrationRetriesSQLiteBusyAtomically(t *testing.T) {
 	db, e := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "busy.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if e != nil {
@@ -74,17 +79,18 @@ func TestMigrationRetriesSQLiteBusyAtomically(t *testing.T) {
 			}
 		}
 	})
-	if e = MigrateIdentity(context.Background(), db); e != nil {
+	logs := &recordedLogs{}
+	if e = MigrateIdentity(logs)(context.Background(), db); e != nil {
 		t.Fatal(e)
 	}
 	if attempts != 2 {
 		t.Fatalf("expected a full retry, attempts=%d", attempts)
 	}
-	state, e := NewStore(db).State(context.Background())
+	state, e := NewStore(db, logs).State(context.Background())
 	if e != nil || state.Initialized {
 		t.Fatal("partial or duplicate initialization", e)
 	}
-	if e = MigrateIdentity(context.Background(), db); e != nil {
+	if e = MigrateIdentity(logs)(context.Background(), db); e != nil {
 		t.Fatal("migration not idempotent", e)
 	}
 	if attempts != 2 {
@@ -99,7 +105,7 @@ func TestMigrationBusyExhaustionPreservesFailure(t *testing.T) {
 	}
 	sql, _ := db.DB()
 	defer sql.Close()
-	output := captureDiagnostics(t)
+	logs := &recordedLogs{}
 	attempts := 0
 	db.Callback().Create().Before("gorm:create").Register("fail:always-busy", func(tx *gorm.DB) {
 		if tx.Statement.Table == "ee_identity_state" {
@@ -108,14 +114,14 @@ func TestMigrationBusyExhaustionPreservesFailure(t *testing.T) {
 		}
 	})
 	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.bootstrap")
-	if err = MigrateIdentity(ctx, db); !sqliteBusy(err) || attempts != 3 {
+	if err = MigrateIdentity(logs)(ctx, db); !sqliteBusy(err) || attempts != 3 {
 		t.Fatalf("failure lost or retries unbounded: attempts=%d", attempts)
 	}
 	if db.Migrator().HasTable(&accountRow{}) || db.Migrator().HasTable(&stateRow{}) {
 		t.Fatal("failed migration left partial identity tables")
 	}
 	for _, field := range []string{"operation=identity.bootstrap", "stage=migration", "kind=sqlite", "code=5/517"} {
-		if !strings.Contains(output.String(), field) {
+		if !strings.Contains(logs.String(), field) {
 			t.Fatalf("missing safe migration diagnostic %s", field)
 		}
 	}

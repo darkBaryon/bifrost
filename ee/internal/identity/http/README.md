@@ -4,7 +4,8 @@
 
 | 文件 | 职责 |
 |---|---|
-| [handler.go](handler.go) | 路由表（`OwnsRoute` 与 `RegisterRoutes` 共用）、端点共同的前置规则、同源与 Cookie、错误映射、各端点适配 |
+| [handler.go](handler.go) | 路由表（`OwnsRoute` 与 `RegisterRoutes` 共用）、端点共同的前置规则、各端点适配 |
+| [protocol.go](protocol.go) | 协议管道：部署 origin 校验、同源检查、Cookie、严格 JSON 解码、错误映射 |
 | [dto.go](dto.go) | 请求与响应结构、业务类型到响应字段的转换 |
 | [handler_test.go](handler_test.go) | 严格 JSON 限制、错误映射与序列化降级契约 |
 

@@ -5,10 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
@@ -19,8 +17,6 @@ import (
 	"github.com/maximhq/bifrost/framework/temptoken"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/maximhq/bifrost/transports/bifrost-http/server"
-	"github.com/tidwall/gjson"
-	"github.com/tidwall/sjson"
 	"github.com/valyala/fasthttp"
 )
 
@@ -38,9 +34,14 @@ func NewAuthAdapter(host *server.BifrostHTTPServer, service *identity.Service, h
 	return &AuthAdapter{service: service, http: handler, host: host}
 }
 
+// Logger 是本包需要的日志能力，由 app 注入宿主 logger；消息为 printf 风格。
+type Logger interface {
+	Info(msg string, args ...any)
+}
+
 // ImportLegacyAdministrator 在身份未初始化时，把宿主已解析的旧管理员凭据导入为主管理员；已初始化时不读取旧配置。
 // 宿主会忽略残缺的文件凭据，所以先直接检查配置文件：残缺或未解析的输入拒绝启动，不能当作空实例开放初始化。
-func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServer, service *identity.Service) error {
+func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServer, service *identity.Service, log Logger) error {
 	state, err := service.State(ctx)
 	if err != nil {
 		return err
@@ -71,9 +72,9 @@ func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServ
 		return errors.New("legacy administrator password is not a supported bcrypt hash")
 	}
 	if storedUser, storedHash := credential(stored); storedUser == username && storedHash == hash {
-		log.Print("EE identity: imported resolved host administrator snapshot matching stored database credentials")
+		log.Info("EE identity: imported resolved host administrator snapshot matching stored database credentials")
 	} else {
-		log.Print("EE identity: imported resolved host administrator snapshot; stored legacy credentials differ")
+		log.Info("EE identity: imported resolved host administrator snapshot; stored legacy credentials differ")
 	}
 	return nil
 }
@@ -201,6 +202,8 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			var p identity.Principal
 			var err error
 			if path == "/ws" {
+				// 握手比普通 POST 更严：浏览器发起 WebSocket 必然带 Origin，因此只接受精确 Origin，
+				// 不像 SameOrigin 那样接受同源 Referer 兜底（方案 4.5）。
 				if string(c.Request.Header.Peek("Origin")) != a.http.Origin() {
 					identityhttp.Error(c, identity.ErrForbidden)
 					return
@@ -254,90 +257,6 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			next(c)
 		}
 	}
-}
-
-// serveConfig 对 GET 用只读投影替换响应中的旧认证字段，对 PUT 先预检再剔除认证字段交给宿主。
-func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p identity.Principal, next fasthttp.RequestHandler) {
-	projection, err := a.projection(ctx, p)
-	if err != nil {
-		identityhttp.Error(c, err)
-		return
-	}
-	if c.IsPut() {
-		if err = a.checkConfig(c, projection); err != nil {
-			identityhttp.Error(c, err)
-			return
-		}
-	}
-	next(c)
-	if c.IsGet() && c.Response.StatusCode() == fasthttp.StatusOK {
-		body, err := sjson.SetBytes(c.Response.Body(), "auth_config", projection)
-		if err == nil {
-			body, err = sjson.SetBytes(body, "client_config.whitelisted_routes", []string{})
-		}
-		if err != nil {
-			identityhttp.Error(c, identity.ErrUnavailable)
-			return
-		}
-		c.Response.SetBody(body)
-	}
-}
-
-// projection 是旧 auth_config 的只读投影：认证启用、主管理员登录名、脱敏密码。
-func (a *AuthAdapter) projection(ctx context.Context, p identity.Principal) (map[string]any, error) {
-	account, err := a.service.Me(ctx, p)
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"is_enabled": true, "admin_username": schemas.NewSecretVar(account.Username), "admin_password": schemas.NewSecretVar("<redacted>")}, nil
-}
-
-// checkConfig 拒绝对旧认证或免认证白名单的任何实际修改（整请求 409），同值回送则剔除 auth_config 后放行。
-// 宿主 JSON 字段不区分大小写，因此安全字段的大小写别名一律 400，保持预检与实际解析一致。
-func (a *AuthAdapter) checkConfig(c *fasthttp.RequestCtx, projection map[string]any) error {
-	body := c.PostBody()
-	var root map[string]json.RawMessage
-	if json.Unmarshal(body, &root) != nil {
-		return identity.ErrInvalid
-	}
-	for key := range root {
-		if (strings.EqualFold(key, "auth_config") && key != "auth_config") || (strings.EqualFold(key, "client_config") && key != "client_config") {
-			return identity.ErrInvalid
-		}
-	}
-	if raw, ok := root["client_config"]; ok {
-		var client map[string]json.RawMessage
-		if json.Unmarshal(raw, &client) != nil {
-			return identity.ErrInvalid
-		}
-		for key := range client {
-			if strings.EqualFold(key, "whitelisted_routes") && key != "whitelisted_routes" {
-				return identity.ErrInvalid
-			}
-		}
-	}
-	if err := identityhttp.ValidateJSONObject(body); err != nil {
-		return err
-	}
-	if v := gjson.GetBytes(body, "auth_config"); v.Exists() {
-		var provided, expected any
-		b, err := json.Marshal(projection)
-		if err != nil {
-			return identity.ErrUnavailable
-		}
-		if json.Unmarshal([]byte(v.Raw), &provided) != nil || json.Unmarshal(b, &expected) != nil || !reflect.DeepEqual(provided, expected) {
-			return identity.ErrConflict
-		}
-	}
-	if v := gjson.GetBytes(body, "client_config.whitelisted_routes"); v.Exists() && (!v.IsArray() || len(v.Array()) != 0) {
-		return identity.ErrConflict
-	}
-	b, err := sjson.DeleteBytes(body, "auth_config")
-	if err != nil {
-		return identity.ErrInvalid
-	}
-	c.Request.SetBody(b)
-	return nil
 }
 
 var _ server.ConsoleAuthProvider = (*AuthAdapter)(nil)

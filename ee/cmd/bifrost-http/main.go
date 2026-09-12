@@ -110,7 +110,7 @@ func main() {
 
 	ctx := context.Background()
 	t := time.Now()
-	err := eeApp.Bootstrap(ctx, server) // ee: 上游 Bootstrap → EE 业务装配
+	err := eeApp.Bootstrap(ctx, server, logger) // ee: 上游 Bootstrap → EE 业务装配，EE 日志复用同一 logger
 	if err != nil {
 		logger.Error("failed to bootstrap server: %v", err)
 		os.Exit(1)

@@ -1,4 +1,4 @@
-// 本文件定义六张身份表的行结构及其与业务类型的转换，并实现读取、事务、限流与分页。
+// 本文件实现读取、锁定 state 的事务、限流预占与分页；六张表的行结构见 rows.go。
 //
 // Package persistence 通过共享配置数据库实现身份存储及原子操作。
 package persistence
@@ -19,115 +19,11 @@ import (
 	"gorm.io/gorm/logger"
 )
 
-// 行结构的字段名决定列名；ee_identity_v1 迁移按当前定义建表，改字段就是改表结构，须走新的迁移版本。
-
-type accountRow struct {
-	ID                 string `gorm:"primaryKey"`
-	Username           string
-	DisplayName        string
-	Status             string
-	MustChangePassword bool
-	PasswordHash       string
-	AuthVersion        int64
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
-}
-
-func (accountRow) TableName() string { return "ee_identity_accounts" }
-
-func (r accountRow) credential() identity.Credential {
-	return identity.Credential{
-		Account: identity.Account{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
-			Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword},
-		PasswordHash: r.PasswordHash, AuthVersion: r.AuthVersion, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-	}
-}
-
-func accountRowOf(c identity.Credential) accountRow {
-	return accountRow{ID: c.ID, Username: c.Username, DisplayName: c.DisplayName, Status: string(c.Status),
-		MustChangePassword: c.MustChangePassword, PasswordHash: c.PasswordHash, AuthVersion: c.AuthVersion,
-		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
-}
-
-// stateRow 是 ID 固定为 1 的单例；Revision 只用于在事务开始时取得写锁。
-type stateRow struct {
-	ID             int `gorm:"primaryKey"`
-	Initialized    bool
-	ChiefAccountID string
-	Revision       int64
-}
-
-func (stateRow) TableName() string { return "ee_identity_state" }
-
-type sessionRow struct {
-	ID                string `gorm:"primaryKey"`
-	TokenHash         string
-	AccountID         string
-	IssuedAuthVersion int64
-	ExpiresAt         time.Time
-	CreatedAt         time.Time
-	RevokedAt         *time.Time
-}
-
-func (sessionRow) TableName() string { return "ee_identity_sessions" }
-
-func sessionRowOf(s identity.Session) sessionRow {
-	return sessionRow{ID: s.ID, TokenHash: s.TokenHash, AccountID: s.AccountID, IssuedAuthVersion: s.IssuedAuthVersion,
-		ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt, RevokedAt: s.RevokedAt}
-}
-
-type eventRow struct {
-	ID          string `gorm:"primaryKey"`
-	OperationID string
-	ActorID     string
-	TargetID    string
-	ActorName   string
-	TargetName  string
-	Action      string
-	Result      string
-	ReasonCode  string
-	OccurredAt  time.Time
-}
-
-func (eventRow) TableName() string { return "ee_identity_password_events" }
-
-func (r eventRow) event() identity.PasswordEvent {
-	return identity.PasswordEvent{ID: r.ID, OperationID: r.OperationID, ActorID: r.ActorID, TargetID: r.TargetID,
-		ActorName: r.ActorName, TargetName: r.TargetName, Action: identity.EventAction(r.Action),
-		Result: identity.EventResult(r.Result), ReasonCode: r.ReasonCode, OccurredAt: r.OccurredAt}
-}
-
-func eventRowOf(e identity.PasswordEvent) eventRow {
-	return eventRow{ID: e.ID, OperationID: e.OperationID, ActorID: e.ActorID, TargetID: e.TargetID, ActorName: e.ActorName,
-		TargetName: e.TargetName, Action: string(e.Action), Result: string(e.Result), ReasonCode: e.ReasonCode, OccurredAt: e.OccurredAt}
-}
-
-// ticketRow 以票据摘要为主键；ConsumedAt 由 UPDATE 条件保证多节点只消费一次。
-type ticketRow struct {
-	Hash       string `gorm:"primaryKey"`
-	SessionID  string
-	ExpiresAt  time.Time
-	ConsumedAt *time.Time
-}
-
-func (ticketRow) TableName() string { return "ee_identity_ws_tickets" }
-
-// limitRow 是一个登录限流桶，Key 形如 "ip:<摘要>" 或 "name:<摘要>"。
-type limitRow struct {
-	Key         string    `gorm:"primaryKey"`
-	WindowStart time.Time `gorm:"index"`
-	Count       int
-}
-
-func (limitRow) TableName() string { return "ee_identity_login_limits" }
-
-// limitRetention 是限流桶的保留期，远大于任何登录窗口，只用于顺带清理旧桶。
-const limitRetention = time.Hour
-
 // Passwords 复用宿主 bcrypt，超过算法上限的密码由业务层拒绝而不是截断。
 type Passwords struct{}
 
-func (Passwords) Hash(p string) (string, error)     { return encrypt.Hash(p) }
+func (Passwords) Hash(p string) (string, error) { return encrypt.Hash(p) }
+
 func (Passwords) Compare(h, p string) (bool, error) { return encrypt.CompareHash(h, p) }
 
 // bcryptHashPattern 补充 bcrypt.Cost 只解析版本和 cost 的不足，要求完整的 22 字节盐与 31 字节摘要。
@@ -140,11 +36,14 @@ func (Passwords) ValidHash(h string) bool {
 }
 
 // Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
-type Store struct{ db *gorm.DB }
+type Store struct {
+	db  *gorm.DB
+	log Logger
+}
 
-// NewStore 复用宿主的数据库连接。
-func NewStore(db *gorm.DB) *Store {
-	return &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})}
+// NewStore 复用宿主的数据库连接；存储故障经 log 记录安全诊断。
+func NewStore(db *gorm.DB, log Logger) *Store {
+	return &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}), log: log}
 }
 
 func notFound(err error) error {
@@ -172,13 +71,13 @@ func conflict(err error) error {
 func (s *Store) State(ctx context.Context) (identity.State, error) {
 	var r stateRow
 	err := s.db.WithContext(ctx).First(&r, 1).Error
-	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(logDatabaseFailure(ctx, "state.read", err))
+	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(logDatabaseFailure(s.log, ctx, "state.read", err))
 }
 
 func (s *Store) CredentialByName(ctx context.Context, name string) (identity.Credential, error) {
 	var r accountRow
 	err := s.db.WithContext(ctx).Where("username = ?", name).First(&r).Error
-	return r.credential(), notFound(logDatabaseFailure(ctx, "account.read", err))
+	return r.credential(), notFound(logDatabaseFailure(s.log, ctx, "account.read", err))
 }
 
 // authRow 是账号与会话联合查询的结果；账号列由 GORM 按导出字段展开，会话列用 session_ 前缀避免同名。
@@ -215,12 +114,12 @@ func authRecord(db *gorm.DB, column, value string) (identity.AuthRecord, error) 
 
 func (s *Store) AuthByHash(ctx context.Context, hash string) (identity.AuthRecord, error) {
 	v, err := authRecord(s.db.WithContext(ctx), "s.token_hash", hash)
-	return v, logDatabaseFailure(ctx, "session.read", err)
+	return v, logDatabaseFailure(s.log, ctx, "session.read", err)
 }
 
 func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, error) {
 	v, err := authRecord(s.db.WithContext(ctx), "s.id", id)
-	return v, logDatabaseFailure(ctx, "session.read", err)
+	return v, logDatabaseFailure(s.log, ctx, "session.read", err)
 }
 
 // transaction 实现 identity.Tx；stage 记录最近执行的操作，供失败诊断定位阶段。
@@ -353,10 +252,10 @@ func (s *Store) transaction(ctx context.Context, fn func(*transaction) error) er
 		})
 	})
 	if sqliteBusy(err) {
-		logDatabaseFailure(ctx, phase, err)
+		logDatabaseFailure(s.log, ctx, phase, err)
 		return identity.ErrUnavailable
 	}
-	return logDatabaseFailure(ctx, phase, err)
+	return logDatabaseFailure(s.log, ctx, phase, err)
 }
 
 // ReserveLogin 在一个事务里为每个桶预占一次：窗口过期则重开，达到上限返回 ErrLimited 并回滚全部预占。
@@ -400,7 +299,7 @@ func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]ident
 	for _, r := range rows {
 		out = append(out, r.credential())
 	}
-	return out, logDatabaseFailure(ctx, "accounts.list", err)
+	return out, logDatabaseFailure(s.log, ctx, "accounts.list", err)
 }
 
 func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n int) ([]identity.PasswordEvent, error) {
@@ -417,7 +316,7 @@ func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n 
 	for _, r := range rows {
 		out = append(out, r.event())
 	}
-	return out, logDatabaseFailure(ctx, "password_events.list", err)
+	return out, logDatabaseFailure(s.log, ctx, "password_events.list", err)
 }
 
 var _ identity.Repository = (*Store)(nil)

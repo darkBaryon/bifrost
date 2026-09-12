@@ -31,12 +31,13 @@ make -C ee help
 make -C ee dev     # EE API，默认 8080；前端开发服务器另行启动
 make -C ee build   # 构建并嵌入 UI，输出 ee/tmp/bifrost-http
 make -C ee test    # EE 模块的 go vet + go test
-make -C ee smoke   # 构建并执行隔离冒烟
+make -C ee smoke            # 构建并执行隔离冒烟：品牌 + SQLite 身份
+make -C ee smoke-identity   # 双节点 PostgreSQL 身份冒烟，需要 IDENTITY_TEST_POSTGRES_DSN
 ```
 
 首次前端构建先在根 `ui/` 执行 `npm ci`。workspace 目标将 EE 加入根 go.work（缺失时初始化），dev/build 同步前端覆盖层。构建产物位于 `cmd/bifrost-http/ui/`，不入库。
 
-冒烟使用临时配置、随机端口和自有进程，验证宿主接入、品牌操作与重启保留。骨架探针接口、空插件、表注册和页面/响应标记已移除；已有数据库中的旧测试表不再使用。
+冒烟使用临时配置、随机端口和自有进程：品牌冒烟验证宿主接入、品牌操作与重启保留，身份冒烟验证初始化竞争、账号与密码流程、跨节点撤销、WS 与离线恢复；两者共用 `scripts/identity-smoke.py` 里的进程夹具。骨架探针接口、空插件、表注册和页面/响应标记已移除；已有数据库中的旧测试表不再使用。
 
 ## 账号认证
 

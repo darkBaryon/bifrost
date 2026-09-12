@@ -207,15 +207,20 @@ type LoginLimit struct {
 }
 
 // Repository 由存储实现；读取方法在事务外执行，写入通过 Transaction。
+// 读取未找到时返回 ErrNotFound，同时返回的值是零值，调用方不得使用；存储故障原样返回，由服务折叠为 ErrUnavailable。
 type Repository interface {
+	// State 读取单例状态；迁移完成后该行必然存在。
 	State(context.Context) (State, error)
+	// CredentialByName 按登录名读取完整账号记录。
 	CredentialByName(context.Context, string) (Credential, error)
+	// AuthByHash 按 token 摘要一次读出会话及其账号；AuthByID 按会话 ID 读出同样的记录。
 	AuthByHash(context.Context, string) (AuthRecord, error)
 	AuthByID(context.Context, string) (AuthRecord, error)
 	// Transaction 在锁定 state 的事务中执行 fn；fn 返回错误则整体回滚。
 	Transaction(context.Context, func(Tx) error) error
 	// ReserveLogin 原子地为全部桶各预占一次；任一桶超限返回 ErrLimited 且不预占。
 	ReserveLogin(context.Context, []LoginLimit, time.Time) error
+	// Accounts 从游标之后按创建时间与 ID 倒序读取最多 n 条；游标为零值表示从头开始。
 	Accounts(context.Context, Cursor, int) ([]Credential, error)
 	// Events 按目标账号筛选，target 为空表示全部。
 	Events(context.Context, string, Cursor, int) ([]PasswordEvent, error)

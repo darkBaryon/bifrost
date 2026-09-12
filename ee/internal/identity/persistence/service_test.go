@@ -49,10 +49,11 @@ func testStore(t *testing.T) (*Store, *gorm.DB) {
 		t.Fatal(e)
 	}
 	t.Cleanup(func() { sql.Close() })
-	if err = MigrateIdentity(context.Background(), db); err != nil {
+	logs := &recordedLogs{}
+	if err = MigrateIdentity(logs)(context.Background(), db); err != nil {
 		t.Fatal(err)
 	}
-	return NewStore(db), db
+	return NewStore(db, logs), db
 }
 func newService(t *testing.T, store *Store) *identity.Service {
 	t.Helper()
@@ -399,7 +400,7 @@ func TestTransactionAndMigrationRollback(t *testing.T) {
 	if e = db.Exec("CREATE TABLE ee_identity_sessions (sentinel integer)").Error; e != nil {
 		t.Fatal(e)
 	}
-	if e = MigrateIdentity(ctx, db); e == nil {
+	if e = MigrateIdentity(store.log)(ctx, db); e == nil {
 		t.Fatal("broken migration succeeded")
 	}
 	if db.Migrator().HasTable("ee_identity_accounts") || db.Migrator().HasTable("ee_identity_state") {
@@ -412,14 +413,14 @@ func TestTransactionAndMigrationRollback(t *testing.T) {
 	if e = db.Exec("DROP TABLE ee_identity_sessions").Error; e != nil {
 		t.Fatal(e)
 	}
-	if e = MigrateIdentity(ctx, db); e != nil {
+	if e = MigrateIdentity(store.log)(ctx, db); e != nil {
 		t.Fatal("migration cannot recover", e)
 	}
 }
 
 func TestDeferredCommitFailure(t *testing.T) {
-	output := captureDiagnostics(t)
 	s, store, db, admin := fixture(t)
+	output := captureDiagnostics(store)
 	ctx := context.Background()
 	for _, sql := range []string{"CREATE TABLE failure_parent (id integer PRIMARY KEY)", "CREATE TABLE failure_child (parent_id integer REFERENCES failure_parent(id) DEFERRABLE INITIALLY DEFERRED)"} {
 		if e := db.Exec(sql).Error; e != nil {

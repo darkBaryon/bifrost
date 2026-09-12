@@ -26,6 +26,12 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// quietLogger 丢弃存储诊断与导入提示；本文件的用例不断言日志。
+type quietLogger struct{}
+
+func (quietLogger) Error(string, ...any) {}
+func (quietLogger) Info(string, ...any)  {}
+
 func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
 	t.Helper()
 	db, e := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "auth.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
@@ -35,10 +41,10 @@ func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
 	sql, _ := db.DB()
 	t.Cleanup(func() { sql.Close() })
 	ctx := context.Background()
-	if e = persistence.MigrateIdentity(ctx, db); e != nil {
+	if e = persistence.MigrateIdentity(quietLogger{})(ctx, db); e != nil {
 		t.Fatal(e)
 	}
-	s, e := identity.NewService(persistence.NewStore(db), persistence.Passwords{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
+	s, e := identity.NewService(persistence.NewStore(db, quietLogger{}), persistence.Passwords{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}

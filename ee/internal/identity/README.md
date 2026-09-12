@@ -5,7 +5,9 @@
 | 文件或目录 | 职责 |
 |---|---|
 | [model.go](model.go) | 业务类型、对外枚举与业务限制的命名常量、业务错误、存储/哈希/策略接口、诊断关联 |
-| [service.go](service.go) | 初始化、旧账号导入、登录与撤销、改密、启停、幂等重置、离线恢复、分页查询与 WS 票据 |
+| [service.go](service.go) | 服务构造、共享辅助函数与会话规则：登录签发、验证、重验、登出、WS 票据 |
+| [accounts.go](accounts.go) | 账号操作：旧账号导入、初始化、建号、启停、分页列表 |
+| [passwords.go](passwords.go) | 密码变更三条路径（本人改密、管理员重置、离线恢复）与密码事件查询 |
 | [http/](http/README.md) | 路由、严格 JSON、同源检查、Cookie 与请求/响应结构 |
 | [persistence/](persistence/README.md) | 共享数据库上的行结构、迁移、事务与限流 |
 

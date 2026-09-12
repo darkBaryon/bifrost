@@ -151,3 +151,15 @@ convert_when: "任一功能(集群广播、日志脱敏映射、治理路由整�
 
 - FIND-013 转入本案：用户明确要求移除骨架探针，已删除接口、空插件、表注册及响应/页面标记；既有数据库旧表不再使用，不执行删表。
 - FIND-015 转入本案：删除旧 smoke.sh，make smoke 使用自建临时配置、随机端口和仅清理自有 PID 的品牌冒烟。
+
+## 账号认证（2026-09-12，收敛评审5）
+
+```yaml
+id: FIND-017
+status: 观察中
+triggered_by: [账号认证]
+evidence: "SQLite busy/locked 整笔重试在 ee/internal/branding/persistence/migration.go 与 ee/internal/identity/persistence/diagnostics.go 各一份，参数已分别命名并互相注明；两个模块的迁移独立演进，不为 10 行驱动兼容代码建共享包；来源:收敛评审5 取舍项 B"
+convert_when: "第三个模块需要同样的 busy 重试，或两份策略出现实质分叉时，提取为 EE 内共享的小包"
+```
+
+- 取舍项 A（品牌冒烟复用身份冒烟的进程夹具）、C（配置投影注释与 RBAC 替换提示）、D（`make smoke` 接入身份冒烟）均已采纳，不挂账。

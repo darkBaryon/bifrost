@@ -19,22 +19,34 @@ const brandingMigrationID = "ee_branding_v1"
 // 它必须保持稳定，并与上游 framework/configstore/migrations.go 中的迁移锁键不同。
 const brandingAdvisoryLockKey = 8342761901
 
+// SQLite 锁冲突最多整笔重试 busyRetries 次，间隔按次数递增。
+// 与 identity/persistence 的 retryBusy 是同一条驱动兼容规则；两个模块的迁移各自独立，不互相依赖，改动时须同步。
+const (
+	busyRetries   = 3
+	busyRetryStep = 20 * time.Millisecond
+)
+
 // MigrateBranding 使用 ConfigStore.RunMigration 提供的连接执行品牌迁移。
-// 表、初始单例和版本记录由同一个外层事务提交或回滚。
+// 表、初始单例和版本记录由同一个外层事务提交或回滚；只对 SQLite busy/locked 整笔重试，耗尽后返回最后一次错误。
 func MigrateBranding(ctx context.Context, db *gorm.DB) error {
-	for attempt := 0; ; attempt++ {
-		err := migrateBrandingOnce(ctx, db)
-		var busy sqlite3.Error
-		if attempt == 2 || !errors.As(err, &busy) || (busy.Code != sqlite3.ErrBusy && busy.Code != sqlite3.ErrLocked) {
+	var err error
+	for attempt := 0; attempt < busyRetries; attempt++ {
+		if err = migrateBrandingOnce(ctx, db); !sqliteBusy(err) {
 			return err
 		}
 		// 宿主后台写入可能令SQLite读事务无法升级为写事务；先回滚再整笔重试。
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
+		case <-time.After(time.Duration(attempt+1) * busyRetryStep):
 		}
 	}
+	return err
+}
+
+func sqliteBusy(err error) bool {
+	var busy sqlite3.Error
+	return errors.As(err, &busy) && (busy.Code == sqlite3.ErrBusy || busy.Code == sqlite3.ErrLocked)
 }
 
 func migrateBrandingOnce(ctx context.Context, db *gorm.DB) error {

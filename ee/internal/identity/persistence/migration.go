@@ -17,10 +17,12 @@ const identityMigrationID = "ee_identity_v1"
 // 上游 framework/configstore/migrations.go 的锁键不同。
 const identityMigrationLock int64 = 8342761902
 
-// MigrateIdentity 建立六张身份表、索引和 state 单例；表、单例与版本记录在同一事务提交或回滚。
-// SQLite 锁冲突整笔重试，耗尽后返回原始错误，由调用方决定是否拒绝启动。
-func MigrateIdentity(ctx context.Context, db *gorm.DB) error {
-	return logDatabaseFailure(ctx, "migration", retryBusy(ctx, func() error { return migrateIdentityOnce(ctx, db) }))
+// MigrateIdentity 返回可交给 ConfigStore.RunMigration 的迁移函数：建立六张身份表、索引和 state 单例，
+// 表、单例与版本记录在同一事务提交或回滚。SQLite 锁冲突整笔重试，耗尽后返回原始错误，由调用方决定是否拒绝启动。
+func MigrateIdentity(log Logger) func(context.Context, *gorm.DB) error {
+	return func(ctx context.Context, db *gorm.DB) error {
+		return logDatabaseFailure(log, ctx, "migration", retryBusy(ctx, func() error { return migrateIdentityOnce(ctx, db) }))
+	}
 }
 
 func migrateIdentityOnce(ctx context.Context, db *gorm.DB) error {

@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
@@ -15,8 +14,13 @@ import (
 	"gorm.io/gorm"
 )
 
+// Logger 是本包需要的日志能力，由 app 注入宿主按部署配置好的 logger；消息为 printf 风格。
+type Logger interface {
+	Error(msg string, args ...any)
+}
+
 // logDatabaseFailure 在 err 是存储故障时写一行诊断日志，然后原样返回 err；业务错误与未找到不记录。
-func logDatabaseFailure(ctx context.Context, stage string, err error) error {
+func logDatabaseFailure(log Logger, ctx context.Context, stage string, err error) error {
 	if err == nil || errors.Is(err, gorm.ErrRecordNotFound) {
 		return err
 	}
@@ -40,7 +44,7 @@ func logDatabaseFailure(ctx context.Context, stage string, err error) error {
 		kind, code = "connection", "closed"
 	}
 	operation, id := identity.DiagnosticOperation(ctx)
-	log.Printf("EE identity database failure operation=%s stage=%s incident_id=%s kind=%s code=%s", operation, stage, id, kind, code)
+	log.Error("EE identity database failure operation=%s stage=%s incident_id=%s kind=%s code=%s", operation, stage, id, kind, code)
 	return err
 }
 
