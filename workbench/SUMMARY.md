@@ -11,6 +11,7 @@
     - [workbench 外壳重设计](reports/workbench外壳重设计.md)
     - [zh 中文化层 TS/mjs 孪生实现收敛](reports/zh中文化层TS-mjs孪生收敛.md)
     - [品牌后端简化](reports/品牌后端简化.md)
+    - [国内定价](reports/国内定价.md)
     - [工作台代码风格与评审指引](reports/工作台代码风格与评审指引.md)
     - [收敛评审代码质量职责](reports/收敛评审代码质量职责.md)
     - [活跃工作台不再显示被取代的旧方案版本](reports/活跃工作台取代版本过滤.md)
