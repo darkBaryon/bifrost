@@ -73,3 +73,52 @@ func TestLoadExternalAndMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestEmbeddedPriceFile(t *testing.T) {
+	f, err := Load("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(f.Vendors) != 4 || f.PricingRule != LowestTierStandardRate {
+		t.Fatalf("unexpected embedded catalog: %+v", f)
+	}
+	for _, vendor := range f.Vendors {
+		if vendor.PricePage == "" {
+			t.Fatalf("missing source: %s", vendor.ID)
+		}
+		for _, model := range vendor.Models {
+			if model.CheckedAt == "" || model.Note == "" || strings.Contains(model.Model, "preview") {
+				t.Fatalf("missing audit fields or preview model: %+v", model)
+			}
+		}
+	}
+	// 独立核对 A1 的关键维度，防止把思考价、优惠价或控制台缓存例外导入。
+	floatPointer := func(v float64) *float64 { return &v }
+	checks := map[string]struct {
+		input, output float64
+		cache         *float64
+	}{
+		"qwen-plus":      {0.8, 2, floatPointer(0.16)},
+		"qwen3.8-max":    {12, 36, nil},
+		"glm-4.7":        {2, 8, floatPointer(0.4)},
+		"deepseek-flash": {2, 8, floatPointer(0.04)},
+	}
+	for _, vendor := range f.Vendors {
+		for _, model := range vendor.Models {
+			want, ok := checks[model.Model]
+			if !ok {
+				continue
+			}
+			if model.InputCost != want.input || model.OutputCost != want.output || (model.CacheReadInputCost == nil) != (want.cache == nil) {
+				t.Fatalf("A1 price mismatch: %+v", model)
+			}
+			if want.cache != nil && *model.CacheReadInputCost != *want.cache {
+				t.Fatalf("cache price mismatch: %+v", model)
+			}
+			delete(checks, model.Model)
+		}
+	}
+	if len(checks) != 0 {
+		t.Fatalf("missing checked models: %v", checks)
+	}
+}
