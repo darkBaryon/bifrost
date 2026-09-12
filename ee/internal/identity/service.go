@@ -117,7 +117,7 @@ func (s *Service) validPassword(password string) bool {
 
 // verify 判断会话记录在 at 时刻是否可用：账号存在且启用、会话未撤销未过期、签发版本与当前版本一致。
 func verify(r AuthRecord, at time.Time) (Principal, error) {
-	c, v := r.Credential, r.Session
+	c, v := r.Account, r.Session
 	if c.ID == "" || c.Status != StatusActive || v.RevokedAt != nil || !v.ExpiresAt.After(at) || c.AuthVersion != v.IssuedAuthVersion {
 		return Principal{}, ErrUnauthorized
 	}
@@ -125,19 +125,19 @@ func verify(r AuthRecord, at time.Time) (Principal, error) {
 }
 
 // resolve 把会话读取结果转换为身份；会话不存在同样视为未认证，存储故障折叠为 ErrUnavailable。
-func resolve(r AuthRecord, err error) (Principal, Credential, error) {
+func resolve(r AuthRecord, err error) (Principal, AccountRecord, error) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			return Principal{}, Credential{}, ErrUnauthorized
+			return Principal{}, AccountRecord{}, ErrUnauthorized
 		}
-		return Principal{}, Credential{}, SafeError(err)
+		return Principal{}, AccountRecord{}, SafeError(err)
 	}
 	p, err := verify(r, now())
-	return p, r.Credential, err
+	return p, r.Account, err
 }
 
 // current 重新读取调用方声明的会话，并核对账号与版本未变；事务内外都用这一个实现。
-func current(lookup func(string) (AuthRecord, error), claimed Principal) (Principal, Credential, error) {
+func current(lookup func(string) (AuthRecord, error), claimed Principal) (Principal, AccountRecord, error) {
 	actual, c, err := resolve(lookup(claimed.SessionID))
 	if err == nil && (actual.AccountID != claimed.AccountID || actual.AuthVersion != claimed.AuthVersion) {
 		err = ErrUnauthorized
@@ -145,7 +145,7 @@ func current(lookup func(string) (AuthRecord, error), claimed Principal) (Princi
 	return actual, c, err
 }
 
-func (s *Service) current(ctx context.Context, p Principal) (Principal, Credential, error) {
+func (s *Service) current(ctx context.Context, p Principal) (Principal, AccountRecord, error) {
 	return current(func(id string) (AuthRecord, error) { return s.repo.AuthByID(ctx, id) }, p)
 }
 
@@ -166,7 +166,7 @@ func (s *Service) authorize(state State, p Principal) error {
 }
 
 // manager 在事务内核对调用方仍是正常会话且有账号管理权限，返回其账号记录。
-func (s *Service) manager(tx Tx, p Principal) (Credential, error) {
+func (s *Service) manager(tx Tx, p Principal) (AccountRecord, error) {
 	actual, c, err := current(tx.AuthByID, p)
 	if err != nil {
 		return c, err
@@ -227,7 +227,7 @@ func (s *Service) Login(ctx context.Context, username, password, peerIP string) 
 	if err := s.repo.ReserveLogin(ctx, limits, now()); err != nil {
 		return IssuedSession{}, SafeError(err)
 	}
-	c, err := s.repo.CredentialByName(ctx, username)
+	c, err := s.repo.RecordByName(ctx, username)
 	missing := errors.Is(err, ErrNotFound)
 	if err != nil && !missing {
 		return IssuedSession{}, SafeError(err)
@@ -259,7 +259,7 @@ func (s *Service) Login(ctx context.Context, username, password, peerIP string) 
 		if err = tx.InsertSession(v); err != nil {
 			return err
 		}
-		p, err := verify(AuthRecord{Session: v, Credential: latest}, now())
+		p, err := verify(AuthRecord{Session: v, Account: latest}, now())
 		if err != nil {
 			return err
 		}

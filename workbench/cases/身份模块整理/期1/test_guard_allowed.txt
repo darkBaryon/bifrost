@@ -27,3 +27,5 @@
 ^[-+][[:space:]]*if _, e = s\.(Account\.)?Initialize\(ctx, "setup", "admin", "Admin-password-1"\); e != nil \{$
 ^[-+][[:space:]]*v, e := s\.(Session\.)?Login\(ctx, "admin", "Admin-password-1", "peer"\)$
 ^[-+][[:space:]]*return NewAuthAdapter\(nil, s(\.Session)?, h\), v$
+# —— 小偏差 1（步骤 3a）：Store.CredentialByName→RecordByName 在 service_test.go 有 7 处调用，方案盘点漏列；机械改名，无逻辑变化 ——
+^[-+][[:space:]]*[a-z]+, (_|e) := store\.(Credential|Record)ByName\(ctx, "(alice|bob|admin)"\)$

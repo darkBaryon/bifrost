@@ -21,7 +21,7 @@ func (s *Service) BootstrapLegacy(ctx context.Context, username, passwordHash st
 		if username == "" || !s.hasher.ValidHash(passwordHash) {
 			return ErrInvalid
 		}
-		c := Credential{Account: Account{ID: randomID(), Username: username, Status: StatusActive},
+		c := AccountRecord{Account: Account{ID: randomID(), Username: username, Status: StatusActive},
 			PasswordHash: passwordHash, AuthVersion: 1, CreatedAt: now(), UpdatedAt: now()}
 		if err := tx.InsertAccount(c); err != nil {
 			return err
@@ -56,7 +56,7 @@ func (s *Service) Initialize(ctx context.Context, setupToken, username, password
 		if tx.State().Initialized {
 			return ErrConflict
 		}
-		c := Credential{Account: Account{ID: randomID(), Username: username, Status: StatusActive},
+		c := AccountRecord{Account: Account{ID: randomID(), Username: username, Status: StatusActive},
 			PasswordHash: hash, AuthVersion: 1, CreatedAt: now(), UpdatedAt: now()}
 		if err := tx.InsertAccount(c); err != nil {
 			return err
@@ -93,7 +93,7 @@ func (s *Service) CreateAccount(ctx context.Context, p Principal, username, disp
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		c := Credential{Account: Account{ID: randomID(), Username: username, DisplayName: displayName, Status: StatusActive, MustChangePassword: true},
+		c := AccountRecord{Account: Account{ID: randomID(), Username: username, DisplayName: displayName, Status: StatusActive, MustChangePassword: true},
 			PasswordHash: hash, AuthVersion: 1, CreatedAt: now(), UpdatedAt: now()}
 		if err := tx.InsertAccount(c); err != nil {
 			return err

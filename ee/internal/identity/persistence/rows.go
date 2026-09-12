@@ -21,15 +21,15 @@ type accountRow struct {
 
 func (accountRow) TableName() string { return "ee_identity_accounts" }
 
-func (r accountRow) credential() identity.Credential {
-	return identity.Credential{
+func (r accountRow) record() identity.AccountRecord {
+	return identity.AccountRecord{
 		Account: identity.Account{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
 			Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword},
 		PasswordHash: r.PasswordHash, AuthVersion: r.AuthVersion, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
 	}
 }
 
-func accountRowOf(c identity.Credential) accountRow {
+func accountRowOf(c identity.AccountRecord) accountRow {
 	return accountRow{ID: c.ID, Username: c.Username, DisplayName: c.DisplayName, Status: string(c.Status),
 		MustChangePassword: c.MustChangePassword, PasswordHash: c.PasswordHash, AuthVersion: c.AuthVersion,
 		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}

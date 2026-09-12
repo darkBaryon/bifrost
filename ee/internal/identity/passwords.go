@@ -42,7 +42,7 @@ func (s *Service) ChangePassword(ctx context.Context, p Principal, oldPassword, 
 }
 
 // replacePassword 是三种改密路径共用的事务尾部：写新哈希、升版本、撤销目标全部会话、记录成功事件，返回写入的事件。
-func (s *Service) replacePassword(tx Tx, c Credential, hash string, mustChange bool, event PasswordEvent) (PasswordEvent, error) {
+func (s *Service) replacePassword(tx Tx, c AccountRecord, hash string, mustChange bool, event PasswordEvent) (PasswordEvent, error) {
 	c.PasswordHash = hash
 	c.AuthVersion++
 	c.MustChangePassword = mustChange

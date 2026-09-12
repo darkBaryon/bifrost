@@ -172,7 +172,7 @@ func TestPasswordEventRollback(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	before, _ := store.CredentialByName(ctx, "alice")
+	before, _ := store.RecordByName(ctx, "alice")
 	db.Callback().Create().Before("gorm:create").Register("fail:events", func(tx *gorm.DB) {
 		if tx.Statement.Table == "ee_identity_password_events" {
 			tx.AddError(errors.New("injected"))
@@ -180,7 +180,7 @@ func TestPasswordEventRollback(t *testing.T) {
 	})
 	_, e = s.ResetPassword(ctx, p.Principal, a.ID, "00000000-0000-4000-8000-000000000002")
 	requireError(t, e, identity.ErrUnavailable)
-	after, _ := store.CredentialByName(ctx, "alice")
+	after, _ := store.RecordByName(ctx, "alice")
 	if before.PasswordHash != after.PasswordHash || before.AuthVersion != after.AuthVersion {
 		t.Fatal("password survived audit failure")
 	}
@@ -354,8 +354,8 @@ func TestPasswordValidationAndIndependentSalt(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	a, _ := store.CredentialByName(ctx, "alice")
-	b, _ := store.CredentialByName(ctx, "bob")
+	a, _ := store.RecordByName(ctx, "alice")
+	b, _ := store.RecordByName(ctx, "bob")
 	if a.PasswordHash == b.PasswordHash {
 		t.Fatal("default passwords share hash")
 	}
@@ -384,7 +384,7 @@ func TestTransactionAndMigrationRollback(t *testing.T) {
 	if !errors.Is(e, injected) {
 		t.Fatal(e)
 	}
-	c, e := store.CredentialByName(ctx, "admin")
+	c, e := store.RecordByName(ctx, "admin")
 	if e != nil || c.AuthVersion != admin.Principal.AuthVersion {
 		t.Fatal("transaction was not rolled back", e)
 	}
@@ -427,7 +427,7 @@ func TestDeferredCommitFailure(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	before, e := store.CredentialByName(ctx, "admin")
+	before, e := store.RecordByName(ctx, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -451,7 +451,7 @@ func TestDeferredCommitFailure(t *testing.T) {
 		t.Fatal("commit failure diagnosis missing: " + output.String())
 	}
 	db.Callback().Create().Remove("fail:commit")
-	after, e := store.CredentialByName(ctx, "admin")
+	after, e := store.RecordByName(ctx, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}

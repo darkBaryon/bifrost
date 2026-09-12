@@ -74,10 +74,10 @@ func (s *Store) State(ctx context.Context) (identity.State, error) {
 	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(logDatabaseFailure(s.log, ctx, "state.read", err))
 }
 
-func (s *Store) CredentialByName(ctx context.Context, name string) (identity.Credential, error) {
+func (s *Store) RecordByName(ctx context.Context, name string) (identity.AccountRecord, error) {
 	var r accountRow
 	err := s.db.WithContext(ctx).Where("username = ?", name).First(&r).Error
-	return r.credential(), notFound(logDatabaseFailure(s.log, ctx, "account.read", err))
+	return r.record(), notFound(logDatabaseFailure(s.log, ctx, "account.read", err))
 }
 
 // authRow 是账号与会话联合查询的结果；账号列由 GORM 按导出字段展开，会话列用 session_ 前缀避免同名。
@@ -106,7 +106,7 @@ func authRecord(db *gorm.DB, column, value string) (identity.AuthRecord, error) 
 		return identity.AuthRecord{}, identity.ErrNotFound
 	}
 	return identity.AuthRecord{
-		Credential: row.Account.credential(),
+		Account: row.Account.record(),
 		Session: identity.Session{ID: row.SessionID, TokenHash: row.TokenHash, AccountID: row.SessionAccountID,
 			IssuedAuthVersion: row.IssuedAuthVersion, ExpiresAt: row.SessionExpiresAt, CreatedAt: row.SessionCreatedAt, RevokedAt: row.SessionRevokedAt},
 	}, nil
@@ -140,27 +140,27 @@ func (t *transaction) SaveState(s identity.State) error {
 	return err
 }
 
-func (t *transaction) Account(id string) (identity.Credential, error) {
+func (t *transaction) Account(id string) (identity.AccountRecord, error) {
 	t.stage = "account.read"
 	var r accountRow
 	err := t.db.Where("id = ?", id).First(&r).Error
-	return r.credential(), notFound(err)
+	return r.record(), notFound(err)
 }
 
-func (t *transaction) AccountByName(name string) (identity.Credential, error) {
+func (t *transaction) AccountByName(name string) (identity.AccountRecord, error) {
 	t.stage = "account.read"
 	var r accountRow
 	err := t.db.Where("username = ?", name).First(&r).Error
-	return r.credential(), notFound(err)
+	return r.record(), notFound(err)
 }
 
-func (t *transaction) InsertAccount(c identity.Credential) error {
+func (t *transaction) InsertAccount(c identity.AccountRecord) error {
 	t.stage = "account.insert"
 	r := accountRowOf(c)
 	return conflict(t.db.Create(&r).Error)
 }
 
-func (t *transaction) SaveAccount(c identity.Credential) error {
+func (t *transaction) SaveAccount(c identity.AccountRecord) error {
 	t.stage = "account.update"
 	r := accountRowOf(c)
 	return t.db.Save(&r).Error
@@ -297,13 +297,13 @@ func beforeCursor(q *gorm.DB, column string, c identity.Cursor) *gorm.DB {
 	return q.Where("("+column+" < ? OR ("+column+" = ? AND id < ?))", c.At, c.At, c.ID)
 }
 
-func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.Credential, error) {
+func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.AccountRecord, error) {
 	rows := []accountRow{}
 	q := beforeCursor(s.db.WithContext(ctx), "created_at", c)
 	err := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
-	out := make([]identity.Credential, 0, len(rows))
+	out := make([]identity.AccountRecord, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, r.credential())
+		out = append(out, r.record())
 	}
 	return out, logDatabaseFailure(s.log, ctx, "accounts.list", err)
 }
