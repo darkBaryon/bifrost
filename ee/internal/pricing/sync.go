@@ -29,8 +29,12 @@ type catalog interface {
 type providerLister interface {
 	List(context.Context) ([]Provider, error)
 }
+type logger interface {
+	Info(string, ...interface{})
+	Warn(string, ...interface{})
+}
 
-// Options 指定已解析的部署配置；nil USDToCNY 使用文件默认汇率。
+// Options 指定部署配置；nil USDToCNY 使用文件默认汇率，VendorMap 须来自 ParseVendorMap（无映射可为 nil）。
 type Options struct {
 	USDToCNY  *float64
 	VendorMap map[string]string
@@ -50,7 +54,7 @@ type Report struct {
 	Unrecognized                         []string
 }
 
-// Service 持有独立配置快照，在上游完成 Bootstrap 后执行一次 Sync。
+// Service 持有启动配置，在上游完成 Bootstrap 后执行一次 Sync。
 type Service struct {
 	overrides overrideStore
 	catalog   catalog
@@ -60,7 +64,8 @@ type Service struct {
 	mapping   map[string]string
 }
 
-// New 校验完整配置；无效文件不会访问任何存储。配置拷贝后不受调用方修改影响。
+// New 校验完整配置；无效文件不会访问任何存储。只拷贝需要覆盖的 Rates，
+// 其余价格目录与 VendorMap 只读引用，调用方在 Service 使用期间不得修改。
 func New(file PriceFile, opts Options, deps Deps) (*Service, error) {
 	if err := file.validate(); err != nil {
 		return nil, err
@@ -74,39 +79,22 @@ func New(file PriceFile, opts Options, deps Deps) (*Service, error) {
 		copyFile.Rates[key] = value
 	}
 	if opts.USDToCNY != nil {
-		if !finiteNonnegative(*opts.USDToCNY) || *opts.USDToCNY == 0 {
+		if !ValidRate(*opts.USDToCNY) {
 			return nil, fmt.Errorf("%w: USD/CNY rate must be finite and positive", ErrConfig)
 		}
 		copyFile.Rates[CNY] = *opts.USDToCNY
 	}
-	copyFile.Vendors = append([]Vendor(nil), file.Vendors...)
-	for i := range copyFile.Vendors {
-		v := &copyFile.Vendors[i]
-		v.EndpointHosts = append([]string(nil), v.EndpointHosts...)
-		v.Models = append([]ModelPrice(nil), v.Models...)
-		for j := range v.Models {
-			m := &v.Models[j]
-			if m.CacheReadInputCost != nil {
-				value := *m.CacheReadInputCost
-				m.CacheReadInputCost = &value
-			}
-		}
-	}
-	if err := copyFile.validate(); err != nil {
+	if err := validateVendorMap(opts.VendorMap, copyFile); err != nil {
 		return nil, err
 	}
-	mapping := map[string]string{}
-	for key, value := range opts.VendorMap {
-		normalized := strings.ToLower(key)
-		if _, ok := mapping[normalized]; ok {
-			return nil, fmt.Errorf("%w: duplicate vendor mapping %q", ErrConfig, normalized)
-		}
-		mapping[normalized] = value
-	}
-	if err := validateVendorMap(mapping, copyFile); err != nil {
-		return nil, err
-	}
-	return &Service{deps.Overrides, deps.Catalog, deps.Providers, deps.Log, copyFile, mapping}, nil
+	return &Service{
+		overrides: deps.Overrides,
+		catalog:   deps.Catalog,
+		providers: deps.Providers,
+		log:       deps.Log,
+		file:      copyFile,
+		mapping:   opts.VendorMap,
+	}, nil
 }
 
 // Sync 先完成全部数据库操作，再增量更新本节点目录；任意失败均返回错误，不回滚已提交行。

@@ -59,12 +59,22 @@ func parsePriceFile(data []byte) (PriceFile, error) {
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return PriceFile{}, fmt.Errorf("parse price file: %w", err)
 	}
-	file := PriceFile{Version: raw.Version, PricingRule: raw.PricingRule, Rates: map[Currency]float64{USD: 1}, RatesCheckedAt: raw.Rates.CheckedAt}
+	file := PriceFile{
+		Version:        raw.Version,
+		PricingRule:    raw.PricingRule,
+		Rates:          map[Currency]float64{USD: 1},
+		RatesCheckedAt: raw.Rates.CheckedAt,
+	}
 	if raw.Rates.CNY != nil {
 		file.Rates[CNY] = *raw.Rates.CNY
 	}
 	for _, v := range raw.Vendors {
-		vendor := Vendor{ID: v.ID, Name: v.Name, EndpointHosts: v.EndpointHosts, PricePage: v.PricePage}
+		vendor := Vendor{
+			ID:            v.ID,
+			Name:          v.Name,
+			EndpointHosts: v.EndpointHosts,
+			PricePage:     v.PricePage,
+		}
 		for _, m := range v.Models {
 			if m.Unit != priceUnit {
 				return PriceFile{}, fmt.Errorf("%s/%s: unit must be %s", v.ID, m.Model, priceUnit)
@@ -72,7 +82,15 @@ func parsePriceFile(data []byte) (PriceFile, error) {
 			if m.InputCost == nil || m.OutputCost == nil {
 				return PriceFile{}, fmt.Errorf("%s/%s: input_cost and output_cost are required", v.ID, m.Model)
 			}
-			vendor.Models = append(vendor.Models, ModelPrice{Model: m.Model, Currency: m.Currency, InputCost: *m.InputCost, OutputCost: *m.OutputCost, CacheReadInputCost: m.CacheReadInputCost, CheckedAt: m.CheckedAt, Note: m.Note})
+			vendor.Models = append(vendor.Models, ModelPrice{
+				Model:              m.Model,
+				Currency:           m.Currency,
+				InputCost:          *m.InputCost,
+				OutputCost:         *m.OutputCost,
+				CacheReadInputCost: m.CacheReadInputCost,
+				CheckedAt:          m.CheckedAt,
+				Note:               m.Note,
+			})
 		}
 		file.Vendors = append(file.Vendors, vendor)
 	}
@@ -80,6 +98,11 @@ func parsePriceFile(data []byte) (PriceFile, error) {
 		return PriceFile{}, err
 	}
 	return file, nil
+}
+
+// ValidRate 判定汇率是否为有限正数，供文件校验、部署配置与金额换算复用。
+func ValidRate(value float64) bool {
+	return finiteNonnegative(value) && value > 0
 }
 
 func finiteNonnegative(value float64) bool {
@@ -91,7 +114,7 @@ func (f PriceFile) validate() error {
 		return fmt.Errorf("invalid pricing_rule %q", f.PricingRule)
 	}
 	for currency, rate := range f.Rates {
-		if !finiteNonnegative(rate) || rate == 0 {
+		if !ValidRate(rate) {
 			return fmt.Errorf("invalid rate for %s", currency)
 		}
 	}

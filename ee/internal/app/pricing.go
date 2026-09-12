@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"strconv"
 
@@ -17,9 +16,12 @@ import (
 )
 
 const (
-	envPricingUSDCNY    = "EE_PRICING_USD_CNY"
+	// envPricingUSDCNY 为每 1 美元兑换的人民币数；未设置用文件汇率，空值或非有限正数拒启。
+	envPricingUSDCNY = "EE_PRICING_USD_CNY"
+	// envPricingVendorMap 为部署厂商名到官网厂商 ID 的对应表；未设置或空值时只按接入主机识别。
 	envPricingVendorMap = "EE_PRICING_VENDOR_MAP"
-	envPricingFile      = "EE_PRICING_FILE"
+	// envPricingFile 为替换价格 JSON 文件的路径；未设置或空值时使用随二进制嵌入的价格文件。
+	envPricingFile = "EE_PRICING_FILE"
 )
 
 func pricingRate() (*float64, error) {
@@ -28,7 +30,7 @@ func pricingRate() (*float64, error) {
 		return nil, nil
 	}
 	rate, err := strconv.ParseFloat(raw, 64)
-	if err != nil || rate <= 0 || math.IsNaN(rate) || math.IsInf(rate, 0) {
+	if err != nil || !pricing.ValidRate(rate) {
 		return nil, fmt.Errorf("%w: %s must be a finite positive number", pricing.ErrConfig, envPricingUSDCNY)
 	}
 	return &rate, nil
@@ -52,14 +54,17 @@ func assemblePricing(ctx context.Context, config configstore.ConfigStore, catalo
 		log.Warn("pricing: model catalog unavailable; synchronization skipped")
 		return nil
 	}
-	store := persistence.NewStore(config, catalog)
-	service, err := pricing.New(file, pricing.Options{USDToCNY: rate, VendorMap: mapping}, pricing.Deps{Overrides: store, Catalog: store.Catalog(), Providers: store.Providers(), Log: log})
+	service, err := pricing.New(file, pricing.Options{
+		USDToCNY:  rate,
+		VendorMap: mapping,
+	}, pricing.Deps{
+		Overrides: persistence.NewOverrides(config),
+		Catalog:   persistence.NewCatalog(catalog),
+		Providers: persistence.NewProviders(config),
+		Log:       log,
+	})
 	if err != nil {
-		if errors.Is(err, pricing.ErrConfig) {
-			return err
-		}
-		log.Error("pricing: initialization failed; synchronization skipped: %v", err)
-		return nil
+		return err
 	}
 	if _, err = service.Sync(ctx); err != nil {
 		if errors.Is(err, pricing.ErrConfig) {

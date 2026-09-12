@@ -56,7 +56,7 @@ func toUSDPerToken(amount float64, currency Currency, rates map[Currency]float64
 	default:
 		return 0, fmt.Errorf("unknown currency %q", currency)
 	}
-	if !finiteNonnegative(amount) || !finiteNonnegative(rate) || rate == 0 {
+	if !finiteNonnegative(amount) || !ValidRate(rate) {
 		return 0, fmt.Errorf("invalid amount or rate for %s", currency)
 	}
 	value := amount / tokensPerMillion / rate
@@ -84,5 +84,14 @@ func makeOverride(provider string, vendor Vendor, model ModelPrice, rates map[Cu
 	if err != nil {
 		return OverrideRow{}, err
 	}
-	return OverrideRow{ID: overrideID(provider, model.Model), Name: namePrefix + vendor.ID + "/" + model.Model, ScopeKind: ProviderScope, ProviderID: provider, MatchType: ExactMatch, Pattern: model.Model, RequestTypes: []RequestType{ChatCompletion, Responses, TextCompletion}, PricingPatchJSON: string(data)}, nil
+	return OverrideRow{
+		ID:               overrideID(provider, model.Model),
+		Name:             namePrefix + vendor.ID + "/" + model.Model,
+		ScopeKind:        ProviderScope,
+		ProviderID:       provider,
+		MatchType:        ExactMatch,
+		Pattern:          model.Model,
+		RequestTypes:     []RequestType{ChatCompletion, Responses, TextCompletion},
+		PricingPatchJSON: string(data),
+	}, nil
 }

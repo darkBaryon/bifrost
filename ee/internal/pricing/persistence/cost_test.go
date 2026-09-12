@@ -39,9 +39,32 @@ func (quietLogger) Warn(string, ...interface{}) {}
 
 func TestCostWithOnlyOverride(t *testing.T) {
 	cache := 1.2
-	file := pricing.PriceFile{PricingRule: pricing.LowestTierStandardRate, Rates: map[pricing.Currency]float64{pricing.USD: 1, pricing.CNY: 7.2}, Vendors: []pricing.Vendor{{ID: "test", EndpointHosts: []string{"test.example"}, Models: []pricing.ModelPrice{{Model: "unlisted-model", Currency: pricing.CNY, InputCost: 6, OutputCost: 24, CacheReadInputCost: &cache}}}}}
+	file := pricing.PriceFile{
+		PricingRule: pricing.LowestTierStandardRate,
+		Rates:       map[pricing.Currency]float64{pricing.USD: 1, pricing.CNY: 7.2},
+		Vendors: []pricing.Vendor{
+			{
+				ID:            "test",
+				EndpointHosts: []string{"test.example"},
+				Models: []pricing.ModelPrice{
+					{
+						Model:              "unlisted-model",
+						Currency:           pricing.CNY,
+						InputCost:          6,
+						OutputCost:         24,
+						CacheReadInputCost: &cache,
+					},
+				},
+			},
+		},
+	}
 	rows := &memoryRows{}
-	service, e := pricing.New(file, pricing.Options{}, pricing.Deps{Overrides: rows, Catalog: captureCatalog{}, Providers: oneProvider{}, Log: quietLogger{}})
+	service, e := pricing.New(file, pricing.Options{}, pricing.Deps{
+		Overrides: rows,
+		Catalog:   captureCatalog{},
+		Providers: oneProvider{},
+		Log:       quietLogger{},
+	})
 	if e != nil {
 		t.Fatal(e)
 	}

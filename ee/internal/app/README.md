@@ -4,7 +4,7 @@
 
 ## 做什么
 
-- `Bootstrap`：先把身份装配工厂埋进 `ConsoleAuthFactory`，再跑上游 `Bootstrap`（它在建好数据库、注册路由前回调工厂），最后 `attach` 品牌路由并复用同一份 EE 鉴权中间件。
+- `Bootstrap`：先把身份装配工厂埋进 `ConsoleAuthFactory`，再跑上游 `Bootstrap`（它在建好数据库、注册路由前回调工厂），最后 `attach` 完成品牌路由接入（复用同一份 EE 鉴权中间件）及国内定价同步。
 - `assembleIdentity`：读 `EE_*` 环境变量并校验、跑身份表迁移、`identity.New` 装配三条线、导入旧管理员、构造 HTTP 层和宿主适配。适配只拿会话线，导入只拿账号线。
 - `RecoverAdmin`：离线 `identity recover-admin` 子命令，不起 HTTP，用同一套装配重置主管理员密码；密码从隐藏终端或 stdin 读。
 

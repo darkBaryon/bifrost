@@ -4,6 +4,7 @@ package pricing
 import (
 	"context"
 	"errors"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -91,7 +92,12 @@ func syncFixture(t *testing.T) (*Service, *fakeStore, *fakeCatalog, *fakeProvide
 	store := &fakeStore{rows: map[string]OverrideRow{}}
 	cat := &fakeCatalog{}
 	providers := &fakeProviders{rows: []Provider{{Name: "q", Custom: true, BaseURL: "dashscope.aliyuncs.com"}}}
-	s, e := New(testFile(t), Options{}, Deps{store, cat, providers, &testLogger{}})
+	s, e := New(testFile(t), Options{}, Deps{
+		Overrides: store,
+		Catalog:   cat,
+		Providers: providers,
+		Log:       &testLogger{},
+	})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -101,7 +107,10 @@ func syncFixture(t *testing.T) (*Service, *fakeStore, *fakeCatalog, *fakeProvide
 func TestSyncLifecycle(t *testing.T) {
 	s, store, cat, providers := syncFixture(t)
 	ctx := context.Background()
-	store.rows["manual"] = OverrideRow{ID: "manual", Name: "my price"}
+	store.rows["manual"] = OverrideRow{
+		ID:   "manual",
+		Name: "my price",
+	}
 	r, e := s.Sync(ctx)
 	if e != nil || r.Created != 1 || cat.upserts != 1 {
 		t.Fatalf("%+v %v", r, e)
@@ -174,8 +183,18 @@ func TestSyncFailure(t *testing.T) {
 
 func TestSyncOwnership(t *testing.T) {
 	s, store, cat, _ := syncFixture(t)
-	forged := OverrideRow{ID: "manual-prefixed", Name: "ee-pricing: dashscope/qwen-test", ProviderID: "q", Pattern: "qwen-test"}
-	collision := OverrideRow{ID: overrideID("q", "qwen-test"), Name: "manual exact ID", ProviderID: "q", Pattern: "qwen-test"}
+	forged := OverrideRow{
+		ID:         "manual-prefixed",
+		Name:       "ee-pricing: dashscope/qwen-test",
+		ProviderID: "q",
+		Pattern:    "qwen-test",
+	}
+	collision := OverrideRow{
+		ID:         overrideID("q", "qwen-test"),
+		Name:       "manual exact ID",
+		ProviderID: "q",
+		Pattern:    "qwen-test",
+	}
 	store.rows[forged.ID] = forged
 	store.rows[collision.ID] = collision
 	r, e := s.Sync(context.Background())
@@ -191,7 +210,12 @@ func TestInvalidFileDoesNotTouchStorage(t *testing.T) {
 	s, store, cat, p := syncFixture(t)
 	f := s.file
 	f.PricingRule = "invalid"
-	if _, e := New(f, Options{}, Deps{store, cat, p, s.log}); e == nil {
+	if _, e := New(f, Options{}, Deps{
+		Overrides: store,
+		Catalog:   cat,
+		Providers: p,
+		Log:       s.log,
+	}); e == nil {
 		t.Fatal("invalid file accepted")
 	}
 	if len(store.calls) != 0 || cat.upserts != 0 {
@@ -201,7 +225,12 @@ func TestInvalidFileDoesNotTouchStorage(t *testing.T) {
 
 func TestPartialFailureRetained(t *testing.T) {
 	s, store, cat, _ := syncFixture(t)
-	old := OverrideRow{ID: overrideID("gone", "model"), Name: "ee-pricing: dashscope/model", ProviderID: "gone", Pattern: "model"}
+	old := OverrideRow{
+		ID:         overrideID("gone", "model"),
+		Name:       "ee-pricing: dashscope/model",
+		ProviderID: "gone",
+		Pattern:    "model",
+	}
 	store.rows[old.ID] = old
 	store.fail = "delete"
 	r, e := s.Sync(context.Background())
@@ -217,19 +246,60 @@ func TestPartialFailureRetained(t *testing.T) {
 
 func TestConfigErrorClassification(t *testing.T) {
 	s, store, cat, p := syncFixture(t)
-	for _, rate := range []float64{0, -1} {
-		if _, e := New(s.file, Options{USDToCNY: &rate}, Deps{store, cat, p, s.log}); !errors.Is(e, ErrConfig) {
+	for _, rate := range []float64{0, -1, math.NaN(), math.Inf(1), math.Inf(-1)} {
+		if _, e := New(s.file, Options{USDToCNY: &rate}, Deps{
+			Overrides: store,
+			Catalog:   cat,
+			Providers: p,
+			Log:       s.log,
+		}); !errors.Is(e, ErrConfig) {
 			t.Fatalf("rate: %v", e)
 		}
 	}
-	if _, e := New(s.file, Options{VendorMap: map[string]string{"q": "unknown"}}, Deps{store, cat, p, s.log}); !errors.Is(e, ErrConfig) {
+	if _, e := New(s.file, Options{VendorMap: map[string]string{"q": "unknown"}}, Deps{
+		Overrides: store,
+		Catalog:   cat,
+		Providers: p,
+		Log:       s.log,
+	}); !errors.Is(e, ErrConfig) {
 		t.Fatalf("mapping: %v", e)
 	}
-	s.file.Vendors = append(s.file.Vendors, Vendor{ID: "overlap", EndpointHosts: []string{"aliyuncs.com"}})
+	s.file.Vendors = append(s.file.Vendors, Vendor{
+		ID:            "overlap",
+		EndpointHosts: []string{"aliyuncs.com"},
+	})
 	if _, e := s.Sync(context.Background()); !errors.Is(e, ErrConfig) {
 		t.Fatalf("multiple matches: %v", e)
 	}
 	if len(store.calls) != 0 || cat.upserts != 0 {
 		t.Fatal("configuration error touched storage")
+	}
+}
+
+func TestNewRateOverridePreservesInput(t *testing.T) {
+	_, store, cat, providers := syncFixture(t)
+	file := testFile(t)
+	mapping, err := ParseVendorMap("Q=dashscope", file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rate := 3.6
+	service, err := New(file, Options{
+		USDToCNY:  &rate,
+		VendorMap: mapping,
+	}, Deps{
+		Overrides: store,
+		Catalog:   cat,
+		Providers: providers,
+		Log:       &testLogger{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Rates[CNY] != 7.2 || service.file.Rates[CNY] != 3.6 {
+		t.Fatalf("input rate=%v service rate=%v", file.Rates[CNY], service.file.Rates[CNY])
+	}
+	if report, err := service.Sync(context.Background()); err != nil || report.Created != 1 {
+		t.Fatalf("parsed mapping and rate override: report=%+v err=%v", report, err)
 	}
 }

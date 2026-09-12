@@ -15,13 +15,8 @@ type Provider struct {
 	BaseURL string
 }
 
-// Match 保留原始厂商名，覆盖作用域不得归一化。
-type Match struct{ Provider, VendorID string }
-
-type logger interface {
-	Info(string, ...interface{})
-	Warn(string, ...interface{})
-}
+// match 保留原始厂商名，覆盖作用域不得归一化。
+type match struct{ Provider, VendorID string }
 
 // ParseVendorMap 校验手工映射并将键转小写，与上游厂商落库规则一致。
 func ParseVendorMap(raw string, file PriceFile) (map[string]string, error) {
@@ -59,10 +54,7 @@ func validateVendorMap(mapping map[string]string, file PriceFile) error {
 	return nil
 }
 
-func matchVendors(providers []Provider, file PriceFile, mapping map[string]string, log logger) ([]Match, []string, error) {
-	if err := validateVendorMap(mapping, file); err != nil {
-		return nil, nil, err
-	}
+func matchVendors(providers []Provider, file PriceFile, mapping map[string]string, log logger) ([]match, []string, error) {
 	custom := map[string]bool{}
 	for _, p := range providers {
 		if p.Custom {
@@ -79,14 +71,17 @@ func matchVendors(providers []Provider, file PriceFile, mapping map[string]strin
 			log.Warn("pricing: vendor map key %s is not a deployed custom provider; ignored", key)
 		}
 	}
-	var matches []Match
+	var matches []match
 	var unknown []string
 	for _, p := range providers {
 		if !p.Custom {
 			continue
 		}
 		if id, ok := mapping[strings.ToLower(p.Name)]; ok {
-			matches = append(matches, Match{p.Name, id})
+			matches = append(matches, match{
+				Provider: p.Name,
+				VendorID: id,
+			})
 			continue
 		}
 		host := endpointHost(p.BaseURL)
@@ -107,7 +102,10 @@ func matchVendors(providers []Provider, file PriceFile, mapping map[string]strin
 			unknown = append(unknown, p.Name)
 			log.Info("未识别厂商 %s（主机 %s），可用 EE_PRICING_VENDOR_MAP 指定", p.Name, host)
 		} else {
-			matches = append(matches, Match{p.Name, matched})
+			matches = append(matches, match{
+				Provider: p.Name,
+				VendorID: matched,
+			})
 		}
 	}
 	sort.Slice(matches, func(i, j int) bool { return matches[i].Provider < matches[j].Provider })

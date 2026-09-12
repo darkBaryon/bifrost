@@ -34,12 +34,25 @@ func TestStoreMapping(t *testing.T) {
 	if mapError(other) != other || mapError(nil) != nil {
 		t.Fatal("unrelated error changed")
 	}
-	row := pricing.OverrideRow{ID: "id", Name: "name", ScopeKind: pricing.ProviderScope, ProviderID: "OriginalName", ProviderKeyID: "key", VirtualKeyID: "vk", UserID: "user", MatchType: pricing.ExactMatch, Pattern: "model", RequestTypes: []pricing.RequestType{pricing.ChatCompletion}, PricingPatchJSON: `{"input_cost_per_token":0}`, ConfigHash: "hash"}
+	row := pricing.OverrideRow{
+		ID:               "id",
+		Name:             "name",
+		ScopeKind:        pricing.ProviderScope,
+		ProviderID:       "OriginalName",
+		ProviderKeyID:    "key",
+		VirtualKeyID:     "vk",
+		UserID:           "user",
+		MatchType:        pricing.ExactMatch,
+		Pattern:          "model",
+		RequestTypes:     []pricing.RequestType{pricing.ChatCompletion},
+		PricingPatchJSON: `{"input_cost_per_token":0}`,
+		ConfigHash:       "hash",
+	}
 	if got := fromTable(*toTable(row)); !reflect.DeepEqual(got, row) {
 		t.Fatalf("%+v", got)
 	}
 	for _, configs := range []map[schemas.ModelProvider]configstore.ProviderConfig{nil, {"custom": {CustomProviderConfig: &schemas.CustomProviderConfig{}}}} {
-		rows, e := (providerAdapter{providerConfigStub{configs: configs}}).List(context.Background())
+		rows, e := NewProviders(providerConfigStub{configs: configs}).List(context.Background())
 		if e != nil || len(rows) != len(configs) {
 			t.Fatal(rows, e)
 		}
@@ -51,8 +64,17 @@ func TestStoreMapping(t *testing.T) {
 
 func TestCatalogAdapter(t *testing.T) {
 	ds := datasheet.NewTestStore(nil)
-	adapter := NewStore(nil, modelcatalog.NewTestCatalogWithDatasheet(ds)).Catalog()
-	row := pricing.OverrideRow{ID: "adapter", Name: "price", ScopeKind: pricing.ProviderScope, ProviderID: "custom", MatchType: pricing.ExactMatch, Pattern: "model", RequestTypes: []pricing.RequestType{pricing.ChatCompletion}, PricingPatchJSON: `{"input_cost_per_token":0.01,"output_cost_per_token":0.02}`}
+	adapter := NewCatalog(modelcatalog.NewTestCatalogWithDatasheet(ds))
+	row := pricing.OverrideRow{
+		ID:               "adapter",
+		Name:             "price",
+		ScopeKind:        pricing.ProviderScope,
+		ProviderID:       "custom",
+		MatchType:        pricing.ExactMatch,
+		Pattern:          "model",
+		RequestTypes:     []pricing.RequestType{pricing.ChatCompletion},
+		PricingPatchJSON: `{"input_cost_per_token":0.01,"output_cost_per_token":0.02}`,
+	}
 	if e := adapter.Upsert(row); e != nil {
 		t.Fatal(e)
 	}

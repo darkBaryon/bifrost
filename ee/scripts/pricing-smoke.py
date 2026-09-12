@@ -7,7 +7,9 @@ import math
 import os
 from pathlib import Path
 import secrets
+import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -46,6 +48,8 @@ class PricingNode(identity_smoke.Node):
         self.log_offset = 0
 
     def start(self, *, pricing_env=None):
+        # 抄自 identity_smoke.Node.start：父类剥掉 EE_* 变量，方案 §8 禁止修改父脚本；
+        # 父类就绪检查或环境隔离规则变化时需同步。此处额外注入定价配置并记录日志起点。
         env = {k: v for k, v in os.environ.items()
                if not k.startswith(('BIFROST_', 'EE_', 'OPENAI_', 'ANTHROPIC_', 'AWS_', 'AZURE_'))}
         env.update(EE_PUBLIC_ORIGIN=self.url, BIFROST_SETUP_TOKEN=self.setup)
@@ -119,7 +123,11 @@ def check_rows(node, models, rate, manual=None):
         assert set(patch) == {target for source, target in fields.items() if source in model}
         for source, target in fields.items():
             if source in model:
-                assert math.isclose(patch[target], model[source] / 1e6 / rate, rel_tol=1e-12)
+                actual = patch[target]
+                expected_value = model[source] / 1e6 / rate
+                assert math.isclose(actual, expected_value, rel_tol=1e-12), (
+                    f"model={model['model']} field={target} "
+                    f"actual={actual!r} expected={expected_value!r}")
     if manual is not None:
         assert next(row for row in rows if row['id'] == manual['id']) == manual
     return {row['pattern']: row['id'] for row in managed}
@@ -177,16 +185,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--binary', required=True)
     args = parser.parse_args()
-    with tempfile.TemporaryDirectory(prefix='ee-pricing-smoke-') as directory:
-        node = PricingNode(args.binary, directory)
+    directory = Path(tempfile.mkdtemp(prefix='ee-pricing-smoke-'))
+    node = None
+    try:
         try:
+            node = PricingNode(args.binary, directory)
             smoke(node)
-        except Exception:
-            # 失败时展示隔离日志末尾，密钥与个人数据从未注入此进程。
-            print(node.current_log()[-12000:])
-            raise
         finally:
-            node.stop()
+            if node is not None:
+                node.stop()
+    except BaseException:
+        # 清理进程后仍保留完整配置、价格文件、数据库与各次启动日志；日志缺失不掩盖原异常。
+        print(f'FAIL: isolated evidence retained at {directory}', file=sys.stderr, flush=True)
+        raise
+    else:
+        shutil.rmtree(directory)
     print('PASS: domestic pricing smoke')
 
 

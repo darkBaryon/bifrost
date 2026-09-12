@@ -8,4 +8,4 @@
 | `cost_test.go` | 空基础价目表下，仅靠生成覆盖计算费用的闭环 |
 | `store_test.go` | 错误映射、完整行往返、nil 网络配置与目录增删 |
 
-`Store` 实现覆盖表 CRUD，`Providers()` 与 `Catalog()` 分别暴露厂商读取和目录接口。适配器将 `ErrAlreadyExists` / `ErrNotFound` 转为根包的 `ErrRowExists` / `ErrRowMissing`，其余错误保留原因交业务服务与 app 分流。目录只增量 Upsert / Delete，不全量替换管理员覆盖。费用测试使用空基础价目表，验证仅靠覆盖也能计算三类请求、流式与缓存费用。
+`NewOverrides(config)`、`NewCatalog(catalog)`、`NewProviders(config)` 分别构造覆盖 CRUD、目录和厂商读取适配器，由 app 独立注入；表与目录的更新顺序由 `pricing.Service` 协调。适配器将 `ErrAlreadyExists` / `ErrNotFound` 转为根包的 `ErrRowExists` / `ErrRowMissing`，其余错误保留原因交业务服务与 app 分流。目录只增量 Upsert / Delete，不全量替换管理员覆盖。费用测试使用空基础价目表，验证仅靠覆盖也能计算三类请求、流式与缓存费用。

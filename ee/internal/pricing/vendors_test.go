@@ -82,7 +82,10 @@ func TestVendorMap(t *testing.T) {
 			t.Fatalf("accepted %q", raw)
 		}
 	}
-	f.Vendors = append(f.Vendors, Vendor{ID: "other", EndpointHosts: []string{"aliyuncs.com"}})
+	f.Vendors = append(f.Vendors, Vendor{
+		ID:            "other",
+		EndpointHosts: []string{"aliyuncs.com"},
+	})
 	if _, _, e = matchVendors([]Provider{{Name: "q", Custom: true, BaseURL: "dashscope.aliyuncs.com"}}, f, nil, log); e == nil {
 		t.Fatal("ambiguous match accepted")
 	}
