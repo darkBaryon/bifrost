@@ -1,4 +1,5 @@
-# 国内定价 期1：不建新表、不改上游；命令集沿用身份期的 ee 检查 + 本案冒烟 + 品牌/身份回归。
+# 国内定价 期1（方案 v2）：不建新表、不改上游；命令集沿用身份期的 ee 检查 + 本案冒烟 + 品牌/身份回归。
+# 用法：python3 workbench/tools/preflight.py --config workbench/cases/国内定价/期1/checklist.yaml --repo .
 必过命令:
   - { name: ee-fmt, run: "cd ee && test -z \"$(gofmt -l ./internal ./cmd)\"" }
   - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
@@ -10,6 +11,8 @@
   - { name: branding-regression, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
   - { name: identity-regression, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database sqlite" }
   - { name: pricefile-valid-json, run: "python3 -c \"import json,sys;json.load(open('ee/internal/pricing/data/cn-prices.json'))\"" }
+  # 根包（含测试）只依赖标准库与 google/uuid；persistence 子包不在此列。
+  - { name: pricing-root-stdlib, run: "! grep -l 'gorm.io\\|maximhq/bifrost' ee/internal/pricing/*.go" }
   - { name: upstream-untouched, run: "git diff --quiet f371548b5444693d7e259033bec9f4a467e3748b -- core framework plugins transports ui" }
   - { name: workbench, run: "python3 workbench/tools/build_views.py --check" }
   - { name: diff-whitespace, run: "git diff --check" }
@@ -23,6 +26,7 @@
   - ee/internal/pricing/data/cn-prices.json
   - ee/internal/pricing/persistence/README.md
   - ee/internal/pricing/persistence/store.go
+  - ee/internal/pricing/persistence/cost_test.go
   - ee/internal/app/pricing.go
   - ee/scripts/pricing-smoke.py
   - ee/docs/国内定价.md
@@ -39,12 +43,14 @@
   - { grep: "EE_PRICING_FILE", in: "ee/internal/app/pricing.go" }
   - { grep: "UpsertPricingOverrides", in: "ee/internal/pricing/persistence/store.go" }
   - { grep: "smoke-pricing", in: "ee/Makefile" }
+  - { grep: "ErrRowExists", in: "ee/internal/pricing/sync.go" }
+  - { grep: "pricing", in: "ee/internal/app/README.md" }
 收敛评审:
   风险等级: L2
   基线: f371548b5444693d7e259033bec9f4a467e3748b
   开发指南: [ee/docs/国内定价.md]
 禁留标记:
-  - { grep: "SetPricingOverrides", in: "ee" }
+  - { grep: "SetPricingOverrides", in: "ee/internal ee/cmd" }
   - { grep: "\"log\"$", in: "ee/internal/pricing" }
   - { grep: "gorm.io", in: "ee/internal/pricing/model.go" }
   - { grep: "gorm.io", in: "ee/internal/pricing/sync.go" }
