@@ -179,3 +179,13 @@ triggered_by: [账号认证]
 evidence: "哈希槽耗尽与登录限流共用 ErrLimited，Retry-After 一律取登录窗口 60 秒（ee/internal/identity/http/protocol.go:121），而槽位争抢通常百毫秒内消散；429 与 Retry-After:60 由方案 4.3 与 ee/docs/账号认证接口.md:44 规定为契约；来源:代码评审5 挂账"
 convert_when: "豁免(改动要动已批准契约)；若前端按 Retry-After 退避导致可感知延迟再评估"
 ```
+
+## 账号认证（2026-09-12，代码通读）
+
+```yaml
+id: FIND-020
+status: 已转Case
+triggered_by: [账号认证, 身份模块整理]
+evidence: "ee_identity_sessions 与 ee_identity_ws_tickets 无任何删除路径（ee/internal/identity/persistence/store.go 全文只有 login_limits 的 Delete，:265），过期行永久累积；逻辑过期由 verify 保证，只是运维成本；来源:用户与 Claude Code 通读代码时确认"
+convert_when: "已转入 身份模块整理 期1 方案 §4.6：写入新会话/票据时顺带删除 expires_at 已过的行"
+```

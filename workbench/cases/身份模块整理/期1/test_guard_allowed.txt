@@ -1,0 +1,29 @@
+# test_guard.sh 的允许集合：每行一条 ERE，整行锚定，匹配的 diff 行视为方案 §6 列名的机械替换。
+# 以 # 开头与空行忽略。任何未在此列出的改动行都判为偏差。
+# —— 通用：空行、import 块、包名改名 ——
+^[-+][[:space:]]*$
+^[-+]import \($
+^[-+]\)$
+^[-+][[:space:]]*"[^"]+"$
+^[-+]package (bifrost|host)$
+# —— persistence/service_test.go 夹具 ——
+^[-+]func newService\(t \*testing\.T, store \*Store\) (\*identity\.Service|services) \{$
+^[-+]func fixture\(t \*testing\.T\) \((\*identity\.Service|services), \*Store, \*gorm\.DB, identity\.IssuedSession\) \{$
+^[-+][[:space:]]*s, e := identity\.(NewService|New)\(store, (Passwords|hasher\.Bcrypt)\{\}, identity\.Options\{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 \* time\.Hour\}, nil\)$
+^[-+][[:space:]]*return (s|services\{s\.Session, s\.Account, s\.Password\})$
+^\+type services struct\{ \*identity\.SessionService; \*identity\.AccountService; \*identity\.PasswordService \}$
+^\+func \(s services\) State\(ctx context\.Context\) \(identity\.State, error\) +\{ return s\.SessionService\.State\(ctx\) \}$
+^\+func \(s services\) RequireAccountManager\(ctx context\.Context, p identity\.Principal\) error +\{ return s\.SessionService\.RequireAccountManager\(ctx, p\) \}$
+# —— persistence/service_test.go 由 Passwords→hasher.Bcrypt 强制的 5 处（方案 §6 列名 :199,:292,:298,:310,:311）——
+^[-+][[:space:]]*hash, e := \((Passwords|hasher\.Bcrypt)\{\}\)\.Hash\("short"\)$
+^[-+][[:space:]]*(Passwords|hasher\.Bcrypt)$
+^[-+][[:space:]]*ok, e := p\.(Passwords|Bcrypt)\.Compare\(h, raw\)$
+^[-+][[:space:]]*p := pausedPasswords\{(Passwords: Passwords|Bcrypt: hasher\.Bcrypt)\{\}, compared: make\(chan struct\{\}\), resume: make\(chan struct\{\}\)\}$
+^-[[:space:]]*login, e := identity\.NewService\(store, p, identity\.Options\{InitialPassword: "123456", SessionTTL: time\.Hour\}, nil\)$
+^\+[[:space:]]*svc, e := identity\.New\(store, p, identity\.Options\{InitialPassword: "123456", SessionTTL: time\.Hour\}, nil\)$
+^\+[[:space:]]*login := services\{svc\.Session, svc\.Account, svc\.Password\}$
+# —— host/auth_test.go 夹具（原 bifrost/auth_test.go :47,:51,:54,:62）——
+^[-+][[:space:]]*s, e := identity\.(NewService|New)\(persistence\.NewStore\(db, quietLogger\{\}\), (persistence\.Passwords|hasher\.Bcrypt)\{\}, identity\.Options\{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 \* time\.Hour\}, nil\)$
+^[-+][[:space:]]*if _, e = s\.(Account\.)?Initialize\(ctx, "setup", "admin", "Admin-password-1"\); e != nil \{$
+^[-+][[:space:]]*v, e := s\.(Session\.)?Login\(ctx, "admin", "Admin-password-1", "peer"\)$
+^[-+][[:space:]]*return NewAuthAdapter\(nil, s(\.Session)?, h\), v$
