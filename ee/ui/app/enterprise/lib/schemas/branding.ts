@@ -1,7 +1,7 @@
 // 本文件定义品牌上传与表单校验规则，供企业品牌设置使用。
 import { z } from "zod";
 
-/** 上传限制与服务端 ee/internal/branding/asset.go 与 http/validation.go 保持一致。 */
+/** 上传限制与服务端 ee/internal/branding/image.go 与 http/dto.go 保持一致。 */
 export const BRANDING_MAX_BYTES = 1024 * 1024;
 export const BRANDING_MAX_MIB = BRANDING_MAX_BYTES / 1024 / 1024;
 export const BRANDING_MAX_EDGE_PX = 4096;

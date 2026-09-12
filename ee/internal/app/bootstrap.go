@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	eehost "github.com/darkBaryon/bifrost/ee/internal/bifrost"
-	"github.com/darkBaryon/bifrost/ee/internal/branding"
 	brandinghandler "github.com/darkBaryon/bifrost/ee/internal/branding/http"
 	eeconfig "github.com/darkBaryon/bifrost/ee/internal/branding/persistence"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -53,7 +52,7 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schema
 		return fmt.Errorf("ee: migrate branding: %w", err)
 	}
 	// 品牌读取供登录页使用，写入路由使用同一 EE 账号认证。
-	if err := brandinghandler.NewBrandingHandler(branding.NewService(eeconfig.NewBrandingStore(db))).RegisterRoutes(s.Router, auth); err != nil {
+	if err := brandinghandler.NewBrandingHandler(eeconfig.NewBrandingStore(db)).RegisterRoutes(s.Router, auth); err != nil {
 		return fmt.Errorf("ee: register branding routes: %w", err)
 	}
 	return nil

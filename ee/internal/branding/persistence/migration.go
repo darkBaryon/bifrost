@@ -64,12 +64,12 @@ func migrateBrandingOnce(ctx context.Context, db *gorm.DB) error {
 		return upstream.RunSingleMigration(ctx, &opts, tx, nil, &migrator.Migration{
 			ID: brandingMigrationID,
 			Migrate: func(tx *gorm.DB) error {
-				if err := tx.Migrator().CreateTable(&brandingRow{}); err != nil {
+				if err := tx.Migrator().CreateTable(&Settings{}); err != nil {
 					return err
 				}
-				return tx.Create(&brandingRow{ID: 1}).Error
+				return tx.Create(&Settings{ID: 1}).Error
 			},
-			Rollback: func(tx *gorm.DB) error { return tx.Migrator().DropTable(&brandingRow{}) },
+			Rollback: func(tx *gorm.DB) error { return tx.Migrator().DropTable(&Settings{}) },
 		})
 	})
 }

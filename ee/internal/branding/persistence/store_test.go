@@ -82,9 +82,9 @@ func TestBrandingPersistenceAndMerge(t *testing.T) {
 	logo := testAsset(t, "logo")
 	icon := testAsset(t, "icon")
 	var wg sync.WaitGroup
-	for _, patch := range []branding.Patch{{Logo: logo}, {Icon: icon}} {
+	for _, patch := range []Patch{{Logo: logo}, {Icon: icon}} {
 		wg.Add(1)
-		go func(p branding.Patch) {
+		go func(p Patch) {
 			defer wg.Done()
 			if _, e := s.Update(ctx, p); e != nil {
 				t.Error(e)
@@ -93,7 +93,7 @@ func TestBrandingPersistenceAndMerge(t *testing.T) {
 	}
 	wg.Wait()
 	row, err = s.Read(ctx)
-	if err != nil || !bytes.Equal(row.Logo, logo.Data()) || !bytes.Equal(row.Icon, icon.Data()) {
+	if err != nil || !bytes.Equal(row.Logo, logo.Data) || !bytes.Equal(row.Icon, icon.Data) {
 		t.Fatalf("merge lost slot: %+v %v", row, err)
 	}
 	before := row
@@ -107,12 +107,12 @@ func TestBrandingPersistenceAndMerge(t *testing.T) {
 	if err != nil || !bytes.Equal(row.Logo, before.Logo) || row.LogoHash != before.LogoHash || row.IconHash != before.IconHash {
 		t.Fatalf("reopen changed data: %+v %v", row, err)
 	}
-	row, err = s.Update(ctx, branding.Patch{Icon: &branding.Asset{}})
-	if err != nil || len(row.Icon) != 0 || row.IconHash != "" || !bytes.Equal(row.Logo, logo.Data()) {
+	row, err = s.Update(ctx, Patch{Icon: &branding.Asset{}})
+	if err != nil || len(row.Icon) != 0 || row.IconHash != "" || !bytes.Equal(row.Logo, logo.Data) {
 		t.Fatalf("clear: %+v %v", row, err)
 	}
 	for i := 0; i < 2; i++ {
-		row, err = s.Update(ctx, branding.Patch{Logo: &branding.Asset{}, Icon: &branding.Asset{}})
+		row, err = s.Reset(ctx)
 		if err != nil || len(row.Logo) != 0 || len(row.Icon) != 0 || row.LogoHash != "" {
 			t.Fatalf("reset: %+v %v", row, err)
 		}
@@ -126,16 +126,16 @@ func TestBrandingReadFailureRollsBackWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := NewBrandingStore(db)
-	before, err := s.Update(ctx, branding.Patch{Logo: testAsset(t, "old")})
+	before, err := s.Update(ctx, Patch{Logo: testAsset(t, "old")})
 	if err != nil {
 		t.Fatal(err)
 	}
 	db.Callback().Query().Before("gorm:query").Register("test:read-failure", func(tx *gorm.DB) { tx.AddError(errors.New("injected read failure")) })
-	if _, err := s.Update(ctx, branding.Patch{Logo: testAsset(t, "new")}); err == nil {
+	if _, err := s.Update(ctx, Patch{Logo: testAsset(t, "new")}); err == nil {
 		t.Fatal("expected failure")
 	}
 	db.Callback().Query().Remove("test:read-failure")
-	var after brandingRow
+	var after Settings
 	if err := db.First(&after, 1).Error; err != nil {
 		t.Fatal(err)
 	}

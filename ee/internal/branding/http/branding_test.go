@@ -56,7 +56,7 @@ func brandingTestRouter(t *testing.T) (*router.Router, *upstream.AuthMiddleware,
 	}
 	am := &upstream.AuthMiddleware{}
 	r := router.New()
-	if err := NewBrandingHandler(branding.NewService(eeconfig.NewBrandingStore(db))).RegisterRoutes(r, am.APIMiddleware()); err != nil {
+	if err := NewBrandingHandler(eeconfig.NewBrandingStore(db)).RegisterRoutes(r, am.APIMiddleware()); err != nil {
 		t.Fatal(err)
 	}
 	return r, am, db
@@ -73,12 +73,12 @@ func brandingRequest(r *router.Router, method, path, body string, headers map[st
 	r.Handler(ctx)
 	return ctx
 }
-func decodeResponse(t *testing.T, ctx *fasthttp.RequestCtx) brandingResponse {
+func decodeResponse(t *testing.T, ctx *fasthttp.RequestCtx) settingsResponse {
 	t.Helper()
 	if ctx.Response.StatusCode() != 200 {
 		t.Fatalf("status=%d body=%s", ctx.Response.StatusCode(), ctx.Response.Body())
 	}
-	var response brandingResponse
+	var response settingsResponse
 	if err := json.Unmarshal(ctx.Response.Body(), &response); err != nil {
 		t.Fatal(err)
 	}
@@ -153,6 +153,9 @@ func TestBrandingDefaultAndAssets(t *testing.T) {
 		t.Fatalf("X-Content-Type-Options %q", v)
 	}
 	etag := string(ctx.Response.Header.Peek("ETag"))
+	if got := brandingRequest(r, "GET", "/api/branding/assets/logo/"+strings.Repeat("0", 64), "", map[string]string{"If-None-Match": "*"}).Response.StatusCode(); got != 404 {
+		t.Fatalf("stale version returned %d despite current image existing", got)
+	}
 	if brandingRequest(r, "GET", url, "", map[string]string{"If-None-Match": etag}).Response.StatusCode() != 304 {
 		t.Fatal("missing 304")
 	}
