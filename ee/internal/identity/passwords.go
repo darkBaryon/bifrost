@@ -75,7 +75,7 @@ func (s *Service) ResetPassword(ctx context.Context, p Principal, targetID, oper
 	// 否则任何持有会话的成员都能靠反复调用把槽位占满，拖垮登录与改密。
 	// 预检失败不直接返回——仍进入事务，由其中的权限判定写失败事件（方案 4.2）。
 	var hash string
-	if allowed := s.RequireAccountManager(ctx, p); allowed == nil {
+	if s.RequireAccountManager(ctx, p) == nil {
 		h, err := s.hash(s.options.InitialPassword)
 		if err != nil {
 			return PasswordEvent{}, err
