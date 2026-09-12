@@ -19,6 +19,8 @@
 | [bootstrap.go](bootstrap.go) | `Bootstrap` 与 `attach` |
 | [identity.go](identity.go) | 环境变量、`newIdentity`、`assembleIdentity` |
 | [recovery.go](recovery.go) | 离线恢复子命令 |
+| [pricing.go](pricing.go) | 定价环境配置、启动同步与错误分类 |
+| [pricing_test.go](pricing_test.go) | 配置顺序、目录缺失与 attach 失败策略测试 |
 
 ## 国内定价装配
 
