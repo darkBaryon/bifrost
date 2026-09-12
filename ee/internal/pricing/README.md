@@ -8,3 +8,5 @@
 | `pricefile.go` | 独立 JSON DTO、嵌入文件、解析及整份校验 |
 | `pricefile_test.go` | 文件契约与非法输入测试 |
 | `data/cn-prices.json` | 随版本发布的价格目录；当前步骤为空骨架 |
+| `vendors.go` / `vendors_test.go` | 官方域名匹配、手工映射优先和原始厂商名保留 |
+| `overrides.go` / `overrides_test.go` | 美元/token 换算、UUID v5 与精确匹配覆盖 |
