@@ -1,0 +1,51 @@
+# 国内定价 期1：不建新表、不改上游；命令集沿用身份期的 ee 检查 + 本案冒烟 + 品牌/身份回归。
+必过命令:
+  - { name: ee-fmt, run: "cd ee && test -z \"$(gofmt -l ./internal ./cmd)\"" }
+  - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: ee-tests-race, run: "cd ee && GOWORK=off go test -race ./..." }
+  - { name: ui-dependencies, run: "cd ui && npm ci" }
+  - { name: ui-embed, run: "make -C ee build-ui" }
+  - { name: ee-binary, run: "cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http" }
+  - { name: pricing-smoke, run: "python3 ee/scripts/pricing-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: branding-regression, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: identity-regression, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database sqlite" }
+  - { name: pricefile-valid-json, run: "python3 -c \"import json,sys;json.load(open('ee/internal/pricing/data/cn-prices.json'))\"" }
+  - { name: upstream-untouched, run: "git diff --quiet f371548b5444693d7e259033bec9f4a467e3748b -- core framework plugins transports ui" }
+  - { name: workbench, run: "python3 workbench/tools/build_views.py --check" }
+  - { name: diff-whitespace, run: "git diff --check" }
+必存产物:
+  - ee/internal/pricing/README.md
+  - ee/internal/pricing/model.go
+  - ee/internal/pricing/pricefile.go
+  - ee/internal/pricing/vendors.go
+  - ee/internal/pricing/overrides.go
+  - ee/internal/pricing/sync.go
+  - ee/internal/pricing/data/cn-prices.json
+  - ee/internal/pricing/persistence/README.md
+  - ee/internal/pricing/persistence/store.go
+  - ee/internal/app/pricing.go
+  - ee/scripts/pricing-smoke.py
+  - ee/docs/国内定价.md
+必含符号:
+  - { grep: "type Service struct", in: "ee/internal/pricing/sync.go" }
+  - { grep: "func (s \\*Service) Sync(", in: "ee/internal/pricing/sync.go" }
+  - { grep: "type overrideStore interface", in: "ee/internal/pricing" }
+  - { grep: "type catalog interface", in: "ee/internal/pricing" }
+  - { grep: "type providerLister interface", in: "ee/internal/pricing" }
+  - { grep: "namePrefix", in: "ee/internal/pricing/overrides.go" }
+  - { grep: "func toUSDPerToken(", in: "ee/internal/pricing/overrides.go" }
+  - { grep: "EE_PRICING_USD_CNY", in: "ee/internal/app/pricing.go" }
+  - { grep: "EE_PRICING_VENDOR_MAP", in: "ee/internal/app/pricing.go" }
+  - { grep: "EE_PRICING_FILE", in: "ee/internal/app/pricing.go" }
+  - { grep: "UpsertPricingOverrides", in: "ee/internal/pricing/persistence/store.go" }
+  - { grep: "smoke-pricing", in: "ee/Makefile" }
+收敛评审:
+  风险等级: L2
+  基线: f371548b5444693d7e259033bec9f4a467e3748b
+  开发指南: [ee/docs/国内定价.md]
+禁留标记:
+  - { grep: "SetPricingOverrides", in: "ee" }
+  - { grep: "\"log\"$", in: "ee/internal/pricing" }
+  - { grep: "gorm.io", in: "ee/internal/pricing/model.go" }
+  - { grep: "gorm.io", in: "ee/internal/pricing/sync.go" }
+  - { grep: "bifrost-http/server", in: "ee/internal/pricing" }
