@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,7 +70,12 @@ func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServ
 		return errors.New("legacy administrator credentials are incomplete")
 	}
 	if err := service.BootstrapLegacy(ctx, username, hash); err != nil {
-		return errors.New("legacy administrator password is not a supported bcrypt hash")
+		// 只有凭据本身不合法才提示去修旧凭据；存储故障等原因照原样带出（identity.Error 已脱敏），
+		// 否则运维会被这句话引向错误的方向。
+		if errors.Is(err, identity.ErrInvalid) {
+			return errors.New("legacy administrator password is not a supported bcrypt hash")
+		}
+		return fmt.Errorf("legacy administrator import failed: %w", err)
 	}
 	if storedUser, storedHash := credential(stored); storedUser == username && storedHash == hash {
 		log.Info("EE identity: imported resolved host administrator snapshot matching stored database credentials")

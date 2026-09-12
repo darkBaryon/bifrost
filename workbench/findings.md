@@ -163,3 +163,19 @@ convert_when: "第三个模块需要同样的 busy 重试，或两份策略出�
 ```
 
 - 取舍项 A（品牌冒烟复用身份冒烟的进程夹具）、C（配置投影注释与 RBAC 替换提示）、D（`make smoke` 接入身份冒烟）均已采纳，不挂账。
+
+```yaml
+id: FIND-018
+status: 观察中
+triggered_by: [账号认证]
+evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账"
+convert_when: "出现真实登录并发容量问题，或把限流桶挪出 state 锁时一并处理"
+```
+
+```yaml
+id: FIND-019
+status: 已接受
+triggered_by: [账号认证]
+evidence: "哈希槽耗尽与登录限流共用 ErrLimited，Retry-After 一律取登录窗口 60 秒（ee/internal/identity/http/protocol.go:121），而槽位争抢通常百毫秒内消散；429 与 Retry-After:60 由方案 4.3 与 ee/docs/账号认证接口.md:44 规定为契约；来源:代码评审5 挂账"
+convert_when: "豁免(改动要动已批准契约)；若前端按 Retry-After 退避导致可感知延迟再评估"
+```

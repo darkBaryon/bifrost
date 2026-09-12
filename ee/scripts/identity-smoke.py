@@ -221,6 +221,18 @@ def exercise(nodes, dbconfig, dsn):
     assert all(e['target_id'] == alice_id for e in own['items'])
     assert not any(secret in json.dumps(own) for secret in ('123456','password_hash','Alice-password'))
     a.expect(403, '/api/identity/password-events', {'target_id':admin_id}, token=alice)
+    # 翻页时成员仍只能看到本人事件：游标条件与 target 限定必须同时生效。
+    seen, cursor, pages = [], None, 0
+    while True:
+        query = {'limit':2} if cursor is None else {'limit':2,'cursor':cursor}
+        page, _ = a.expect(200, '/api/identity/password-events', query, token=alice)
+        assert all(e['target_id'] == alice_id for e in page['items']), 'member paging leaked other accounts'
+        seen += [e['id'] for e in page['items']]
+        cursor, pages = page['next_cursor'], pages+1
+        assert pages < 20, 'member event paging did not terminate'
+        if cursor is None:
+            break
+    assert len(seen) == len(set(seen)) and len(seen) >= 3, 'member event paging lost or duplicated records'
     b.expect(200, '/api/accounts/set-status', {'account_id':alice_id,'status':'disabled'}, token=admin)
     a.expect(401, '/api/identity/me', {}, token=alice)
     b.expect(200, '/api/accounts/set-status', {'account_id':alice_id,'status':'active'}, token=admin)

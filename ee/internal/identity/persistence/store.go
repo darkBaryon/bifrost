@@ -292,7 +292,7 @@ func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]ident
 	rows := []accountRow{}
 	q := s.db.WithContext(ctx)
 	if c.ID != "" {
-		q = q.Where("created_at < ? OR (created_at = ? AND id < ?)", c.At, c.At, c.ID)
+		q = q.Where("(created_at < ? OR (created_at = ? AND id < ?))", c.At, c.At, c.ID)
 	}
 	err := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
 	out := make([]identity.Credential, 0, len(rows))
@@ -309,7 +309,7 @@ func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n 
 		q = q.Where("target_id = ?", target)
 	}
 	if c.ID != "" {
-		q = q.Where("occurred_at < ? OR (occurred_at = ? AND id < ?)", c.At, c.At, c.ID)
+		q = q.Where("(occurred_at < ? OR (occurred_at = ? AND id < ?))", c.At, c.At, c.ID)
 	}
 	err := q.Order("occurred_at DESC, id DESC").Limit(n).Find(&rows).Error
 	out := make([]identity.PasswordEvent, 0, len(rows))

@@ -71,13 +71,20 @@ func (s *Service) ResetPassword(ctx context.Context, p Principal, targetID, oper
 	if !uuidPattern.MatchString(operationID) || !uuidPattern.MatchString(targetID) {
 		return PasswordEvent{}, ErrInvalid
 	}
-	hash, err := s.hash(s.options.InitialPassword)
-	if err != nil {
-		return PasswordEvent{}, err
+	// 先做一次廉价的会话与权限预检，通过才计算 bcrypt：未授权的调用不占用哈希槽，
+	// 否则任何持有会话的成员都能靠反复调用把槽位占满，拖垮登录与改密。
+	// 预检失败不直接返回——仍进入事务，由其中的权限判定写失败事件（方案 4.2）。
+	var hash string
+	if allowed := s.RequireAccountManager(ctx, p); allowed == nil {
+		h, err := s.hash(s.options.InitialPassword)
+		if err != nil {
+			return PasswordEvent{}, err
+		}
+		hash = h
 	}
 	var event PasswordEvent
 	var outcome error
-	err = s.repo.Transaction(ctx, func(tx Tx) error {
+	err := s.repo.Transaction(ctx, func(tx Tx) error {
 		actual, actor, err := current(tx.AuthByID, p)
 		if err != nil {
 			return err
@@ -114,6 +121,11 @@ func (s *Service) ResetPassword(ctx context.Context, p Principal, targetID, oper
 		if outcome != nil {
 			event.Result, event.ReasonCode = ResultFailure, SafeError(outcome).Error()
 			return tx.InsertEvent(event)
+		}
+		if hash == "" {
+			// 预检拒绝、事务内却放行：权限在两次判定之间刚被授予。整笔回滚不写事件，
+			// 调用方用同一 operation_id 重试即可（重置本身幂等）。
+			return ErrConflict
 		}
 		event, err = s.replacePassword(tx, target, hash, true, event)
 		return err
