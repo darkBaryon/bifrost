@@ -27,8 +27,8 @@ func TestExpiredRowsSweptOnInsert(t *testing.T) {
 	for _, r := range []ticketRow{
 		{Hash: "ticket-expired", SessionID: admin.Principal.SessionID, ExpiresAt: now.Add(-time.Minute)},
 		{Hash: "ticket-expired-consumed", SessionID: admin.Principal.SessionID, ExpiresAt: now.Add(-time.Minute), ConsumedAt: &past},
-		{Hash: "ticket-alive", SessionID: admin.Principal.SessionID, ExpiresAt: now.Add(time.Minute)},
-		{Hash: "ticket-alive-consumed", SessionID: admin.Principal.SessionID, ExpiresAt: now.Add(time.Minute), ConsumedAt: &past},
+		{Hash: "ticket-alive", SessionID: admin.Principal.SessionID, ExpiresAt: now.Add(time.Hour)},
+		{Hash: "ticket-alive-consumed", SessionID: admin.Principal.SessionID, ExpiresAt: now.Add(time.Hour), ConsumedAt: &past},
 	} {
 		if err := db.Create(&r).Error; err != nil {
 			t.Fatal(err)

@@ -10,7 +10,7 @@
 - 写入新会话/票据前删除已到期的行（FIND-020）；限流桶写入时删除过期窗口。
 - SQLite 与上游共用文件时的 busy/locked 整笔重试；两种驱动的唯一键冲突统一成 `ErrConflict`。
 
-运维自查行数：`SELECT COUNT(*) FROM ee_identity_sessions; SELECT COUNT(*) FROM ee_identity_ws_tickets;`——正常应在两位数以内，超过万行再评估加索引。
+运维自查行数：`SELECT COUNT(*) FROM ee_identity_sessions; SELECT COUNT(*) FROM ee_identity_ws_tickets;`——会话行数 ≈ `SessionTTL` 窗口内的登录次数（默认 24 小时、内部控制台约为两位数；TTL 可配 1 小时到 7 天，按部署重算），票据行数 ≈ `WSTicketTTL` 内的 WS 建连次数；超过万行再评估加索引。
 
 ## 不做什么
 

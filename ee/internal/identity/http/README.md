@@ -4,7 +4,7 @@
 
 ## 做什么
 
-- 路由表是唯一来源，`RegisterRoutes` 注册、`OwnsRoute` 供宿主判断"这条路由是不是你的"；旧 `/api/session/*` 四条指向同样的端点。
+- 路由表是唯一来源，`RegisterRoutes` 注册、`OwnsRoute` 供宿主判断"这条路由是不是你的"；旧 `/api/session/*` 四条指向同样的端点。路由归属、所有 POST 的来源拒绝与匿名/会话边界的契约测试在 [host/auth_test.go](../../host/auth_test.go) 的 `TestIdentityRouteContract`（另一个包），改路由表要一并跑。
 - 每个端点外套一层 `serve`：禁缓存、非 GET 查同源、非匿名端点验 Cookie；端点本身只做"解码 → 调服务 → 装响应"。
 - JSON 严格：拒绝未知字段、重复键、过深嵌套、超 16KB；请求与响应结构（DTO）和业务类型分开定义。
 - 7 个业务错误映射 7 个状态码，其余一律 503；限流附 `Retry-After`。
