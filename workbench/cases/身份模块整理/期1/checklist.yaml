@@ -9,7 +9,8 @@
   - { name: ee-binary, run: "cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http" }
   - { name: identity-sqlite-http, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database sqlite" }
   - { name: identity-postgres-two-nodes, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database postgres" }
-  - { name: identity-upgrade, run: "python3 ee/scripts/identity-upgrade-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: legacy-binary, run: "sh workbench/tools/build_legacy_ee.sh 3e15a640d89902772445d3fb4c04023e58828eba ee/tmp/legacy-bifrost-http" }
+  - { name: identity-upgrade, run: "python3 ee/scripts/identity-upgrade-smoke.py --binary ee/tmp/bifrost-http --legacy-binary ee/tmp/legacy-bifrost-http" }
   - { name: branding-regression, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
   - { name: smoke-unchanged, run: "git diff --quiet 7284ad939462e4b78b6518826f6c537e13aecb46 -- ee/scripts" }
   - { name: test-guard, run: "ALLOWED_FILE=workbench/cases/身份模块整理/期1/test_guard_allowed.txt sh workbench/tools/test_guard.sh 7284ad939462e4b78b6518826f6c537e13aecb46 ee/internal/identity/persistence/service_test.go ee/internal/identity/persistence/diagnostics_test.go ee/internal/identity/http/handler_test.go ee/internal/bifrost/auth_test.go=ee/internal/host/auth_test.go" }
