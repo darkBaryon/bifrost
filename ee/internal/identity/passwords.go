@@ -65,8 +65,9 @@ func (s *Service) replacePassword(tx Tx, c Credential, hash string, mustChange b
 }
 
 // ResetPassword 由主管理员把目标密码重置为部署初始密码并强制改密，成功事件与改密同事务提交。
-// 权限、目标或自我重置等业务失败会写入失败事件并提交，随后作为错误返回；只有存储故障才回滚。
-// 同一 actor/target 用同一 operation_id 重试时原样返回首次结果，不再改密；同 ID 不同 actor/target 返回 ErrConflict。
+// 权限、目标或自我重置等业务失败会写入失败事件并提交，随后作为错误返回；存储故障与下述预检冲突才回滚。
+// 同一 actor/target 用同一 operation_id 重试时原样返回首次结果，不再改密。ErrConflict 有两种成因：
+// 同 ID 不同 actor/target（换新 ID 重试）；以及预检拒绝而事务内放行的权限竞态，此时整笔回滚、不写事件，用同一 ID 重试即可。
 func (s *Service) ResetPassword(ctx context.Context, p Principal, targetID, operationID string) (PasswordEvent, error) {
 	if !uuidPattern.MatchString(operationID) || !uuidPattern.MatchString(targetID) {
 		return PasswordEvent{}, ErrInvalid

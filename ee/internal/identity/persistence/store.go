@@ -288,12 +288,18 @@ func (s *Store) ReserveLogin(ctx context.Context, limits []identity.LoginLimit, 
 	})
 }
 
+// beforeCursor 是分页的唯一比较规则：按 (column, id) 严格早于游标；游标为空表示从头开始。
+// column 必须与调用方随后的 Order 排序键一致，否则翻页会漏行或重复。括号显式写出，不依赖 GORM 包裹 OR 表达式。
+func beforeCursor(q *gorm.DB, column string, c identity.Cursor) *gorm.DB {
+	if c.ID == "" {
+		return q
+	}
+	return q.Where("("+column+" < ? OR ("+column+" = ? AND id < ?))", c.At, c.At, c.ID)
+}
+
 func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.Credential, error) {
 	rows := []accountRow{}
-	q := s.db.WithContext(ctx)
-	if c.ID != "" {
-		q = q.Where("(created_at < ? OR (created_at = ? AND id < ?))", c.At, c.At, c.ID)
-	}
+	q := beforeCursor(s.db.WithContext(ctx), "created_at", c)
 	err := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
 	out := make([]identity.Credential, 0, len(rows))
 	for _, r := range rows {
@@ -308,9 +314,7 @@ func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n 
 	if target != "" {
 		q = q.Where("target_id = ?", target)
 	}
-	if c.ID != "" {
-		q = q.Where("(occurred_at < ? OR (occurred_at = ? AND id < ?))", c.At, c.At, c.ID)
-	}
+	q = beforeCursor(q, "occurred_at", c)
 	err := q.Order("occurred_at DESC, id DESC").Limit(n).Find(&rows).Error
 	out := make([]identity.PasswordEvent, 0, len(rows))
 	for _, r := range rows {
