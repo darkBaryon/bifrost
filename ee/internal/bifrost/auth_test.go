@@ -53,7 +53,7 @@ func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	return &AuthAdapter{HTTP: h}, v
+	return NewAuthAdapter(nil, s, h), v
 }
 func request(r *router.Router, method, path, body, token, origin, auth string) *fasthttp.RequestCtx {
 	req := &fasthttp.Request{}
@@ -89,36 +89,42 @@ func TestAdminBoundary(t *testing.T) {
 	for _, tt := range []struct {
 		token, origin, auth string
 		code                int
-	}{{"", a.HTTP.Origin, "", 401}, {v.Token, "", "", 403}, {v.Token, "https://evil.example", "", 403}, {v.Token, a.HTTP.Origin, "Basic dGVzdA==", 401}, {v.Token, a.HTTP.Origin, "", 204}} {
+	}{{"", a.http.Origin(), "", 401}, {v.Token, "", "", 403}, {v.Token, "https://evil.example", "", 403}, {v.Token, a.http.Origin(), "Basic dGVzdA==", 401}, {v.Token, a.http.Origin(), "", 204}} {
 		c := request(r, "POST", "/api/protected", "{}", tt.token, tt.origin, tt.auth)
 		if c.Response.StatusCode() != tt.code {
 			t.Fatalf("status=%d expected=%d", c.Response.StatusCode(), tt.code)
 		}
 	}
-	c := request(r, "POST", "/api/identity/create", "{}", v.Token, a.HTTP.Origin, "")
+	c := request(r, "POST", "/api/identity/create", "{}", v.Token, a.http.Origin(), "")
 	if c.Response.StatusCode() != 404 {
 		t.Fatal("unknown route exposed")
 	}
-	c = request(r, "POST", "/api/accounts/create", `{"username":"alice","role":"admin"}`, v.Token, a.HTTP.Origin, "")
+	c = request(r, "POST", "/api/accounts/create", `{"username":"alice","role":"admin"}`, v.Token, a.http.Origin(), "")
 	if c.Response.StatusCode() != 400 {
 		t.Fatal("accepted role injection")
 	}
-	if _, e := a.HTTP.Service.CreateAccount(context.Background(), v.Principal, "alice", ""); e != nil {
+	// limit 省略取默认值，显式 0 不是有效页大小。
+	for body, code := range map[string]int{`{}`: 200, `{"limit":0}`: 400, `{"limit":101}`: 400} {
+		if c = request(r, "POST", "/api/accounts/list", body, v.Token, a.http.Origin(), ""); c.Response.StatusCode() != code {
+			t.Fatalf("list %s: status=%d expected=%d", body, c.Response.StatusCode(), code)
+		}
+	}
+	if _, e := a.service.CreateAccount(context.Background(), v.Principal, "alice", ""); e != nil {
 		t.Fatal(e)
 	}
-	member, e := a.HTTP.Service.Login(context.Background(), "alice", "123456", "peer")
+	member, e := a.service.Login(context.Background(), "alice", "123456", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
-	c = request(r, "POST", "/api/protected", "{}", member.Token, a.HTTP.Origin, "")
+	c = request(r, "POST", "/api/protected", "{}", member.Token, a.http.Origin(), "")
 	if c.Response.StatusCode() != 403 {
 		t.Fatal("member elevated")
 	}
-	c = request(r, "POST", "/api/session/logout", "", v.Token, a.HTTP.Origin, "")
+	c = request(r, "POST", "/api/session/logout", "", v.Token, a.http.Origin(), "")
 	if c.Response.StatusCode() != 200 {
 		t.Fatal("legacy empty logout failed")
 	}
-	if _, e = a.HTTP.Service.Authenticate(context.Background(), v.Token); e != identity.ErrUnauthorized {
+	if _, e = a.service.Authenticate(context.Background(), v.Token); e != identity.ErrUnauthorized {
 		t.Fatal("logout failed to revoke")
 	}
 }
@@ -144,13 +150,13 @@ func TestConfigurationProjection(t *testing.T) {
 		t.Fatal("config read")
 	}
 	body := string(c.Response.Body())
-	c = request(r, "PUT", "/api/config", body, v.Token, a.HTTP.Origin, "")
+	c = request(r, "PUT", "/api/config", body, v.Token, a.http.Origin(), "")
 	if c.Response.StatusCode() != 200 || !called {
 		t.Fatal("same projection rejected")
 	}
 	for _, body := range []string{`{"auth_config":{"is_enabled":false},"client_config":{}}`, `{"client_config":{"whitelisted_routes":["*"]}}`, `{"AUTH_CONFIG":{"is_enabled":false}}`, `{"client_config":{"Whitelisted_Routes":["*"]}}`, `{"auth_config":{},"auth_config":null}`} {
 		called = false
-		c = request(r, "PUT", "/api/config", body, v.Token, a.HTTP.Origin, "")
+		c = request(r, "PUT", "/api/config", body, v.Token, a.http.Origin(), "")
 		if c.Response.StatusCode() < 400 || called {
 			t.Fatal("configuration bypass/partial write")
 		}
@@ -160,7 +166,7 @@ func TestCookieAndStrictJSON(t *testing.T) {
 	a, _ := testAdapter(t)
 	r := router.New()
 	a.RegisterSessionRoutes(r, a.APIMiddleware())
-	c := request(r, "POST", "/api/identity/login", `{"username":"admin","password":"Admin-password-1"}`, "", a.HTTP.Origin, "")
+	c := request(r, "POST", "/api/identity/login", `{"username":"admin","password":"Admin-password-1"}`, "", a.http.Origin(), "")
 	if c.Response.StatusCode() != 200 {
 		t.Fatal("login failed", c.Response.StatusCode())
 	}
@@ -171,7 +177,7 @@ func TestCookieAndStrictJSON(t *testing.T) {
 		t.Fatal("unsafe cookie")
 	}
 	for _, body := range []string{`{"username":"admin","username":"other","password":"bad"}`, `{} {}`, `null`, `[]`} {
-		c = request(r, "POST", "/api/identity/login", body, "", a.HTTP.Origin, "")
+		c = request(r, "POST", "/api/identity/login", body, "", a.http.Origin(), "")
 		if c.Response.StatusCode() != 400 {
 			t.Fatal("invalid JSON accepted")
 		}
@@ -184,28 +190,28 @@ func TestOriginConflictAndTicketValidation(t *testing.T) {
 		origin, referer string
 		ok              bool
 	}{
-		{a.HTTP.Origin, "https://evil.test/page", false}, {"https://evil.test", a.HTTP.Origin + "/page", false}, {"", a.HTTP.Origin + "/page", true}, {"", "", false},
+		{a.http.Origin(), "https://evil.test/page", false}, {"https://evil.test", a.http.Origin() + "/page", false}, {"", a.http.Origin() + "/page", true}, {"", "", false},
 	} {
 		var c fasthttp.RequestCtx
 		c.Init(&fasthttp.Request{}, nil, nil)
 		c.Request.Header.Set("Origin", tc.origin)
 		c.Request.Header.Set("Referer", tc.referer)
-		if a.HTTP.SameOrigin(&c) != tc.ok {
+		if a.http.SameOrigin(&c) != tc.ok {
 			t.Fatal("ambiguous origin accepted")
 		}
 	}
 	r := router.New()
 	m := a.APIMiddleware()
 	r.GET("/ws", m(func(c *fasthttp.RequestCtx) { c.SetStatusCode(204) }))
-	ticket, e := a.HTTP.Service.IssueTicket(context.Background(), v.Principal)
+	ticket, e := a.service.IssueTicket(context.Background(), v.Principal)
 	if e != nil {
 		t.Fatal(e)
 	}
-	c := request(r, "GET", "/ws?ticket="+ticket, "", "", a.HTTP.Origin, "")
+	c := request(r, "GET", "/ws?ticket="+ticket, "", "", a.http.Origin(), "")
 	if c.Response.StatusCode() != 204 {
 		t.Fatal("ticket rejected")
 	}
-	c = request(r, "GET", "/ws?ticket="+ticket, "", "", a.HTTP.Origin, "")
+	c = request(r, "GET", "/ws?ticket="+ticket, "", "", a.http.Origin(), "")
 	if c.Response.StatusCode() != 401 {
 		t.Fatal("consumed ticket replayed")
 	}
@@ -232,10 +238,10 @@ func TestTemporaryTokenScopes(t *testing.T) {
 		t.Fatal(e)
 	}
 	a.host = &server.BifrostHTTPServer{Config: &lib.Config{ConfigStore: store}, TempTokens: tokens}
-	if _, e = a.HTTP.Service.CreateAccount(ctx, admin.Principal, "member", ""); e != nil {
+	if _, e = a.service.CreateAccount(ctx, admin.Principal, "member", ""); e != nil {
 		t.Fatal(e)
 	}
-	member, e := a.HTTP.Service.Login(ctx, "member", "123456", "peer")
+	member, e := a.service.Login(ctx, "member", "123456", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -353,7 +359,7 @@ func TestIdentityRouteContract(t *testing.T) {
 			if c.Response.StatusCode() != 403 {
 				t.Fatal("POST bypassed source check", c.Response.StatusCode())
 			}
-			c = request(r, fasthttp.MethodPost, tt.path, tt.body, "", a.HTTP.Origin, "")
+			c = request(r, fasthttp.MethodPost, tt.path, tt.body, "", a.http.Origin(), "")
 			if c.Response.StatusCode() != tt.status {
 				t.Fatal("anonymous contract changed", c.Response.StatusCode())
 			}
@@ -368,7 +374,7 @@ func TestIdentityRouteContract(t *testing.T) {
 	if c.Response.StatusCode() != 200 || !identityhttp.OwnsRoute(fasthttp.MethodGet, "/api/session/is-auth-enabled") {
 		t.Fatal("legacy public status changed")
 	}
-	c = request(r, fasthttp.MethodPost, "/api/identity/logout", "", "", a.HTTP.Origin, "")
+	c = request(r, fasthttp.MethodPost, "/api/identity/logout", "", "", a.http.Origin(), "")
 	if c.Response.StatusCode() != 400 {
 		t.Fatal("new logout accidentally accepts legacy empty body")
 	}

@@ -1,10 +1,13 @@
-# 身份HTTP接口
+# 身份 HTTP 接口
 
-`handler.go`集中维护本模块HTTP适配：路由声明、严格JSON解码、同源检查、Cookie、安全错误映射和业务调用。账号规则通过identity.Service执行，不在handler中操作数据库。
+本包集中维护身份模块的 HTTP 适配：路由声明、严格 JSON 解码、同源检查、Cookie、安全错误映射和业务调用。账号规则通过 `identity.Service` 执行，不在这里操作数据库。
 
-- 路由表同时供OwnsRoute和RegisterRoutes使用；每个端点显式绑定类型化operation、匿名能力及兼容空体规则，默认要求会话。路径仅在此声明，不按路径前缀推断业务行为。
-- HTTP状态码/方法和删除Cookie的过期值复用fasthttp；请求体字节数、JSON深度就近命名；Retry-After秒数从identity.LoginRateWindow推导，与数据库限流共用口径。
-- 命名响应类型固定字段契约，兼容成功消息集中定义；未知内部操作明确失败，不返回成功空响应。
-- `handler_test.go`验证严格JSON限制、错误映射和序列化降级。精确路由归属、所有POST的来源拒绝及匿名/会话边界由`../../bifrost/auth_test.go`中的`TestIdentityRouteContract`验证；业务全流程继续由宿主适配测试及真实HTTP冒烟覆盖。
+| 文件 | 职责 |
+|---|---|
+| [handler.go](handler.go) | 路由表（`OwnsRoute` 与 `RegisterRoutes` 共用）、端点共同的前置规则、同源与 Cookie、错误映射、各端点适配 |
+| [dto.go](dto.go) | 请求与响应结构、业务类型到响应字段的转换 |
+| [handler_test.go](handler_test.go) | 严格 JSON 限制、错误映射与序列化降级契约 |
 
-新接口统一POST，保留上游会话兼容路径及旧登出/票据的空体能力。GET is-auth-enabled维持公开状态查询。Cookie绑定已验证的外部origin，非回环部署必须HTTPS；不信任代理头，不把会话token返回到JSON。
+每条路由直接绑定端点方法，并显式声明匿名能力与旧接口的空正文兼容；新增路由默认要求会话。精确路由归属、所有 POST 的来源拒绝及匿名/会话边界由 [../../bifrost/auth_test.go](../../bifrost/auth_test.go) 的 `TestIdentityRouteContract` 验证，业务全流程由宿主适配测试和真实 HTTP 冒烟覆盖。
+
+新接口统一 POST，保留上游会话兼容路径及旧登出/票据的空正文能力；`GET /api/session/is-auth-enabled` 维持公开状态查询。部署 origin 由 `ValidateOrigin` 统一校验，非回环部署必须 HTTPS；不信任代理头，不把会话 token 放进 JSON。`limit` 省略取默认值，显式 0 或越界返回 400。

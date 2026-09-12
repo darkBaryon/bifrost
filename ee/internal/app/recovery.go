@@ -13,9 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	eehost "github.com/darkBaryon/bifrost/ee/internal/bifrost"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
@@ -65,11 +63,12 @@ func RecoverAdmin(args []string) error {
 		return errors.New("cannot open recovery database")
 	}
 	defer store.Close(ctx)
-	options, e := eehost.OptionsFromEnvironment("")
+	// 恢复只需要密码规则；初始化密钥不参与，传空。
+	options, e := identityOptions("")
 	if e != nil {
 		return e
 	}
-	svc, e := identity.NewService(persistence.NewStore(store.DB()), persistence.Passwords{}, options, nil)
+	svc, e := newIdentityService(store.DB(), options)
 	if e != nil {
 		return e
 	}

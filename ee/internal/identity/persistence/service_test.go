@@ -137,7 +137,7 @@ func TestAccountLifecycle(t *testing.T) {
 		t.Fatal(e)
 	}
 	events, e := s.ListPasswordEvents(ctx, v.Principal, "", "", 1)
-	if e != nil || len(events.Items) != 1 || events.NextCursor == nil {
+	if e != nil || len(events.Items) != 1 || events.NextCursor == "" {
 		t.Fatal("event pagination", events, e)
 	}
 	_, e = s.ListPasswordEvents(ctx, v.Principal, admin.Principal.AccountID, "", 20)
@@ -146,15 +146,16 @@ func TestAccountLifecycle(t *testing.T) {
 	if strings.Contains(string(body), "password_hash") || strings.Contains(string(body), "123456") {
 		t.Fatal("secret serialized")
 	}
-	if e = s.SetAccountStatus(ctx, admin.Principal, a.ID, "disabled"); e != nil {
+	if _, e = s.SetAccountStatus(ctx, admin.Principal, a.ID, identity.StatusDisabled); e != nil {
 		t.Fatal(e)
 	}
-	if e = s.SetAccountStatus(ctx, admin.Principal, a.ID, "active"); e != nil {
+	if _, e = s.SetAccountStatus(ctx, admin.Principal, a.ID, identity.StatusActive); e != nil {
 		t.Fatal(e)
 	}
 	_, e = s.Authenticate(ctx, v.Token)
 	requireError(t, e, identity.ErrUnauthorized)
-	requireError(t, s.SetAccountStatus(ctx, admin.Principal, admin.Principal.AccountID, "disabled"), identity.ErrForbidden)
+	_, e = s.SetAccountStatus(ctx, admin.Principal, admin.Principal.AccountID, identity.StatusDisabled)
+	requireError(t, e, identity.ErrForbidden)
 	var rows []sessionRow
 	db.Find(&rows)
 	for _, r := range rows {
@@ -184,7 +185,7 @@ func TestPasswordEventRollback(t *testing.T) {
 	}
 	db.Callback().Create().Remove("fail:events")
 	ev, e := s.ResetPassword(ctx, p.Principal, a.ID, "00000000-0000-4000-8000-000000000002")
-	if e != nil || ev.Result != "success" {
+	if e != nil || ev.Result != identity.ResultSuccess {
 		t.Fatal(e)
 	}
 }
@@ -198,12 +199,10 @@ func TestInitializationAndLegacy(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	legacy := &identity.Credential{Account: identity.Account{Username: "old admin!"}, PasswordHash: hash}
-	if e = s.BootstrapLegacy(ctx, legacy); e != nil {
+	if e = s.BootstrapLegacy(ctx, "old admin!", hash); e != nil {
 		t.Fatal(e)
 	}
-	legacy.PasswordHash = "invalid"
-	if e = s.BootstrapLegacy(ctx, legacy); e != nil {
+	if e = s.BootstrapLegacy(ctx, "old admin!", "invalid"); e != nil {
 		t.Fatal("reimported changed legacy", e)
 	}
 	v, e := s.Login(ctx, "old admin!", "short", "peer")
@@ -254,7 +253,7 @@ func TestRateLimitAndFailedAudit(t *testing.T) {
 	requireError(t, e, identity.ErrLimited)
 	event, e := s.ResetPassword(ctx, p.Principal, p.Principal.AccountID, "00000000-0000-4000-8000-000000000003")
 	requireError(t, e, identity.ErrForbidden)
-	if event.Result != "failure" || event.ReasonCode != "forbidden" {
+	if event.Result != identity.ResultFailure || event.ReasonCode != identity.ErrForbidden.Error() {
 		t.Fatal("missing failure event")
 	}
 }
@@ -472,7 +471,7 @@ func TestLegacyRejectsMalformedBcrypt(t *testing.T) {
 	s := newService(t, store)
 	ctx := context.Background()
 	for _, hash := range []string{"plaintext", "$2a$10$" + strings.Repeat("!", 53), "$2z$10$" + strings.Repeat("a", 53), "$2a$10$" + strings.Repeat("a", 54)} {
-		requireError(t, s.BootstrapLegacy(ctx, &identity.Credential{Account: identity.Account{Username: "admin"}, PasswordHash: hash}), identity.ErrInvalid)
+		requireError(t, s.BootstrapLegacy(ctx, "admin", hash), identity.ErrInvalid)
 	}
 	state, e := s.State(ctx)
 	if e != nil || state.Initialized {

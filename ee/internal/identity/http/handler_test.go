@@ -79,7 +79,7 @@ func TestStrictJSONBoundaries(t *testing.T) {
 			var payload struct {
 				Value string `json:"value"`
 			}
-			if err := Decode(&c, &payload, tt.allowEmpty); (err == nil) != tt.valid {
+			if err := decode(&c, &payload, tt.allowEmpty); (err == nil) != tt.valid {
 				t.Fatal("unexpected decode result", err)
 			}
 		})

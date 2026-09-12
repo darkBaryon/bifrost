@@ -1,9 +1,10 @@
 # 宿主认证接入
 
-`auth.go`在宿主注册路由前装配身份服务并提供ConsoleAuthProvider。替换管理认证和旧会话处理者，推理注册链及VK规则保持。
+本包把 EE 身份服务接到宿主路由上，实现 `server.ConsoleAuthProvider`：替换管理鉴权和旧会话处理者，推理注册链及 VK 规则保持。
 
-管理请求默认要求当前chief，通知兼容localAdmin标记，WS每次推送重验会话。公开协议路径与MCP临时令牌按固定method/route处理，不接受动态管理白名单。配置GET投影只读认证状态，PUT同值回送剔除旧auth_config后继续宿主操作，实际认证变更整请求拒绝。
+| 文件 | 职责 |
+|---|---|
+| [auth.go](auth.go) | 旧管理员凭据导入、管理路由鉴权中间件、公开入口与 MCP 临时令牌例外、WS 握手与重验回调、`/api/config` 投影与预检 |
+| [auth_test.go](auth_test.go) | 真实路由链的身份边界、来源冲突、配置同值回送、URL 票据脱敏与临时令牌精确范围 |
 
-EE_INITIAL_PASSWORD、EE_SESSION_TTL_HOURS、EE_PUBLIC_ORIGIN为部署环境配置；初始化凭据复用宿主SetupToken。数据库及后台worker生命周期仍归宿主。
-
-`auth_test.go`验证来源冲突、配置同值回送、URL票据脱敏和真实MCP临时令牌的精确scope边界。
+身份服务、HTTP 适配和部署选项由 [app](../app/README.md) 装配后通过 `NewAuthAdapter` 注入；本包不读环境变量、不迁移表。管理请求默认要求当前正常的主管理员会话，通知等上游能力通过 localAdmin 兼容标记放行；WS 每次推送前重验会话。公开协议路径与 MCP 临时令牌按固定 method/route 处理，不接受动态管理白名单。配置 GET 投影只读认证状态，PUT 同值回送剔除旧 auth_config 后继续宿主操作，实际认证变更整请求拒绝。数据库及后台 worker 生命周期仍归宿主。

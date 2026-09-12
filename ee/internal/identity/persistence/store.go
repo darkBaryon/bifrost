@@ -1,3 +1,5 @@
+// 本文件定义六张身份表的行结构及其与业务类型的转换，并实现读取、事务、限流与分页。
+//
 // Package persistence 通过共享配置数据库实现身份存储及原子操作。
 package persistence
 
@@ -5,10 +7,11 @@ import (
 	"context"
 	"errors"
 	"regexp"
-	"strings"
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/mattn/go-sqlite3"
 	"github.com/maximhq/bifrost/framework/encrypt"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -16,12 +19,37 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// 行结构的字段名决定列名；ee_identity_v1 迁移按当前定义建表，改字段就是改表结构，须走新的迁移版本。
+
 type accountRow struct {
-	identity.Credential `gorm:"embedded"`
+	ID                 string `gorm:"primaryKey"`
+	Username           string
+	DisplayName        string
+	Status             string
+	MustChangePassword bool
+	PasswordHash       string
+	AuthVersion        int64
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 func (accountRow) TableName() string { return "ee_identity_accounts" }
 
+func (r accountRow) credential() identity.Credential {
+	return identity.Credential{
+		Account: identity.Account{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
+			Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword},
+		PasswordHash: r.PasswordHash, AuthVersion: r.AuthVersion, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+	}
+}
+
+func accountRowOf(c identity.Credential) accountRow {
+	return accountRow{ID: c.ID, Username: c.Username, DisplayName: c.DisplayName, Status: string(c.Status),
+		MustChangePassword: c.MustChangePassword, PasswordHash: c.PasswordHash, AuthVersion: c.AuthVersion,
+		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+}
+
+// stateRow 是 ID 固定为 1 的单例；Revision 只用于在事务开始时取得写锁。
 type stateRow struct {
 	ID             int `gorm:"primaryKey"`
 	Initialized    bool
@@ -32,17 +60,49 @@ type stateRow struct {
 func (stateRow) TableName() string { return "ee_identity_state" }
 
 type sessionRow struct {
-	identity.Session `gorm:"embedded"`
+	ID                string `gorm:"primaryKey"`
+	TokenHash         string
+	AccountID         string
+	IssuedAuthVersion int64
+	ExpiresAt         time.Time
+	CreatedAt         time.Time
+	RevokedAt         *time.Time
 }
 
 func (sessionRow) TableName() string { return "ee_identity_sessions" }
 
+func sessionRowOf(s identity.Session) sessionRow {
+	return sessionRow{ID: s.ID, TokenHash: s.TokenHash, AccountID: s.AccountID, IssuedAuthVersion: s.IssuedAuthVersion,
+		ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt, RevokedAt: s.RevokedAt}
+}
+
 type eventRow struct {
-	identity.PasswordEvent `gorm:"embedded"`
+	ID          string `gorm:"primaryKey"`
+	OperationID string
+	ActorID     string
+	TargetID    string
+	ActorName   string
+	TargetName  string
+	Action      string
+	Result      string
+	ReasonCode  string
+	OccurredAt  time.Time
 }
 
 func (eventRow) TableName() string { return "ee_identity_password_events" }
 
+func (r eventRow) event() identity.PasswordEvent {
+	return identity.PasswordEvent{ID: r.ID, OperationID: r.OperationID, ActorID: r.ActorID, TargetID: r.TargetID,
+		ActorName: r.ActorName, TargetName: r.TargetName, Action: identity.EventAction(r.Action),
+		Result: identity.EventResult(r.Result), ReasonCode: r.ReasonCode, OccurredAt: r.OccurredAt}
+}
+
+func eventRowOf(e identity.PasswordEvent) eventRow {
+	return eventRow{ID: e.ID, OperationID: e.OperationID, ActorID: e.ActorID, TargetID: e.TargetID, ActorName: e.ActorName,
+		TargetName: e.TargetName, Action: string(e.Action), Result: string(e.Result), ReasonCode: e.ReasonCode, OccurredAt: e.OccurredAt}
+}
+
+// ticketRow 以票据摘要为主键；ConsumedAt 由 UPDATE 条件保证多节点只消费一次。
 type ticketRow struct {
 	Hash       string `gorm:"primaryKey"`
 	SessionID  string
@@ -52,6 +112,7 @@ type ticketRow struct {
 
 func (ticketRow) TableName() string { return "ee_identity_ws_tickets" }
 
+// limitRow 是一个登录限流桶，Key 形如 "ip:<摘要>" 或 "name:<摘要>"。
 type limitRow struct {
 	Key         string    `gorm:"primaryKey"`
 	WindowStart time.Time `gorm:"index"`
@@ -60,78 +121,109 @@ type limitRow struct {
 
 func (limitRow) TableName() string { return "ee_identity_login_limits" }
 
-// Passwords 复用宿主bcrypt，禁止截断超过算法上限的密码。
+// limitRetention 是限流桶的保留期，远大于任何登录窗口，只用于顺带清理旧桶。
+const limitRetention = time.Hour
+
+// Passwords 复用宿主 bcrypt，超过算法上限的密码由业务层拒绝而不是截断。
 type Passwords struct{}
 
 func (Passwords) Hash(p string) (string, error)     { return encrypt.Hash(p) }
 func (Passwords) Compare(h, p string) (bool, error) { return encrypt.CompareHash(h, p) }
 
+// bcryptHashPattern 补充 bcrypt.Cost 只解析版本和 cost 的不足，要求完整的 22 字节盐与 31 字节摘要。
 var bcryptHashPattern = regexp.MustCompile(`^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$`)
 
+// ValidHash 判断字符串是否为完整的 bcrypt 哈希，用于旧管理员凭据导入。
 func (Passwords) ValidHash(h string) bool {
 	_, err := bcrypt.Cost([]byte(h))
 	return err == nil && bcryptHashPattern.MatchString(h)
 }
 
-// Store 使用静默SQL日志，避免错误查询输出凭据、哈希和身份信息。
+// Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
 type Store struct{ db *gorm.DB }
 
+// NewStore 复用宿主的数据库连接。
 func NewStore(db *gorm.DB) *Store {
 	return &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)})}
 }
+
 func notFound(err error) error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return identity.ErrNotFound
 	}
 	return err
 }
+
+// pgUniqueViolation 是 PostgreSQL 唯一约束冲突的 SQLSTATE。
+const pgUniqueViolation = "23505"
+
+// conflict 把两种驱动的唯一键冲突转换为 ErrConflict，其他错误原样返回。
 func conflict(err error) error {
-	if err != nil && (errors.Is(err, gorm.ErrDuplicatedKey) || strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "SQLSTATE 23505")) {
+	var pg *pgconn.PgError
+	var lite sqlite3.Error
+	switch {
+	case errors.As(err, &pg) && pg.Code == pgUniqueViolation,
+		errors.As(err, &lite) && (lite.ExtendedCode == sqlite3.ErrConstraintUnique || lite.ExtendedCode == sqlite3.ErrConstraintPrimaryKey):
 		return identity.ErrConflict
 	}
 	return err
 }
+
 func (s *Store) State(ctx context.Context) (identity.State, error) {
 	var r stateRow
-	e := s.db.WithContext(ctx).First(&r, 1).Error
-	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(databaseFailure(ctx, "state.read", e))
-}
-func (s *Store) CredentialByName(ctx context.Context, name string) (identity.Credential, error) {
-	var r accountRow
-	e := s.db.WithContext(ctx).Where("username = ?", name).First(&r).Error
-	return r.Credential, notFound(databaseFailure(ctx, "account.read", e))
+	err := s.db.WithContext(ctx).First(&r, 1).Error
+	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(logDatabaseFailure(ctx, "state.read", err))
 }
 
-// authRecord 在一个SQL语句中读取会话及账号，避免跨查询读出不一致版本。
+func (s *Store) CredentialByName(ctx context.Context, name string) (identity.Credential, error) {
+	var r accountRow
+	err := s.db.WithContext(ctx).Where("username = ?", name).First(&r).Error
+	return r.credential(), notFound(logDatabaseFailure(ctx, "account.read", err))
+}
+
+// authRow 是账号与会话联合查询的结果；账号列由 GORM 按导出字段展开，会话列用 session_ 前缀避免同名。
+type authRow struct {
+	Account           accountRow `gorm:"embedded"`
+	SessionID         string
+	TokenHash         string
+	SessionAccountID  string
+	IssuedAuthVersion int64
+	SessionExpiresAt  time.Time
+	SessionCreatedAt  time.Time
+	SessionRevokedAt  *time.Time
+}
+
+// authRecord 在一条 SQL 中读取会话及其账号，避免跨查询读出不一致的版本。
 func authRecord(db *gorm.DB, column, value string) (identity.AuthRecord, error) {
-	var row struct {
-		identity.Credential `gorm:"embedded"`
-		SessionID           string
-		TokenHash           string
-		SessionAccountID    string
-		IssuedAuthVersion   int64
-		SessionExpiresAt    time.Time
-		SessionCreatedAt    time.Time
-		SessionRevokedAt    *time.Time
-	}
-	result := db.Table("ee_identity_accounts a").Select("a.*, s.id AS session_id, s.token_hash, s.account_id AS session_account_id, s.issued_auth_version, s.expires_at AS session_expires_at, s.created_at AS session_created_at, s.revoked_at AS session_revoked_at").Joins("JOIN ee_identity_sessions s ON s.account_id = a.id").Where(column+" = ?", value).Limit(1).Scan(&row)
+	var row authRow
+	result := db.Table("ee_identity_accounts a").
+		Select("a.*, s.id AS session_id, s.token_hash, s.account_id AS session_account_id, s.issued_auth_version, "+
+			"s.expires_at AS session_expires_at, s.created_at AS session_created_at, s.revoked_at AS session_revoked_at").
+		Joins("JOIN ee_identity_sessions s ON s.account_id = a.id").Where(column+" = ?", value).Limit(1).Scan(&row)
 	if result.Error != nil {
 		return identity.AuthRecord{}, result.Error
 	}
 	if result.RowsAffected == 0 {
 		return identity.AuthRecord{}, identity.ErrNotFound
 	}
-	return identity.AuthRecord{Credential: row.Credential, Session: identity.Session{ID: row.SessionID, TokenHash: row.TokenHash, AccountID: row.SessionAccountID, IssuedAuthVersion: row.IssuedAuthVersion, ExpiresAt: row.SessionExpiresAt, CreatedAt: row.SessionCreatedAt, RevokedAt: row.SessionRevokedAt}}, nil
-}
-func (s *Store) AuthByHash(ctx context.Context, h string) (identity.AuthRecord, error) {
-	v, e := authRecord(s.db.WithContext(ctx), "s.token_hash", h)
-	return v, databaseFailure(ctx, "session.read", e)
-}
-func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, error) {
-	v, e := authRecord(s.db.WithContext(ctx), "s.id", id)
-	return v, databaseFailure(ctx, "session.read", e)
+	return identity.AuthRecord{
+		Credential: row.Account.credential(),
+		Session: identity.Session{ID: row.SessionID, TokenHash: row.TokenHash, AccountID: row.SessionAccountID,
+			IssuedAuthVersion: row.IssuedAuthVersion, ExpiresAt: row.SessionExpiresAt, CreatedAt: row.SessionCreatedAt, RevokedAt: row.SessionRevokedAt},
+	}, nil
 }
 
+func (s *Store) AuthByHash(ctx context.Context, hash string) (identity.AuthRecord, error) {
+	v, err := authRecord(s.db.WithContext(ctx), "s.token_hash", hash)
+	return v, logDatabaseFailure(ctx, "session.read", err)
+}
+
+func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, error) {
+	v, err := authRecord(s.db.WithContext(ctx), "s.id", id)
+	return v, logDatabaseFailure(ctx, "session.read", err)
+}
+
+// transaction 实现 identity.Tx；stage 记录最近执行的操作，供失败诊断定位阶段。
 type transaction struct {
 	db    *gorm.DB
 	state identity.State
@@ -139,64 +231,81 @@ type transaction struct {
 }
 
 func (t *transaction) State() identity.State { return t.state }
+
 func (t *transaction) SaveState(s identity.State) error {
 	t.stage = "state.save"
-	e := t.db.Model(&stateRow{}).Where("id = 1").Updates(map[string]any{"initialized": s.Initialized, "chief_account_id": s.ChiefAccountID}).Error
-	if e == nil {
+	err := t.db.Model(&stateRow{}).Where("id = 1").Updates(map[string]any{"initialized": s.Initialized, "chief_account_id": s.ChiefAccountID}).Error
+	if err == nil {
 		t.state = s
 	}
-	return e
+	return err
 }
+
 func (t *transaction) Account(id string) (identity.Credential, error) {
 	t.stage = "account.read"
 	var r accountRow
-	e := t.db.Where("id = ?", id).First(&r).Error
-	return r.Credential, notFound(e)
+	err := t.db.Where("id = ?", id).First(&r).Error
+	return r.credential(), notFound(err)
 }
+
 func (t *transaction) AccountByName(name string) (identity.Credential, error) {
 	t.stage = "account.read"
 	var r accountRow
-	e := t.db.Where("username = ?", name).First(&r).Error
-	return r.Credential, notFound(e)
+	err := t.db.Where("username = ?", name).First(&r).Error
+	return r.credential(), notFound(err)
 }
+
 func (t *transaction) InsertAccount(c identity.Credential) error {
 	t.stage = "account.insert"
-	return conflict(t.db.Create(&accountRow{c}).Error)
+	r := accountRowOf(c)
+	return conflict(t.db.Create(&r).Error)
 }
+
 func (t *transaction) SaveAccount(c identity.Credential) error {
 	t.stage = "account.update"
-	return t.db.Save(&accountRow{c}).Error
+	r := accountRowOf(c)
+	return t.db.Save(&r).Error
 }
+
 func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
 	t.stage = "session.read"
 	return authRecord(t.db, "s.id", id)
 }
+
 func (t *transaction) InsertSession(s identity.Session) error {
 	t.stage = "session.insert"
-	return t.db.Create(&sessionRow{s}).Error
+	r := sessionRowOf(s)
+	return t.db.Create(&r).Error
 }
+
 func (t *transaction) RevokeSession(id string, at time.Time) error {
 	t.stage = "session.revoke"
 	return t.db.Model(&sessionRow{}).Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", at).Error
 }
-func (t *transaction) RevokeSessions(id string, at time.Time) error {
+
+func (t *transaction) RevokeSessions(accountID string, at time.Time) error {
 	t.stage = "sessions.revoke"
-	return t.db.Model(&sessionRow{}).Where("account_id = ? AND revoked_at IS NULL", id).Update("revoked_at", at).Error
+	return t.db.Model(&sessionRow{}).Where("account_id = ? AND revoked_at IS NULL", accountID).Update("revoked_at", at).Error
 }
-func (t *transaction) Event(id string) (identity.PasswordEvent, error) {
+
+func (t *transaction) Event(operationID string) (identity.PasswordEvent, error) {
 	t.stage = "password_event.read"
 	var r eventRow
-	e := t.db.Where("operation_id = ?", id).First(&r).Error
-	return r.PasswordEvent, notFound(e)
+	err := t.db.Where("operation_id = ?", operationID).First(&r).Error
+	return r.event(), notFound(err)
 }
+
 func (t *transaction) InsertEvent(e identity.PasswordEvent) error {
 	t.stage = "password_event.insert"
-	return conflict(t.db.Create(&eventRow{e}).Error)
+	r := eventRowOf(e)
+	return conflict(t.db.Create(&r).Error)
 }
+
 func (t *transaction) InsertTicket(v identity.Ticket) error {
 	t.stage = "ticket.insert"
 	return t.db.Create(&ticketRow{Hash: v.Hash, SessionID: v.SessionID, ExpiresAt: v.ExpiresAt}).Error
 }
+
 func (t *transaction) ConsumeTicket(hash string, at time.Time) (string, error) {
 	t.stage = "ticket.consume"
 	result := t.db.Model(&ticketRow{}).Where("hash = ? AND consumed_at IS NULL AND expires_at > ?", hash, at).Update("consumed_at", at)
@@ -207,15 +316,21 @@ func (t *transaction) ConsumeTicket(hash string, at time.Time) (string, error) {
 		return "", identity.ErrUnauthorized
 	}
 	var r ticketRow
-	e := t.db.Where("hash = ?", hash).First(&r).Error
-	return r.SessionID, e
+	err := t.db.Where("hash = ?", hash).First(&r).Error
+	return r.SessionID, err
 }
+
+// Transaction 先更新 state.revision 取得写锁（SQLite 为库级写锁，PostgreSQL 为行锁），再执行 fn。
+// SQLite 锁冲突整笔重试，耗尽后返回 ErrUnavailable；其他错误记录诊断后原样返回。
 func (s *Store) Transaction(ctx context.Context, fn func(identity.Tx) error) error {
-	var last error
+	return s.transaction(ctx, func(t *transaction) error { return fn(t) })
+}
+
+func (s *Store) transaction(ctx context.Context, fn func(*transaction) error) error {
 	phase := "transaction.begin"
-	for attempt := 0; attempt < 3; attempt++ {
+	err := retryBusy(ctx, func() error {
 		phase = "transaction.begin"
-		e := s.db.WithContext(ctx).Transaction(func(db *gorm.DB) error {
+		return s.db.WithContext(ctx).Transaction(func(db *gorm.DB) error {
 			phase = "transaction.lock"
 			result := db.Model(&stateRow{}).Where("id = 1").UpdateColumn("revision", gorm.Expr("revision + 1"))
 			if result.Error != nil {
@@ -228,75 +343,66 @@ func (s *Store) Transaction(ctx context.Context, fn func(identity.Tx) error) err
 			if e := db.First(&row, 1).Error; e != nil {
 				return e
 			}
-			tx := &transaction{db: db, state: identity.State{Initialized: row.Initialized, ChiefAccountID: row.ChiefAccountID}, stage: "transaction.operation"}
-			e := fn(tx)
-			phase = tx.stage
+			t := &transaction{db: db, state: identity.State{Initialized: row.Initialized, ChiefAccountID: row.ChiefAccountID}, stage: "transaction.operation"}
+			e := fn(t)
+			phase = t.stage
 			if e == nil {
 				phase = "transaction.commit"
 			}
 			return e
 		})
-		if !sqliteBusy(e) {
-			return databaseFailure(ctx, phase, e)
-		}
-		last = e
-		select {
-		case <-ctx.Done():
-			return databaseFailure(ctx, phase, ctx.Err())
-		case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
-		}
+	})
+	if sqliteBusy(err) {
+		logDatabaseFailure(ctx, phase, err)
+		return identity.ErrUnavailable
 	}
-	databaseFailure(ctx, phase, last)
-	return identity.ErrUnavailable
+	return logDatabaseFailure(ctx, phase, err)
 }
-func (s *Store) ReserveLogin(ctx context.Context, nameHash, ipHash string, at time.Time) error {
-	return s.Transaction(ctx, func(tx identity.Tx) error {
-		t := tx.(*transaction)
+
+// ReserveLogin 在一个事务里为每个桶预占一次：窗口过期则重开，达到上限返回 ErrLimited 并回滚全部预占。
+func (s *Store) ReserveLogin(ctx context.Context, limits []identity.LoginLimit, at time.Time) error {
+	return s.transaction(ctx, func(t *transaction) error {
 		t.stage = "login_limit.reserve"
-		db := t.db
-		// 删除旧限流窗口；凭据与审计记录不参与此清理。
-		if e := db.Where("window_start < ?", at.Add(-time.Hour)).Delete(&limitRow{}).Error; e != nil {
+		if e := t.db.Where("window_start < ?", at.Add(-limitRetention)).Delete(&limitRow{}).Error; e != nil {
 			return e
 		}
-		for _, v := range []struct {
-			key string
-			max int
-		}{{"ip:" + ipHash, identity.LoginAttemptsPerIP}, {"name:" + nameHash, identity.LoginAttemptsPerUsername}} {
-			r := limitRow{Key: v.key, WindowStart: at}
-			if e := db.Clauses(clause.OnConflict{DoNothing: true}).Create(&r).Error; e != nil {
+		for _, l := range limits {
+			r := limitRow{Key: l.Key, WindowStart: at}
+			if e := t.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&r).Error; e != nil {
 				return e
 			}
-			if e := db.Where("key = ?", v.key).First(&r).Error; e != nil {
+			if e := t.db.Where("key = ?", l.Key).First(&r).Error; e != nil {
 				return e
 			}
-			if !r.WindowStart.Add(identity.LoginRateWindow).After(at) {
-				r.WindowStart = at
-				r.Count = 0
+			if !r.WindowStart.Add(l.Window).After(at) {
+				r.WindowStart, r.Count = at, 0
 			}
-			if r.Count >= v.max {
+			if r.Count >= l.Max {
 				return identity.ErrLimited
 			}
 			r.Count++
-			if e := db.Save(&r).Error; e != nil {
+			if e := t.db.Save(&r).Error; e != nil {
 				return e
 			}
 		}
 		return nil
 	})
 }
+
 func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.Credential, error) {
 	rows := []accountRow{}
 	q := s.db.WithContext(ctx)
 	if c.ID != "" {
 		q = q.Where("created_at < ? OR (created_at = ? AND id < ?)", c.At, c.At, c.ID)
 	}
-	e := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
+	err := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
 	out := make([]identity.Credential, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, r.Credential)
+		out = append(out, r.credential())
 	}
-	return out, databaseFailure(ctx, "accounts.list", e)
+	return out, logDatabaseFailure(ctx, "accounts.list", err)
 }
+
 func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n int) ([]identity.PasswordEvent, error) {
 	rows := []eventRow{}
 	q := s.db.WithContext(ctx)
@@ -306,12 +412,12 @@ func (s *Store) Events(ctx context.Context, target string, c identity.Cursor, n 
 	if c.ID != "" {
 		q = q.Where("occurred_at < ? OR (occurred_at = ? AND id < ?)", c.At, c.At, c.ID)
 	}
-	e := q.Order("occurred_at DESC, id DESC").Limit(n).Find(&rows).Error
+	err := q.Order("occurred_at DESC, id DESC").Limit(n).Find(&rows).Error
 	out := make([]identity.PasswordEvent, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, r.PasswordEvent)
+		out = append(out, r.event())
 	}
-	return out, databaseFailure(ctx, "password_events.list", e)
+	return out, logDatabaseFailure(ctx, "password_events.list", err)
 }
 
 var _ identity.Repository = (*Store)(nil)

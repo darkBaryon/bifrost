@@ -3,7 +3,6 @@ package persistence
 
 import (
 	"context"
-	"time"
 
 	upstream "github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/migrator"
@@ -11,23 +10,17 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// identityMigrationID 已写入版本表，不能改变。
 const identityMigrationID = "ee_identity_v1"
+
+// identityMigrationLock 协调 PostgreSQL 多节点的身份迁移；须保持稳定，并与品牌迁移锁键 8342761901 及
+// 上游 framework/configstore/migrations.go 的锁键不同。
 const identityMigrationLock int64 = 8342761902
 
+// MigrateIdentity 建立六张身份表、索引和 state 单例；表、单例与版本记录在同一事务提交或回滚。
+// SQLite 锁冲突整笔重试，耗尽后返回原始错误，由调用方决定是否拒绝启动。
 func MigrateIdentity(ctx context.Context, db *gorm.DB) error {
-	var err error
-	for attempt := 0; attempt < 3; attempt++ {
-		err = migrateIdentityOnce(ctx, db)
-		if !sqliteBusy(err) {
-			return databaseFailure(ctx, "migration", err)
-		}
-		select {
-		case <-ctx.Done():
-			return databaseFailure(ctx, "migration", ctx.Err())
-		case <-time.After(time.Duration(attempt+1) * 20 * time.Millisecond):
-		}
-	}
-	return databaseFailure(ctx, "migration", err)
+	return logDatabaseFailure(ctx, "migration", retryBusy(ctx, func() error { return migrateIdentityOnce(ctx, db) }))
 }
 
 func migrateIdentityOnce(ctx context.Context, db *gorm.DB) error {
