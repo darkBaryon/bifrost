@@ -136,7 +136,7 @@ type State struct {
 	ChiefAccountID string
 }
 
-// Session 只保存 token 的摘要；撤销通过 RevokedAt 标记，记录不删除。
+// Session 只保存 token 的摘要；撤销通过 RevokedAt 标记，到期行在下次写入会话时清理。
 type Session struct {
 	ID                string
 	TokenHash         string

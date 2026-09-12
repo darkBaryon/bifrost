@@ -152,7 +152,12 @@ func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
 	return authRecord(t.db, "s.id", id)
 }
 
+// InsertSession 先删除已到期的会话行再写入：过期即删（含已撤销），会话表不承担审计；无索引全表扫描，行数由本清理封顶。
 func (t *transaction) InsertSession(s identity.Session) error {
+	t.stage = "session.sweep"
+	if err := t.db.Where("expires_at < ?", time.Now().UTC()).Delete(&sessionRow{}).Error; err != nil {
+		return err
+	}
 	t.stage = "session.insert"
 	r := sessionRowOf(s)
 	return t.db.Create(&r).Error
@@ -181,7 +186,12 @@ func (t *transaction) InsertEvent(e identity.PasswordEvent) error {
 	return conflict(t.db.Create(&r).Error)
 }
 
+// InsertTicket 先删除已到期的票据行再写入；已消费但未到期的行留到到期。
 func (t *transaction) InsertTicket(v identity.Ticket) error {
+	t.stage = "ticket.sweep"
+	if err := t.db.Where("expires_at < ?", time.Now().UTC()).Delete(&ticketRow{}).Error; err != nil {
+		return err
+	}
 	t.stage = "ticket.insert"
 	return t.db.Create(&ticketRow{Hash: v.Hash, SessionID: v.SessionID, ExpiresAt: v.ExpiresAt}).Error
 }
