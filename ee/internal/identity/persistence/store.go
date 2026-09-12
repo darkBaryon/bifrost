@@ -297,13 +297,13 @@ func beforeCursor(q *gorm.DB, column string, c identity.Cursor) *gorm.DB {
 	return q.Where("("+column+" < ? OR ("+column+" = ? AND id < ?))", c.At, c.At, c.ID)
 }
 
-func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.AccountRecord, error) {
+func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.Account, error) {
 	rows := []accountRow{}
 	q := beforeCursor(s.db.WithContext(ctx), "created_at", c)
 	err := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
-	out := make([]identity.AccountRecord, 0, len(rows))
+	out := make([]identity.Account, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, r.record())
+		out = append(out, r.account())
 	}
 	return out, logDatabaseFailure(s.log, ctx, "accounts.list", err)
 }

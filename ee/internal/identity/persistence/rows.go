@@ -21,12 +21,13 @@ type accountRow struct {
 
 func (accountRow) TableName() string { return "ee_identity_accounts" }
 
+func (r accountRow) account() identity.Account {
+	return identity.Account{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
+		Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword, CreatedAt: r.CreatedAt}
+}
+
 func (r accountRow) record() identity.AccountRecord {
-	return identity.AccountRecord{
-		Account: identity.Account{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
-			Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword},
-		PasswordHash: r.PasswordHash, AuthVersion: r.AuthVersion, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
-	}
+	return identity.AccountRecord{Account: r.account(), PasswordHash: r.PasswordHash, AuthVersion: r.AuthVersion, UpdatedAt: r.UpdatedAt}
 }
 
 func accountRowOf(c identity.AccountRecord) accountRow {

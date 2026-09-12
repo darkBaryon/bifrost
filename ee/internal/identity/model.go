@@ -119,6 +119,7 @@ type Account struct {
 	DisplayName        string
 	Status             AccountStatus
 	MustChangePassword bool
+	CreatedAt          time.Time // 建号时间；账号列表按它与 ID 倒序分页
 }
 
 // AccountRecord 是账号的完整记录，只在服务与存储之间传递。
@@ -126,7 +127,6 @@ type AccountRecord struct {
 	Account
 	PasswordHash string
 	AuthVersion  int64 // 密码或状态每变更一次加一，会话签发时的版本不匹配即失效
-	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
 
@@ -221,7 +221,7 @@ type Repository interface {
 	// ReserveLogin 原子地为全部桶各预占一次；任一桶超限返回 ErrLimited 且不预占。
 	ReserveLogin(context.Context, []LoginLimit, time.Time) error
 	// Accounts 从游标之后按创建时间与 ID 倒序读取最多 n 条；游标为零值表示从头开始。
-	Accounts(context.Context, Cursor, int) ([]AccountRecord, error)
+	Accounts(context.Context, Cursor, int) ([]Account, error)
 	// Events 按目标账号筛选，target 为空表示全部。
 	Events(context.Context, string, Cursor, int) ([]PasswordEvent, error)
 }

@@ -21,8 +21,8 @@ func (s *Service) BootstrapLegacy(ctx context.Context, username, passwordHash st
 		if username == "" || !s.hasher.ValidHash(passwordHash) {
 			return ErrInvalid
 		}
-		c := AccountRecord{Account: Account{ID: randomID(), Username: username, Status: StatusActive},
-			PasswordHash: passwordHash, AuthVersion: 1, CreatedAt: now(), UpdatedAt: now()}
+		c := AccountRecord{Account: Account{ID: randomID(), Username: username, Status: StatusActive, CreatedAt: now()},
+			PasswordHash: passwordHash, AuthVersion: 1, UpdatedAt: now()}
 		if err := tx.InsertAccount(c); err != nil {
 			return err
 		}
@@ -56,8 +56,8 @@ func (s *Service) Initialize(ctx context.Context, setupToken, username, password
 		if tx.State().Initialized {
 			return ErrConflict
 		}
-		c := AccountRecord{Account: Account{ID: randomID(), Username: username, Status: StatusActive},
-			PasswordHash: hash, AuthVersion: 1, CreatedAt: now(), UpdatedAt: now()}
+		c := AccountRecord{Account: Account{ID: randomID(), Username: username, Status: StatusActive, CreatedAt: now()},
+			PasswordHash: hash, AuthVersion: 1, UpdatedAt: now()}
 		if err := tx.InsertAccount(c); err != nil {
 			return err
 		}
@@ -93,8 +93,8 @@ func (s *Service) CreateAccount(ctx context.Context, p Principal, username, disp
 		} else if !errors.Is(err, ErrNotFound) {
 			return err
 		}
-		c := AccountRecord{Account: Account{ID: randomID(), Username: username, DisplayName: displayName, Status: StatusActive, MustChangePassword: true},
-			PasswordHash: hash, AuthVersion: 1, CreatedAt: now(), UpdatedAt: now()}
+		c := AccountRecord{Account: Account{ID: randomID(), Username: username, DisplayName: displayName, Status: StatusActive, MustChangePassword: true, CreatedAt: now()},
+			PasswordHash: hash, AuthVersion: 1, UpdatedAt: now()}
 		if err := tx.InsertAccount(c); err != nil {
 			return err
 		}
@@ -180,8 +180,6 @@ func (s *Service) ListAccounts(ctx context.Context, p Principal, cursor string, 
 		out.NextCursor = encodeCursor(rows[n-1].CreatedAt, rows[n-1].ID)
 		rows = rows[:n]
 	}
-	for _, r := range rows {
-		out.Items = append(out.Items, r.Account)
-	}
+	out.Items = append(out.Items, rows...)
 	return out, nil
 }
