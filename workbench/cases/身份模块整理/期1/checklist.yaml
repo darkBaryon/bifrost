@@ -1,0 +1,62 @@
+# 本期为纯结构整理；命令集与账号认证期1相同，行为保护靠既有测试的断言与逻辑零改动（test-guard）与冒烟零改动。
+必过命令:
+  - { name: ee-fmt, run: "cd ee && test -z \"$(gofmt -l ./internal ./cmd)\"" }
+  - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: ee-tests-race, run: "cd ee && GOWORK=off go test -race ./..." }
+  - { name: host-regression, run: "cd ee && GOWORK=off go test -race github.com/maximhq/bifrost/transports/bifrost-http/handlers github.com/maximhq/bifrost/transports/bifrost-http/server" }
+  - { name: ui-dependencies, run: "cd ui && npm ci" }
+  - { name: ui-embed, run: "make -C ee build-ui" }
+  - { name: ee-binary, run: "cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http" }
+  - { name: identity-sqlite-http, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database sqlite" }
+  - { name: identity-postgres-two-nodes, run: "python3 ee/scripts/identity-smoke.py --binary ee/tmp/bifrost-http --database postgres" }
+  - { name: legacy-binary, run: "sh workbench/tools/build_legacy_ee.sh 3e15a640d89902772445d3fb4c04023e58828eba ee/tmp/legacy-bifrost-http" }
+  - { name: identity-upgrade, run: "python3 ee/scripts/identity-upgrade-smoke.py --binary ee/tmp/bifrost-http --legacy-binary ee/tmp/legacy-bifrost-http" }
+  - { name: branding-regression, run: "python3 ee/scripts/branding-smoke.py --binary ee/tmp/bifrost-http" }
+  - { name: smoke-unchanged, run: "git diff --quiet 7284ad939462e4b78b6518826f6c537e13aecb46 -- ee/scripts" }
+  - { name: test-guard, run: "ALLOWED_FILE=workbench/cases/身份模块整理/期1/test_guard_allowed.txt sh workbench/tools/test_guard.sh 7284ad939462e4b78b6518826f6c537e13aecb46 ee/internal/identity/persistence/service_test.go ee/internal/identity/persistence/diagnostics_test.go ee/internal/identity/http/handler_test.go ee/internal/bifrost/auth_test.go=ee/internal/host/auth_test.go" }
+  - { name: workbench, run: "python3 workbench/tools/build_views.py --check" }
+  - { name: diff-whitespace, run: "git diff --check" }
+必存产物:
+  - ee/internal/identity/README.md
+  - ee/internal/identity/core.go
+  - ee/internal/identity/session.go
+  - ee/internal/identity/hasher/bcrypt.go
+  - ee/internal/identity/hasher/README.md
+  - ee/internal/identity/http/README.md
+  - ee/internal/identity/http/session.go
+  - ee/internal/identity/http/accounts.go
+  - ee/internal/identity/http/passwords.go
+  - ee/internal/identity/http/dto_test.go
+  - ee/internal/identity/persistence/README.md
+  - ee/internal/identity/persistence/accounts_page_test.go
+  - ee/internal/identity/persistence/cleanup_test.go
+  - ee/internal/host/README.md
+  - ee/internal/app/README.md
+  - workbench/cases/身份模块整理/期1/test_guard_allowed.txt
+必含符号:
+  - { grep: "type Services struct", in: "ee/internal/identity" }
+  - { grep: "func New(", in: "ee/internal/identity/core.go" }
+  - { grep: "type SessionService struct", in: "ee/internal/identity" }
+  - { grep: "type AccountService struct", in: "ee/internal/identity" }
+  - { grep: "type PasswordService struct", in: "ee/internal/identity" }
+  - { grep: "type AccountRecord struct", in: "ee/internal/identity" }
+  - { grep: "RecordByName(", in: "ee/internal/identity/model.go" }
+  - { grep: "type Bcrypt struct", in: "ee/internal/identity/hasher" }
+  - { grep: "type consoleSessions interface", in: "ee/internal/host" }
+  - { grep: "type legacyImporter interface", in: "ee/internal/host" }
+  - { grep: "type identityRoutes interface", in: "ee/internal/host" }
+  - { grep: "expires_at <= ?", in: "ee/internal/identity/persistence/store.go" }
+  - { grep: "func (t \\*transaction) sweepExpired(", in: "ee/internal/identity/persistence/store.go" }
+收敛评审:
+  风险等级: L3
+  基线: 7284ad939462e4b78b6518826f6c537e13aecb46
+  开发指南: [ee/docs/账号认证接口.md, ee/docs/账号认证升级与恢复.md]
+禁留标记:
+  - { grep: "identity\\.Service[^sA-Za-z]", in: "ee" }
+  - { grep: "identity\\.Service$", in: "ee" }
+  - { grep: "identity\\.NewService", in: "ee" }
+  - { grep: "identity\\.Credential", in: "ee" }
+  - { grep: "CredentialByName", in: "ee" }
+  - { grep: "persistence\\.Passwords", in: "ee" }
+  - { grep: "framework/encrypt", in: "ee/internal/identity/persistence" }
+  - { grep: "internal/bifrost", in: "ee" }

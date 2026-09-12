@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	eehost "github.com/darkBaryon/bifrost/ee/internal/bifrost"
 	brandinghandler "github.com/darkBaryon/bifrost/ee/internal/branding/http"
 	eeconfig "github.com/darkBaryon/bifrost/ee/internal/branding/persistence"
+	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )

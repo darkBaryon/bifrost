@@ -1,0 +1,45 @@
+# test_guard.sh 的允许集合：每行一条 ERE，整行锚定，匹配的 diff 行视为方案 §6 列名的机械替换。
+# 以 # 开头与空行忽略。任何未在此列出的改动行都判为偏差。
+# —— 通用：空行、import 块、包名改名 ——
+^[-+][[:space:]]*$
+^[-+]import \($
+^[-+]\)$
+^[-+][[:space:]]*"[^"]+"$
+^[-+]package (bifrost|host)$
+# —— persistence/service_test.go 夹具 ——
+^[-+]func newService\(t \*testing\.T, store \*Store\) (\*identity\.Service|services) \{$
+^[-+]func fixture\(t \*testing\.T\) \((\*identity\.Service|services), \*Store, \*gorm\.DB, identity\.IssuedSession\) \{$
+^[-+][[:space:]]*s, e := identity\.(NewService|New)\(store, (Passwords|hasher\.Bcrypt)\{\}, identity\.Options\{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 \* time\.Hour\}, nil\)$
+^[-+][[:space:]]*return (s|services\{s\.Session, s\.Account, s\.Password\})$
+^\+type services struct\{ \*identity\.SessionService; \*identity\.AccountService; \*identity\.PasswordService \}$
+^\+func \(s services\) State\(ctx context\.Context\) \(identity\.State, error\) +\{ return s\.SessionService\.State\(ctx\) \}$
+^\+func \(s services\) RequireAccountManager\(ctx context\.Context, p identity\.Principal\) error +\{ return s\.SessionService\.RequireAccountManager\(ctx, p\) \}$
+# —— persistence/service_test.go 由 Passwords→hasher.Bcrypt 强制的 5 处（方案 §6 列名 :199,:292,:298,:310,:311）——
+^[-+][[:space:]]*hash, e := \((Passwords|hasher\.Bcrypt)\{\}\)\.Hash\("short"\)$
+^[-+][[:space:]]*(Passwords|hasher\.Bcrypt)$
+^[-+][[:space:]]*ok, e := p\.(Passwords|Bcrypt)\.Compare\(h, raw\)$
+^[-+][[:space:]]*p := pausedPasswords\{(Passwords: Passwords|Bcrypt: hasher\.Bcrypt)\{\}, compared: make\(chan struct\{\}\), resume: make\(chan struct\{\}\)\}$
+^-[[:space:]]*login, e := identity\.NewService\(store, p, identity\.Options\{InitialPassword: "123456", SessionTTL: time\.Hour\}, nil\)$
+^\+[[:space:]]*svc, e := identity\.New\(store, p, identity\.Options\{InitialPassword: "123456", SessionTTL: time\.Hour\}, nil\)$
+^\+[[:space:]]*login := services\{svc\.Session, svc\.Account, svc\.Password\}$
+# —— host/auth_test.go 夹具（原 bifrost/auth_test.go :47,:51,:54,:62）——
+^[-+][[:space:]]*s, e := identity\.(NewService|New)\(persistence\.NewStore\(db, quietLogger\{\}\), (persistence\.Passwords|hasher\.Bcrypt)\{\}, identity\.Options\{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 \* time\.Hour\}, nil\)$
+^[-+][[:space:]]*if _, e = s\.(Account\.)?Initialize\(ctx, "setup", "admin", "Admin-password-1"\); e != nil \{$
+^[-+][[:space:]]*v, e := s\.(Session\.)?Login\(ctx, "admin", "Admin-password-1", "peer"\)$
+^[-+][[:space:]]*return NewAuthAdapter\(nil, s(\.Session)?, h\), v(, s)?$
+# —— 小偏差 1（步骤 3a）：Store.CredentialByName→RecordByName 在 service_test.go 有 7 处调用，方案盘点漏列；机械改名，无逻辑变化 ——
+^[-+][[:space:]]*[a-z]+, (_|e) := store\.(Credential|Record)ByName\(ctx, "(alice|bob|admin)"\)$
+# —— 小偏差 2（步骤 5）：host/auth_test.go 有 5 处经适配器字段 a.service 调建号/登录/签票，收窄后不可达，方案盘点漏列；夹具多返回 *identity.Services，调用改走它，断言零改动 ——
+^[-+]func testAdapter\(t \*testing\.T\) \(\*AuthAdapter, identity\.IssuedSession(, \*identity\.Services)?\) \{$
+^[-+][[:space:]]*a, (v|admin|_)(, (svc|_))? := testAdapter\(t\)$
+^[-+][[:space:]]*if _, e :?= (a\.service|svc\.Account)\.CreateAccount\((context\.Background\(\)|ctx), (v|admin)\.Principal, "(alice|member)", ""\); e != nil \{$
+^[-+][[:space:]]*member, e := (a\.service|svc\.Session)\.Login\((context\.Background\(\)|ctx), "(alice|member)", "123456", "peer"\)$
+^[-+][[:space:]]*ticket, e := (a\.service|svc\.Session)\.IssueTicket\(context\.Background\(\), v\.Principal\)$
+# —— 小偏差 3（步骤 5）：方案 §6 示例把组合类型与两个转发方法写成单行，gofmt（checklist 必过项）会展成多行；按 gofmt 输出逐行列名，替代原单行模式 ——
+^\+type services struct \{$
+^\+[[:space:]]*\*identity\.(Session|Account|Password)Service$
+^\+\}$
+^\+func \(s services\) State\(ctx context\.Context\) \(identity\.State, error\) \{$
+^\+[[:space:]]*return s\.SessionService\.State\(ctx\)$
+^\+func \(s services\) RequireAccountManager\(ctx context\.Context, p identity\.Principal\) error \{$
+^\+[[:space:]]*return s\.SessionService\.RequireAccountManager\(ctx, p\)$

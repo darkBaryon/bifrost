@@ -1,11 +1,8 @@
 // Package identityhttp 提供身份 API、Cookie 和同源验证，不承担存储事务。
-// 本文件维护路由表、端点共同的前置规则与各端点适配；协议管道（origin、Cookie、JSON、错误映射）见 protocol.go。
+// 本文件维护路由表与端点共同的前置规则；端点按线见 session.go、accounts.go、passwords.go，协议管道见 protocol.go。
 package identityhttp
 
 import (
-	"errors"
-	"time"
-
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -21,20 +18,20 @@ const (
 	messagePasswordChanged  = "Password changed; log in again"
 )
 
-// Handler 持有身份服务与已验证的部署 origin；不信任请求中的代理头。
+// Handler 持有三条线的身份服务与已验证的部署 origin；不信任请求中的代理头。
 type Handler struct {
-	service *identity.Service
-	origin  string
-	secure  bool
+	svc    *identity.Services
+	origin string
+	secure bool
 }
 
 // NewHandler 绑定身份服务与部署 origin。
-func NewHandler(service *identity.Service, origin string) (*Handler, error) {
+func NewHandler(svc *identity.Services, origin string) (*Handler, error) {
 	o, secure, err := ValidateOrigin(origin)
 	if err != nil {
 		return nil, err
 	}
-	return &Handler{service: service, origin: o, secure: secure}, nil
+	return &Handler{svc: svc, origin: o, secure: secure}, nil
 }
 
 // Origin 返回已验证的部署 origin，供宿主适配做 WebSocket 握手的来源检查。
@@ -103,7 +100,7 @@ func (h *Handler) serve(rt route) fasthttp.RequestHandler {
 				Error(c, identity.ErrUnauthorized)
 				return
 			}
-			p, err := h.service.Authenticate(r.ctx, r.cookie())
+			p, err := h.svc.Session.Authenticate(r.ctx, r.cookie())
 			if err != nil {
 				Error(c, err)
 				return
@@ -117,158 +114,4 @@ func (h *Handler) serve(rt route) fasthttp.RequestHandler {
 		}
 		JSON(c, code, body)
 	}
-}
-
-// status 供登录页判断是否初始化及当前 Cookie 是否有效；没有会话时不暴露账号信息。
-func (h *Handler) status(r request) (int, any, error) {
-	if !r.c.IsGet() {
-		if err := r.decode(&emptyRequest{}); err != nil {
-			return 0, nil, err
-		}
-	}
-	state, err := h.service.State(r.ctx)
-	if err != nil {
-		return 0, nil, err
-	}
-	p, err := h.service.Authenticate(r.ctx, r.cookie())
-	if err != nil && !errors.Is(err, identity.ErrUnauthorized) {
-		return 0, nil, err
-	}
-	valid := err == nil
-	return fasthttp.StatusOK, statusResponse{Initialized: state.Initialized, AuthType: authType, IsAuthEnabled: true,
-		HasValidToken: valid, HasValidSession: valid, MustChangePassword: valid && p.MustChangePassword}, nil
-}
-
-func (h *Handler) initialize(r request) (int, any, error) {
-	var q initializeRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	a, err := h.service.Initialize(r.ctx, q.SetupToken, q.Username, q.Password)
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusCreated, accountResponse{Account: toAccountDTO(a)}, nil
-}
-
-// login 用真实 TCP 来源地址参与限流，不信任代理头；成功后只通过 Cookie 交付 token。
-func (h *Handler) login(r request) (int, any, error) {
-	var q loginRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	v, err := h.service.Login(r.ctx, q.Username, q.Password, r.c.RemoteIP().String())
-	if err != nil {
-		return 0, nil, err
-	}
-	h.setCookie(r.c, v.Token, v.ExpiresAt)
-	return fasthttp.StatusOK, loginResponse{Message: messageLoginSuccessful, Account: toAccountDTO(v.Account),
-		MustChangePassword: v.Principal.MustChangePassword, ExpiresAt: v.ExpiresAt}, nil
-}
-
-// logout 无论 Cookie 是否有效都返回成功并清除 Cookie。
-func (h *Handler) logout(r request) (int, any, error) {
-	if err := r.decode(&emptyRequest{}); err != nil {
-		return 0, nil, err
-	}
-	if err := h.service.Logout(r.ctx, r.cookie()); err != nil {
-		return 0, nil, err
-	}
-	h.clearCookie(r.c)
-	return fasthttp.StatusOK, messageResponse{Message: messageLogoutSuccessful}, nil
-}
-
-func (h *Handler) me(r request) (int, any, error) {
-	if err := r.decode(&emptyRequest{}); err != nil {
-		return 0, nil, err
-	}
-	a, err := h.service.Me(r.ctx, r.principal)
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusOK, accountResponse{Account: toAccountDTO(a)}, nil
-}
-
-// changePassword 成功后清除 Cookie，调用方须重新登录。
-func (h *Handler) changePassword(r request) (int, any, error) {
-	var q changePasswordRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	if err := h.service.ChangePassword(r.ctx, r.principal, q.OldPassword, q.NewPassword); err != nil {
-		return 0, nil, err
-	}
-	h.clearCookie(r.c)
-	return fasthttp.StatusOK, messageResponse{Message: messagePasswordChanged}, nil
-}
-
-func (h *Handler) createAccount(r request) (int, any, error) {
-	var q createAccountRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	a, err := h.service.CreateAccount(r.ctx, r.principal, q.Username, q.DisplayName)
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusCreated, accountResponse{Account: toAccountDTO(a)}, nil
-}
-
-func (h *Handler) listAccounts(r request) (int, any, error) {
-	var q listRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	p, err := h.service.ListAccounts(r.ctx, r.principal, q.Cursor, pageLimit(q.Limit))
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusOK, toAccountPage(p), nil
-}
-
-func (h *Handler) setStatus(r request) (int, any, error) {
-	var q setStatusRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	a, err := h.service.SetAccountStatus(r.ctx, r.principal, q.AccountID, identity.AccountStatus(q.Status))
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusOK, accountResponse{Account: toAccountDTO(a)}, nil
-}
-
-func (h *Handler) resetPassword(r request) (int, any, error) {
-	var q resetPasswordRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	e, err := h.service.ResetPassword(r.ctx, r.principal, q.AccountID, q.OperationID)
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusOK, resetPasswordResponse{EventID: e.ID, Result: string(e.Result)}, nil
-}
-
-func (h *Handler) passwordEvents(r request) (int, any, error) {
-	var q eventsRequest
-	if err := r.decode(&q); err != nil {
-		return 0, nil, err
-	}
-	p, err := h.service.ListPasswordEvents(r.ctx, r.principal, q.TargetID, q.Cursor, pageLimit(q.Limit))
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusOK, toEventPage(p), nil
-}
-
-func (h *Handler) wsTicket(r request) (int, any, error) {
-	if err := r.decode(&emptyRequest{}); err != nil {
-		return 0, nil, err
-	}
-	ticket, err := h.service.IssueTicket(r.ctx, r.principal)
-	if err != nil {
-		return 0, nil, err
-	}
-	return fasthttp.StatusOK, ticketResponse{Ticket: ticket, ExpiresIn: int(identity.WSTicketTTL / time.Second)}, nil
 }

@@ -1,4 +1,4 @@
-// 本文件是 HTTP 协议管道：部署 origin 校验、同源检查、Cookie、严格 JSON 解码与错误映射；端点见 handler.go。
+// 本文件是 HTTP 协议管道：部署 origin 校验、同源检查、Cookie、严格 JSON 解码与错误映射；端点按线见 session.go、accounts.go、passwords.go。
 package identityhttp
 
 import (

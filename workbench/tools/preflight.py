@@ -32,8 +32,11 @@ DEFAULT_REPO = Path(__file__).resolve().parents[2]  # 工作台在 <项目>/work
 
 
 def run(cmd: str, cwd: Path, timeout: int = 600):
+    # errors="replace"：构建工具的进度动画会切断多字节字符，按严格 utf-8 解码会抛
+    # UnicodeDecodeError 中断整张事实表；坏字节换成替换符，退出码照样可信。
     p = subprocess.run(cmd, shell=True, cwd=str(cwd), capture_output=True,
-                       text=True, timeout=timeout)
+                       text=True, encoding="utf-8", errors="replace",
+                       timeout=timeout)
     return p.returncode, (p.stdout + p.stderr).strip()
 
 

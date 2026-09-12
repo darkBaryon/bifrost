@@ -6,34 +6,15 @@ package persistence
 import (
 	"context"
 	"errors"
-	"regexp"
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/mattn/go-sqlite3"
-	"github.com/maximhq/bifrost/framework/encrypt"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
-
-// Passwords 复用宿主 bcrypt，超过算法上限的密码由业务层拒绝而不是截断。
-type Passwords struct{}
-
-func (Passwords) Hash(p string) (string, error) { return encrypt.Hash(p) }
-
-func (Passwords) Compare(h, p string) (bool, error) { return encrypt.CompareHash(h, p) }
-
-// bcryptHashPattern 补充 bcrypt.Cost 只解析版本和 cost 的不足，要求完整的 22 字节盐与 31 字节摘要。
-var bcryptHashPattern = regexp.MustCompile(`^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$`)
-
-// ValidHash 判断字符串是否为完整的 bcrypt 哈希，用于旧管理员凭据导入。
-func (Passwords) ValidHash(h string) bool {
-	_, err := bcrypt.Cost([]byte(h))
-	return err == nil && bcryptHashPattern.MatchString(h)
-}
 
 // Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
 type Store struct {
@@ -74,10 +55,10 @@ func (s *Store) State(ctx context.Context) (identity.State, error) {
 	return identity.State{Initialized: r.Initialized, ChiefAccountID: r.ChiefAccountID}, notFound(logDatabaseFailure(s.log, ctx, "state.read", err))
 }
 
-func (s *Store) CredentialByName(ctx context.Context, name string) (identity.Credential, error) {
+func (s *Store) RecordByName(ctx context.Context, name string) (identity.AccountRecord, error) {
 	var r accountRow
 	err := s.db.WithContext(ctx).Where("username = ?", name).First(&r).Error
-	return r.credential(), notFound(logDatabaseFailure(s.log, ctx, "account.read", err))
+	return r.record(), notFound(logDatabaseFailure(s.log, ctx, "account.read", err))
 }
 
 // authRow 是账号与会话联合查询的结果；账号列由 GORM 按导出字段展开，会话列用 session_ 前缀避免同名。
@@ -106,7 +87,7 @@ func authRecord(db *gorm.DB, column, value string) (identity.AuthRecord, error) 
 		return identity.AuthRecord{}, identity.ErrNotFound
 	}
 	return identity.AuthRecord{
-		Credential: row.Account.credential(),
+		Account: row.Account.record(),
 		Session: identity.Session{ID: row.SessionID, TokenHash: row.TokenHash, AccountID: row.SessionAccountID,
 			IssuedAuthVersion: row.IssuedAuthVersion, ExpiresAt: row.SessionExpiresAt, CreatedAt: row.SessionCreatedAt, RevokedAt: row.SessionRevokedAt},
 	}, nil
@@ -140,27 +121,27 @@ func (t *transaction) SaveState(s identity.State) error {
 	return err
 }
 
-func (t *transaction) Account(id string) (identity.Credential, error) {
+func (t *transaction) Account(id string) (identity.AccountRecord, error) {
 	t.stage = "account.read"
 	var r accountRow
 	err := t.db.Where("id = ?", id).First(&r).Error
-	return r.credential(), notFound(err)
+	return r.record(), notFound(err)
 }
 
-func (t *transaction) AccountByName(name string) (identity.Credential, error) {
+func (t *transaction) AccountByName(name string) (identity.AccountRecord, error) {
 	t.stage = "account.read"
 	var r accountRow
 	err := t.db.Where("username = ?", name).First(&r).Error
-	return r.credential(), notFound(err)
+	return r.record(), notFound(err)
 }
 
-func (t *transaction) InsertAccount(c identity.Credential) error {
+func (t *transaction) InsertAccount(c identity.AccountRecord) error {
 	t.stage = "account.insert"
 	r := accountRowOf(c)
 	return conflict(t.db.Create(&r).Error)
 }
 
-func (t *transaction) SaveAccount(c identity.Credential) error {
+func (t *transaction) SaveAccount(c identity.AccountRecord) error {
 	t.stage = "account.update"
 	r := accountRowOf(c)
 	return t.db.Save(&r).Error
@@ -171,7 +152,18 @@ func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
 	return authRecord(t.db, "s.id", id)
 }
 
+// sweepExpired 删除已到期的行，写入新会话/票据时顺带执行（FIND-020）：过期即删，含已撤销/已消费的行，
+// 会话与票据表不承担审计；口径与 identity 的过期判定一致，expires_at <= 当前时刻即为过期。无索引全表扫描，行数由本清理封顶。
+func (t *transaction) sweepExpired(model any) error {
+	return t.db.Where("expires_at <= ?", time.Now().UTC()).Delete(model).Error
+}
+
+// InsertSession 先清理到期会话行再写入。
 func (t *transaction) InsertSession(s identity.Session) error {
+	t.stage = "session.sweep"
+	if err := t.sweepExpired(&sessionRow{}); err != nil {
+		return err
+	}
 	t.stage = "session.insert"
 	r := sessionRowOf(s)
 	return t.db.Create(&r).Error
@@ -200,7 +192,12 @@ func (t *transaction) InsertEvent(e identity.PasswordEvent) error {
 	return conflict(t.db.Create(&r).Error)
 }
 
+// InsertTicket 先清理到期票据行再写入；已消费但未到期的行留到到期。
 func (t *transaction) InsertTicket(v identity.Ticket) error {
+	t.stage = "ticket.sweep"
+	if err := t.sweepExpired(&ticketRow{}); err != nil {
+		return err
+	}
 	t.stage = "ticket.insert"
 	return t.db.Create(&ticketRow{Hash: v.Hash, SessionID: v.SessionID, ExpiresAt: v.ExpiresAt}).Error
 }
@@ -297,13 +294,13 @@ func beforeCursor(q *gorm.DB, column string, c identity.Cursor) *gorm.DB {
 	return q.Where("("+column+" < ? OR ("+column+" = ? AND id < ?))", c.At, c.At, c.ID)
 }
 
-func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.Credential, error) {
+func (s *Store) Accounts(ctx context.Context, c identity.Cursor, n int) ([]identity.Account, error) {
 	rows := []accountRow{}
 	q := beforeCursor(s.db.WithContext(ctx), "created_at", c)
 	err := q.Order("created_at DESC, id DESC").Limit(n).Find(&rows).Error
-	out := make([]identity.Credential, 0, len(rows))
+	out := make([]identity.Account, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, r.credential())
+		out = append(out, r.account())
 	}
 	return out, logDatabaseFailure(s.log, ctx, "accounts.list", err)
 }

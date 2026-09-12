@@ -71,7 +71,7 @@ func RecoverAdmin(args []string) error {
 	if e != nil {
 		return e
 	}
-	svc, e := newIdentityService(store.DB(), options, log)
+	svc, e := newIdentity(store.DB(), options, log)
 	if e != nil {
 		return e
 	}
@@ -91,7 +91,7 @@ func RecoverAdmin(args []string) error {
 		}
 		password = strings.TrimSuffix(strings.TrimSuffix(raw, "\n"), "\r")
 	}
-	if e = svc.RecoverAdmin(ctx, password); e != nil {
+	if e = svc.Password.RecoverAdmin(ctx, password); e != nil {
 		return identity.SafeError(e)
 	}
 	fmt.Fprintln(os.Stdout, "Administrator password updated; previous sessions revoked.")

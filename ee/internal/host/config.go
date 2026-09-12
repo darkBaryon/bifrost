@@ -1,5 +1,5 @@
 // 本文件处理 /api/config 的认证投影与写入预检：GET 用只读投影替换旧认证字段，PUT 拒绝实际的认证或白名单变更。
-package bifrost
+package host
 
 import (
 	"context"

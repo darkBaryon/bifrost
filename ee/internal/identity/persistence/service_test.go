@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -55,15 +56,29 @@ func testStore(t *testing.T) (*Store, *gorm.DB) {
 	}
 	return NewStore(db, logs), db
 }
-func newService(t *testing.T, store *Store) *identity.Service {
+
+type services struct {
+	*identity.SessionService
+	*identity.AccountService
+	*identity.PasswordService
+}
+
+func (s services) State(ctx context.Context) (identity.State, error) {
+	return s.SessionService.State(ctx)
+}
+func (s services) RequireAccountManager(ctx context.Context, p identity.Principal) error {
+	return s.SessionService.RequireAccountManager(ctx, p)
+}
+
+func newService(t *testing.T, store *Store) services {
 	t.Helper()
-	s, e := identity.NewService(store, Passwords{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
+	s, e := identity.New(store, hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
-	return s
+	return services{s.Session, s.Account, s.Password}
 }
-func fixture(t *testing.T) (*identity.Service, *Store, *gorm.DB, identity.IssuedSession) {
+func fixture(t *testing.T) (services, *Store, *gorm.DB, identity.IssuedSession) {
 	t.Helper()
 	store, db := testStore(t)
 	s := newService(t, store)
@@ -172,7 +187,7 @@ func TestPasswordEventRollback(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	before, _ := store.CredentialByName(ctx, "alice")
+	before, _ := store.RecordByName(ctx, "alice")
 	db.Callback().Create().Before("gorm:create").Register("fail:events", func(tx *gorm.DB) {
 		if tx.Statement.Table == "ee_identity_password_events" {
 			tx.AddError(errors.New("injected"))
@@ -180,7 +195,7 @@ func TestPasswordEventRollback(t *testing.T) {
 	})
 	_, e = s.ResetPassword(ctx, p.Principal, a.ID, "00000000-0000-4000-8000-000000000002")
 	requireError(t, e, identity.ErrUnavailable)
-	after, _ := store.CredentialByName(ctx, "alice")
+	after, _ := store.RecordByName(ctx, "alice")
 	if before.PasswordHash != after.PasswordHash || before.AuthVersion != after.AuthVersion {
 		t.Fatal("password survived audit failure")
 	}
@@ -196,7 +211,7 @@ func TestInitializationAndLegacy(t *testing.T) {
 	ctx := context.Background()
 	_, e := s.Initialize(ctx, "wrong", "admin", adminPassword)
 	requireError(t, e, identity.ErrForbidden)
-	hash, e := (Passwords{}).Hash("short")
+	hash, e := (hasher.Bcrypt{}).Hash("short")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -289,13 +304,13 @@ func TestConcurrentInitialize(t *testing.T) {
 
 // 暂停已完成密码比较的登录，确保重置提交后不会签发旧版本会话。
 type pausedPasswords struct {
-	Passwords
+	hasher.Bcrypt
 	compared chan struct{}
 	resume   chan struct{}
 }
 
 func (p pausedPasswords) Compare(h, raw string) (bool, error) {
-	ok, e := p.Passwords.Compare(h, raw)
+	ok, e := p.Bcrypt.Compare(h, raw)
 	close(p.compared)
 	<-p.resume
 	return ok, e
@@ -307,11 +322,12 @@ func TestLoginRacingReset(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	p := pausedPasswords{Passwords: Passwords{}, compared: make(chan struct{}), resume: make(chan struct{})}
-	login, e := identity.NewService(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
+	p := pausedPasswords{Bcrypt: hasher.Bcrypt{}, compared: make(chan struct{}), resume: make(chan struct{})}
+	svc, e := identity.New(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
+	login := services{svc.Session, svc.Account, svc.Password}
 	done := make(chan error, 1)
 	go func() { _, e := login.Login(ctx, "alice", "123456", "peer"); done <- e }()
 	<-p.compared
@@ -354,8 +370,8 @@ func TestPasswordValidationAndIndependentSalt(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	a, _ := store.CredentialByName(ctx, "alice")
-	b, _ := store.CredentialByName(ctx, "bob")
+	a, _ := store.RecordByName(ctx, "alice")
+	b, _ := store.RecordByName(ctx, "bob")
 	if a.PasswordHash == b.PasswordHash {
 		t.Fatal("default passwords share hash")
 	}
@@ -384,7 +400,7 @@ func TestTransactionAndMigrationRollback(t *testing.T) {
 	if !errors.Is(e, injected) {
 		t.Fatal(e)
 	}
-	c, e := store.CredentialByName(ctx, "admin")
+	c, e := store.RecordByName(ctx, "admin")
 	if e != nil || c.AuthVersion != admin.Principal.AuthVersion {
 		t.Fatal("transaction was not rolled back", e)
 	}
@@ -427,7 +443,7 @@ func TestDeferredCommitFailure(t *testing.T) {
 			t.Fatal(e)
 		}
 	}
-	before, e := store.CredentialByName(ctx, "admin")
+	before, e := store.RecordByName(ctx, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -451,7 +467,7 @@ func TestDeferredCommitFailure(t *testing.T) {
 		t.Fatal("commit failure diagnosis missing: " + output.String())
 	}
 	db.Callback().Create().Remove("fail:commit")
-	after, e := store.CredentialByName(ctx, "admin")
+	after, e := store.RecordByName(ctx, "admin")
 	if e != nil {
 		t.Fatal(e)
 	}

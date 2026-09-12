@@ -1,11 +1,21 @@
 # 应用装配
 
-本包连接业务服务、存储与 Bifrost 宿主，不承担运行期业务规则。
+把 EE 的业务服务、存储和宿主接入装到上游 `BifrostHTTPServer` 上。只做构造与连线，不含运行期业务规则。
 
-| 文件 | 职责 |
+## 做什么
+
+- `Bootstrap`：先把身份装配工厂埋进 `ConsoleAuthFactory`，再跑上游 `Bootstrap`（它在建好数据库、注册路由前回调工厂），最后 `attach` 品牌路由并复用同一份 EE 鉴权中间件。
+- `assembleIdentity`：读 `EE_*` 环境变量并校验、跑身份表迁移、`identity.New` 装配三条线、导入旧管理员、构造 HTTP 层和宿主适配。适配只拿会话线，导入只拿账号线。
+- `RecoverAdmin`：离线 `identity recover-admin` 子命令，不起 HTTP，用同一套装配重置主管理员密码；密码从隐藏终端或 stdin 读。
+
+## 不做什么
+
+品牌图片校验在 [branding](../branding/README.md)；宿主中间件在 [host](../host/README.md)；共享的 Server、Router、数据库连接由上游创建与关闭。
+
+## 文件
+
+| 文件 | 内容 |
 |---|---|
-| [bootstrap.go](bootstrap.go) | 接收入口配置好的宿主 logger，注入身份装配工厂 → 上游 Bootstrap → attach：品牌迁移、注入品牌存储、注册路由 |
-| [identity.go](identity.go) | 解析 `EE_*` 部署环境变量、迁移身份表、构造身份服务与宿主认证适配，并把宿主 logger 注入存储与适配 |
-| [recovery.go](recovery.go) | 离线 `identity recover-admin` 子命令：打开现有配置库，用同一套选项构造服务并重置主管理员 |
-
-身份依赖为 `HTTP → Service → Repository`，本包创建具体 Store 与 Handler 并注入 [bifrost](../bifrost/README.md) 的适配；品牌不设中转服务，本包创建 Store 并直接注入 HTTP Handler，图片校验由品牌根包的函数负责，见 [branding](../branding/README.md)。品牌写入路由与管理路由使用同一 EE 账号认证。双方复用同一个 Server、Router 和数据库连接；本包不重复创建或关闭共享资源。离线恢复的密码只从隐藏终端或 stdin 读取，要求操作者预先停止全部实例。
+| [bootstrap.go](bootstrap.go) | `Bootstrap` 与 `attach` |
+| [identity.go](identity.go) | 环境变量、`newIdentity`、`assembleIdentity` |
+| [recovery.go](recovery.go) | 离线恢复子命令 |

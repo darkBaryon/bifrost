@@ -119,14 +119,14 @@ type Account struct {
 	DisplayName        string
 	Status             AccountStatus
 	MustChangePassword bool
+	CreatedAt          time.Time // 建号时间；账号列表按它与 ID 倒序分页
 }
 
-// Credential 是账号的完整记录，只在服务与存储之间传递。
-type Credential struct {
+// AccountRecord 是账号的完整记录，只在服务与存储之间传递。
+type AccountRecord struct {
 	Account
 	PasswordHash string
 	AuthVersion  int64 // 密码或状态每变更一次加一，会话签发时的版本不匹配即失效
-	CreatedAt    time.Time
 	UpdatedAt    time.Time
 }
 
@@ -136,7 +136,7 @@ type State struct {
 	ChiefAccountID string
 }
 
-// Session 只保存 token 的摘要；撤销通过 RevokedAt 标记，记录不删除。
+// Session 只保存 token 的摘要；撤销通过 RevokedAt 标记，到期行在下次写入会话时清理。
 type Session struct {
 	ID                string
 	TokenHash         string
@@ -149,8 +149,8 @@ type Session struct {
 
 // AuthRecord 是一次读取得到的会话及其账号，避免分两次查询读到不一致的版本。
 type AuthRecord struct {
-	Session    Session
-	Credential Credential
+	Session Session
+	Account AccountRecord
 }
 
 // IssuedSession 是登录结果；Token 只在此处返回一次，由 HTTP 适配写入 Cookie。
@@ -188,7 +188,7 @@ type Cursor struct {
 	ID string
 }
 
-// AccountPage 与 EventPage 的 NextCursor 为空表示没有更多。
+// AccountPage 与 EventPage 的 Items 恒非 nil（空页为空切片），NextCursor 为空表示没有更多。
 type AccountPage struct {
 	Items      []Account
 	NextCursor string
@@ -211,8 +211,8 @@ type LoginLimit struct {
 type Repository interface {
 	// State 读取单例状态；迁移完成后该行必然存在。
 	State(context.Context) (State, error)
-	// CredentialByName 按登录名读取完整账号记录。
-	CredentialByName(context.Context, string) (Credential, error)
+	// RecordByName 按登录名读取完整账号记录。
+	RecordByName(context.Context, string) (AccountRecord, error)
 	// AuthByHash 按 token 摘要一次读出会话及其账号；AuthByID 按会话 ID 读出同样的记录。
 	AuthByHash(context.Context, string) (AuthRecord, error)
 	AuthByID(context.Context, string) (AuthRecord, error)
@@ -221,7 +221,7 @@ type Repository interface {
 	// ReserveLogin 原子地为全部桶各预占一次；任一桶超限返回 ErrLimited 且不预占。
 	ReserveLogin(context.Context, []LoginLimit, time.Time) error
 	// Accounts 从游标之后按创建时间与 ID 倒序读取最多 n 条；游标为零值表示从头开始。
-	Accounts(context.Context, Cursor, int) ([]Credential, error)
+	Accounts(context.Context, Cursor, int) ([]Account, error)
 	// Events 按目标账号筛选，target 为空表示全部。
 	Events(context.Context, string, Cursor, int) ([]PasswordEvent, error)
 }
@@ -230,11 +230,11 @@ type Repository interface {
 type Tx interface {
 	State() State
 	SaveState(State) error
-	Account(string) (Credential, error)
-	AccountByName(string) (Credential, error)
+	Account(string) (AccountRecord, error)
+	AccountByName(string) (AccountRecord, error)
 	// InsertAccount 与 InsertEvent 在唯一键冲突时返回 ErrConflict。
-	InsertAccount(Credential) error
-	SaveAccount(Credential) error
+	InsertAccount(AccountRecord) error
+	SaveAccount(AccountRecord) error
 	AuthByID(string) (AuthRecord, error)
 	InsertSession(Session) error
 	RevokeSession(string, time.Time) error
@@ -246,7 +246,7 @@ type Tx interface {
 	ConsumeTicket(string, time.Time) (string, error)
 }
 
-// PasswordHasher 由存储适配注入宿主的 bcrypt 实现。
+// PasswordHasher 抽象密码哈希，由装配层注入；bcrypt 实现在 identity/hasher。
 type PasswordHasher interface {
 	Hash(string) (string, error)
 	Compare(string, string) (bool, error)

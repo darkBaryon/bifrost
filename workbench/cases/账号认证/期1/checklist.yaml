@@ -1,4 +1,5 @@
 # 本期实施完成后的合同；起草方案时不执行尚不存在的业务测试。
+# 2026-09-12 身份模块整理：宿主接入包由 internal/bifrost 改名 internal/host，本合同的必存产物随之更新以保持可重跑；evidence/ 下九份历史事实表记录当时路径，不改。
 必过命令:
   - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
   - { name: ee-tests-race, run: "cd ee && GOWORK=off go test -race ./..." }
@@ -15,7 +16,7 @@
   - ee/internal/identity/README.md
   - ee/internal/identity/http/README.md
   - ee/internal/identity/persistence/README.md
-  - ee/internal/bifrost/README.md
+  - ee/internal/host/README.md
   - ee/scripts/identity-smoke.py
   - ee/docs/账号认证接口.md
   - ee/docs/账号认证升级与恢复.md

@@ -43,14 +43,14 @@ ee/
 │   ├── branding/          品牌设置
 │   ├── audit/             管理审计
 │   ├── guardrails/        内容护栏
-│   └── bifrost/           宿主与上游能力集成
+│   └── host/              宿主与上游能力集成
 ├── ui/                    自有前端覆盖层
 ├── scripts/
 ├── go.mod
 └── Makefile
 ```
 
-现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`及`internal/bifrost/`；完整角色权限等模块后续按需建立。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
+现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`及`internal/host/`；完整角色权限等模块后续按需建立。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
 
 ## 4. 模块内部的职责
 
@@ -110,7 +110,8 @@ app → 业务服务 + 具体实现（构造函数注入）
 
 ## 7. 与 Bifrost 的协作边界
 
-- **集成归位**：`internal/bifrost/` 负责宿主、管理路由、会话兼容等跨功能接入；具体业务插件留在所属模块。
+- **集成归位**：`internal/host/` 负责宿主、管理路由、会话兼容等跨功能接入；具体业务插件留在所属模块。
+- **适配归位判定**：模块根包只依赖标准库；`<模块>/<子包>` 是把根包定义的接口适配到某个库（如 `identity/persistence`→GORM、`identity/http`→fasthttp、`identity/hasher`→bcrypt），库不是宿主对象；只有触及运行中宿主对象（`*server.BifrostHTTPServer`、handlers 上下文键、`TempTokens` 等）的代码才进 `internal/host/`。宿主接入对模块能力只声明自己需要的窄接口，由 `app` 显式注入。
 - **复用完整操作**：保留上游的存储与运行状态更新链。例如 Provider 修改还涉及内存配置、Core 和模型发现，不能只写表；审计也不能只凭 HTTP 状态判断变更结果。
 - **按缺口扩展**：先评估已有数据库、迁移、日志、向量库、插件与 Sidekiq，再增加实现；不重复包装整套 SDK 或另建基础设施。
 - **生命周期统一协调**：共享资源由创建者管理，EE 的初始化失败清理和关闭流程须与上游协调，避免重复关闭共享连接。

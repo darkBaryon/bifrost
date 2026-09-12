@@ -168,7 +168,7 @@ convert_when: "第三个模块需要同样的 busy 重试，或两份策略出�
 id: FIND-018
 status: 观察中
 triggered_by: [账号认证]
-evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账"
+evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账；身份模块整理 期1 的 FIND-020 清理在同一 state 写锁事务内新增一次无索引 DELETE，代码评审1 定向复核实测：稳态 SQLite 0.13ms/PG 0.35ms，1 万行积压 3.5ms/2.2ms，10 万行 303ms/25ms，100 万行 7.1s/1.55s（一次性，升级后首登），量级上不叠加"
 convert_when: "出现真实登录并发容量问题，或把限流桶挪出 state 锁时一并处理"
 ```
 
@@ -178,4 +178,22 @@ status: 已接受
 triggered_by: [账号认证]
 evidence: "哈希槽耗尽与登录限流共用 ErrLimited，Retry-After 一律取登录窗口 60 秒（ee/internal/identity/http/protocol.go:121），而槽位争抢通常百毫秒内消散；429 与 Retry-After:60 由方案 4.3 与 ee/docs/账号认证接口.md:44 规定为契约；来源:代码评审5 挂账"
 convert_when: "豁免(改动要动已批准契约)；若前端按 Retry-After 退避导致可感知延迟再评估"
+```
+
+## 账号认证（2026-09-12，代码通读）
+
+```yaml
+id: FIND-020
+status: 已转Case
+triggered_by: [账号认证, 身份模块整理]
+evidence: "ee_identity_sessions 与 ee_identity_ws_tickets 无任何删除路径（ee/internal/identity/persistence/store.go 全文只有 login_limits 的 Delete，:265），过期行永久累积；逻辑过期由 verify 保证，只是运维成本；来源:用户与 Claude Code 通读代码时确认"
+convert_when: "已转入 身份模块整理 期1 方案 §4.6：写入新会话/票据时顺带删除 expires_at 已过的行；期1 已实现（store.go sweepExpired，收敛评审1 核对与 §4.6 拍板一致），随期1 交付关账"
+```
+
+```yaml
+id: FIND-021
+status: 观察中
+triggered_by: [身份模块整理]
+evidence: "ee/internal/identity/persistence/store.go 的到期清理 sweepExpired 自取 time.Now().UTC()，而同文件 ReserveLogin 与 Tx 的 RevokeSession/ConsumeTicket 均由业务层传 at；identity 侧只有 core.go now() 一个时钟。改 Tx.InsertSession/InsertTicket 签名超出方案 §6 白名单，本期不做；R5 已把时钟读取收敛到一处；来源:收敛评审1 取舍项 S1"
+convert_when: "下次需要可注入时钟（测试或时钟漂移排查），或 Tx 因其他原因要改签名时一并收口"
 ```
