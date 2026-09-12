@@ -2,7 +2,7 @@
 
 [← 返回产品与技术文档](../README.md)
 
-本目录登记我们在 fork 中对**上游文件**做的全部修改。上游文件指 `core/`、`framework/`、`transports/`、`ui/`、`plugins/` 下的代码，它们由 maximhq/bifrost 维护，我们每次同步上游都要重新合并。`ee/`、`product/`、`workbench/`、`docs-zh/` 是我们自己的目录，不属于登记范围。
+本目录登记我们在 fork 中对**上游文件**做的全部修改。上游文件指 `core/`、`framework/`、`transports/`、`ui/`、`plugins/` 下的代码，它们由 maximhq/bifrost 维护，我们每次同步上游都要重新合并。`ee/`、`product/`、`workbench/` 是我们自己的目录，不属于登记范围。
 
 登记的目的只有一个：**同步上游前先看这份清单**，知道哪些文件会冲突、每处改动当初为什么必须改、合并后要验证什么。
 

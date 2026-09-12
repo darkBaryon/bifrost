@@ -45,7 +45,8 @@
   - { grep: "type consoleSessions interface", in: "ee/internal/host" }
   - { grep: "type legacyImporter interface", in: "ee/internal/host" }
   - { grep: "type identityRoutes interface", in: "ee/internal/host" }
-  - { grep: "expires_at < ?", in: "ee/internal/identity/persistence/store.go" }
+  - { grep: "expires_at <= ?", in: "ee/internal/identity/persistence/store.go" }
+  - { grep: "func (t \\*transaction) sweepExpired(", in: "ee/internal/identity/persistence/store.go" }
 收敛评审:
   风险等级: L3
   基线: 7284ad939462e4b78b6518826f6c537e13aecb46

@@ -142,17 +142,17 @@ func (s *AccountService) ListAccounts(ctx context.Context, p Principal, cursor s
 	if err := s.RequireAccountManager(ctx, p); err != nil {
 		return out, err
 	}
-	c, n, err := page(cursor, limit)
+	c, err := page(cursor, limit)
 	if err != nil {
 		return out, err
 	}
-	rows, err := s.repo.Accounts(ctx, c, n+1)
+	rows, err := s.repo.Accounts(ctx, c, limit+1)
 	if err != nil {
 		return out, SafeError(err)
 	}
-	if len(rows) > n {
-		out.NextCursor = encodeCursor(rows[n-1].CreatedAt, rows[n-1].ID)
-		rows = rows[:n]
+	if len(rows) > limit {
+		out.NextCursor = encodeCursor(rows[limit-1].CreatedAt, rows[limit-1].ID)
+		rows = rows[:limit]
 	}
 	out.Items = append(out.Items, rows...)
 	return out, nil

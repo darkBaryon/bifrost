@@ -43,7 +43,7 @@ ee/
 │   ├── branding/          品牌设置
 │   ├── audit/             管理审计
 │   ├── guardrails/        内容护栏
-│   └── bifrost/           宿主与上游能力集成
+│   └── host/              宿主与上游能力集成
 ├── ui/                    自有前端覆盖层
 ├── scripts/
 ├── go.mod

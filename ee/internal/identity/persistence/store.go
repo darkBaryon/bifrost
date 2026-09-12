@@ -152,10 +152,16 @@ func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
 	return authRecord(t.db, "s.id", id)
 }
 
-// InsertSession 先删除已到期的会话行再写入：过期即删（含已撤销），会话表不承担审计；无索引全表扫描，行数由本清理封顶。
+// sweepExpired 删除已到期的行，写入新会话/票据时顺带执行（FIND-020）：过期即删，含已撤销/已消费的行，
+// 会话与票据表不承担审计；口径与 identity 的过期判定一致，expires_at <= 当前时刻即为过期。无索引全表扫描，行数由本清理封顶。
+func (t *transaction) sweepExpired(model any) error {
+	return t.db.Where("expires_at <= ?", time.Now().UTC()).Delete(model).Error
+}
+
+// InsertSession 先清理到期会话行再写入。
 func (t *transaction) InsertSession(s identity.Session) error {
 	t.stage = "session.sweep"
-	if err := t.db.Where("expires_at < ?", time.Now().UTC()).Delete(&sessionRow{}).Error; err != nil {
+	if err := t.sweepExpired(&sessionRow{}); err != nil {
 		return err
 	}
 	t.stage = "session.insert"
@@ -186,10 +192,10 @@ func (t *transaction) InsertEvent(e identity.PasswordEvent) error {
 	return conflict(t.db.Create(&r).Error)
 }
 
-// InsertTicket 先删除已到期的票据行再写入；已消费但未到期的行留到到期。
+// InsertTicket 先清理到期票据行再写入；已消费但未到期的行留到到期。
 func (t *transaction) InsertTicket(v identity.Ticket) error {
 	t.stage = "ticket.sweep"
-	if err := t.db.Where("expires_at < ?", time.Now().UTC()).Delete(&ticketRow{}).Error; err != nil {
+	if err := t.sweepExpired(&ticketRow{}); err != nil {
 		return err
 	}
 	t.stage = "ticket.insert"

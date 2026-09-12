@@ -186,18 +186,18 @@ func (s *PasswordService) ListPasswordEvents(ctx context.Context, p Principal, t
 		}
 		target = p.AccountID
 	}
-	c, n, err := page(cursor, limit)
+	c, err := page(cursor, limit)
 	if err != nil {
 		return out, err
 	}
-	rows, err := s.repo.Events(ctx, target, c, n+1)
+	rows, err := s.repo.Events(ctx, target, c, limit+1)
 	if err != nil {
 		return out, SafeError(err)
 	}
-	if len(rows) > n {
-		out.NextCursor = encodeCursor(rows[n-1].OccurredAt, rows[n-1].ID)
-		rows = rows[:n]
+	if len(rows) > limit {
+		out.NextCursor = encodeCursor(rows[limit-1].OccurredAt, rows[limit-1].ID)
+		rows = rows[:limit]
 	}
-	out.Items = rows
+	out.Items = append(out.Items, rows...)
 	return out, nil
 }

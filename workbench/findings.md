@@ -187,5 +187,13 @@ id: FIND-020
 status: 已转Case
 triggered_by: [账号认证, 身份模块整理]
 evidence: "ee_identity_sessions 与 ee_identity_ws_tickets 无任何删除路径（ee/internal/identity/persistence/store.go 全文只有 login_limits 的 Delete，:265），过期行永久累积；逻辑过期由 verify 保证，只是运维成本；来源:用户与 Claude Code 通读代码时确认"
-convert_when: "已转入 身份模块整理 期1 方案 §4.6：写入新会话/票据时顺带删除 expires_at 已过的行"
+convert_when: "已转入 身份模块整理 期1 方案 §4.6：写入新会话/票据时顺带删除 expires_at 已过的行；期1 已实现（store.go sweepExpired，收敛评审1 核对与 §4.6 拍板一致），随期1 交付关账"
+```
+
+```yaml
+id: FIND-021
+status: 观察中
+triggered_by: [身份模块整理]
+evidence: "ee/internal/identity/persistence/store.go 的到期清理 sweepExpired 自取 time.Now().UTC()，而同文件 ReserveLogin 与 Tx 的 RevokeSession/ConsumeTicket 均由业务层传 at；identity 侧只有 core.go now() 一个时钟。改 Tx.InsertSession/InsertTicket 签名超出方案 §6 白名单，本期不做；R5 已把时钟读取收敛到一处；来源:收敛评审1 取舍项 S1"
+convert_when: "下次需要可注入时钟（测试或时钟漂移排查），或 Tx 因其他原因要改签名时一并收口"
 ```

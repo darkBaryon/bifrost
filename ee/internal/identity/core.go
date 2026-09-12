@@ -192,13 +192,13 @@ func (s *core) manager(tx Tx, p Principal) (AccountRecord, error) {
 	return c, s.authorize(tx.State(), actual)
 }
 
-// State 返回初始化状态与主管理员账号。
+// State 返回初始化状态与主管理员账号；经嵌入提升到三条线，外部从任意一条调用等价。
 func (s *core) State(ctx context.Context) (State, error) {
 	v, err := s.repo.State(ctx)
 	return v, SafeError(err)
 }
 
-// RequireAccountManager 供宿主对管理路由使用：重新核对会话，并要求正常会话与管理权限。
+// RequireAccountManager 供宿主对管理路由使用：重新核对会话，并要求正常会话与管理权限；同 State，三条线上等价。
 func (s *core) RequireAccountManager(ctx context.Context, p Principal) error {
 	actual, _, err := s.current(ctx, p)
 	if err != nil {
@@ -211,22 +211,22 @@ func (s *core) RequireAccountManager(ctx context.Context, p Principal) error {
 	return s.authorize(state, actual)
 }
 
-// page 解析分页参数：limit 必须在 1 到 MaxPageSize 之间，游标为空或可解码。
-func page(cursor string, limit int) (Cursor, int, error) {
+// page 校验分页参数并解码游标：limit 必须在 1 到 MaxPageSize 之间，游标为空或可解码；不改写 limit。
+func page(cursor string, limit int) (Cursor, error) {
 	if limit < 1 || limit > MaxPageSize {
-		return Cursor{}, 0, ErrInvalid
+		return Cursor{}, ErrInvalid
 	}
 	var c Cursor
 	if cursor != "" {
 		raw, err := base64.RawURLEncoding.DecodeString(cursor)
 		if err != nil || len(raw) > maxCursorBytes {
-			return Cursor{}, 0, ErrInvalid
+			return Cursor{}, ErrInvalid
 		}
 		if json.Unmarshal(raw, &c) != nil || c.At.IsZero() || !uuidPattern.MatchString(c.ID) {
-			return Cursor{}, 0, ErrInvalid
+			return Cursor{}, ErrInvalid
 		}
 	}
-	return c, limit, nil
+	return c, nil
 }
 
 func encodeCursor(at time.Time, id string) string {

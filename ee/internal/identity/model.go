@@ -188,7 +188,7 @@ type Cursor struct {
 	ID string
 }
 
-// AccountPage 与 EventPage 的 NextCursor 为空表示没有更多。
+// AccountPage 与 EventPage 的 Items 恒非 nil（空页为空切片），NextCursor 为空表示没有更多。
 type AccountPage struct {
 	Items      []Account
 	NextCursor string
