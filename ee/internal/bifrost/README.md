@@ -1,11 +1,23 @@
 # 宿主认证接入
 
-本包把 EE 身份服务接到宿主路由上，实现 `server.ConsoleAuthProvider`：替换管理鉴权和旧会话处理者，推理注册链及 VK 规则保持。
+把 EE 的账号认证接到上游 Bifrost 上，替换上游自带的共享密码认证。实现上游定义的 `server.ConsoleAuthProvider` 接口。
 
-| 文件 | 职责 |
+## 做什么
+
+- 管理接口的鉴权中间件：验 `ee_session` Cookie，只放行主管理员；通过后按上游规矩写 `is_local_admin` 标记，上游的通知、WebSocket 功能靠它判断权限。
+- 接管旧的 `/api/session/*` 路由，前端不用改。
+- WebSocket 连接每次推送前重新验证会话，撤销即断开。
+- `GET /api/config` 把旧认证字段替换成只读投影；`PUT` 拒绝对它的修改。
+- 启动时把上游旧配置里的管理员导入为主管理员（只在首次）。
+
+## 不做什么
+
+账号规则在 [identity](../identity/README.md)，装配和环境变量在 [app](../app/README.md)，推理链的鉴权完全是上游的。
+
+## 文件
+
+| 文件 | 内容 |
 |---|---|
-| [auth.go](auth.go) | 旧管理员凭据导入、管理路由鉴权中间件、公开入口与 MCP 临时令牌例外、WS 握手与重验回调 |
-| [config.go](config.go) | `/api/config` 的认证投影与写入预检 |
-| [auth_test.go](auth_test.go) | 真实路由链的身份边界、来源冲突、配置同值回送、URL 票据脱敏与临时令牌精确范围 |
-
-身份服务、HTTP 适配、部署选项和宿主 logger 由 [app](../app/README.md) 装配后注入；本包不读环境变量、不迁移表、不用标准库 `log`。管理请求默认要求当前正常的主管理员会话，通知等上游能力通过 localAdmin 兼容标记放行；WS 每次推送前重验会话。公开协议路径与 MCP 临时令牌按固定 method/route 处理，不接受动态管理白名单。配置 GET 投影只读认证状态，PUT 同值回送剔除旧 auth_config 后继续宿主操作，实际认证变更整请求拒绝。数据库及后台 worker 生命周期仍归宿主。
+| [auth.go](auth.go) | 中间件、会话路由、WebSocket 重验、旧管理员导入 |
+| [config.go](config.go) | `/api/config` 的读投影与写预检 |
+| [auth_test.go](auth_test.go) | 真实路由链上的鉴权边界测试 |
