@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
@@ -57,7 +58,7 @@ func testStore(t *testing.T) (*Store, *gorm.DB) {
 }
 func newService(t *testing.T, store *Store) *identity.Service {
 	t.Helper()
-	s, e := identity.NewService(store, Passwords{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
+	s, e := identity.NewService(store, hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -196,7 +197,7 @@ func TestInitializationAndLegacy(t *testing.T) {
 	ctx := context.Background()
 	_, e := s.Initialize(ctx, "wrong", "admin", adminPassword)
 	requireError(t, e, identity.ErrForbidden)
-	hash, e := (Passwords{}).Hash("short")
+	hash, e := (hasher.Bcrypt{}).Hash("short")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -289,13 +290,13 @@ func TestConcurrentInitialize(t *testing.T) {
 
 // 暂停已完成密码比较的登录，确保重置提交后不会签发旧版本会话。
 type pausedPasswords struct {
-	Passwords
+	hasher.Bcrypt
 	compared chan struct{}
 	resume   chan struct{}
 }
 
 func (p pausedPasswords) Compare(h, raw string) (bool, error) {
-	ok, e := p.Passwords.Compare(h, raw)
+	ok, e := p.Bcrypt.Compare(h, raw)
 	close(p.compared)
 	<-p.resume
 	return ok, e
@@ -307,7 +308,7 @@ func TestLoginRacingReset(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	p := pausedPasswords{Passwords: Passwords{}, compared: make(chan struct{}), resume: make(chan struct{})}
+	p := pausedPasswords{Bcrypt: hasher.Bcrypt{}, compared: make(chan struct{}), resume: make(chan struct{})}
 	login, e := identity.NewService(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)

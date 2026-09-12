@@ -6,34 +6,15 @@ package persistence
 import (
 	"context"
 	"errors"
-	"regexp"
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/mattn/go-sqlite3"
-	"github.com/maximhq/bifrost/framework/encrypt"
-	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
-
-// Passwords 复用宿主 bcrypt，超过算法上限的密码由业务层拒绝而不是截断。
-type Passwords struct{}
-
-func (Passwords) Hash(p string) (string, error) { return encrypt.Hash(p) }
-
-func (Passwords) Compare(h, p string) (bool, error) { return encrypt.CompareHash(h, p) }
-
-// bcryptHashPattern 补充 bcrypt.Cost 只解析版本和 cost 的不足，要求完整的 22 字节盐与 31 字节摘要。
-var bcryptHashPattern = regexp.MustCompile(`^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$`)
-
-// ValidHash 判断字符串是否为完整的 bcrypt 哈希，用于旧管理员凭据导入。
-func (Passwords) ValidHash(h string) bool {
-	_, err := bcrypt.Cost([]byte(h))
-	return err == nil && bcryptHashPattern.MatchString(h)
-}
 
 // Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
 type Store struct {

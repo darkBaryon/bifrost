@@ -12,6 +12,7 @@ import (
 
 	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -47,7 +48,7 @@ func identityOptions(setupToken string) (identity.Options, error) {
 
 // newIdentityService 在已迁移的共享数据库上构造身份服务，使用宿主 bcrypt 与暂行的主管理员策略；存储诊断经 log 输出。
 func newIdentityService(db *gorm.DB, options identity.Options, log schemas.Logger) (*identity.Service, error) {
-	return identity.NewService(persistence.NewStore(db, log), persistence.Passwords{}, options, nil)
+	return identity.NewService(persistence.NewStore(db, log), hasher.Bcrypt{}, options, nil)
 }
 
 // assembleIdentity 在宿主注册路由前执行：先校验全部部署配置，再迁移身份表、导入旧管理员并构造宿主适配。

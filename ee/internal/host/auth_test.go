@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/fasthttp/router"
@@ -44,7 +45,7 @@ func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
 	if e = persistence.MigrateIdentity(quietLogger{})(ctx, db); e != nil {
 		t.Fatal(e)
 	}
-	s, e := identity.NewService(persistence.NewStore(db, quietLogger{}), persistence.Passwords{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
+	s, e := identity.NewService(persistence.NewStore(db, quietLogger{}), hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
