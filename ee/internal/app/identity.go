@@ -46,9 +46,9 @@ func identityOptions(setupToken string) (identity.Options, error) {
 	return options, nil
 }
 
-// newIdentityService 在已迁移的共享数据库上构造身份服务，使用宿主 bcrypt 与暂行的主管理员策略；存储诊断经 log 输出。
-func newIdentityService(db *gorm.DB, options identity.Options, log schemas.Logger) (*identity.Service, error) {
-	return identity.NewService(persistence.NewStore(db, log), hasher.Bcrypt{}, options, nil)
+// newIdentity 在已迁移的共享数据库上构造三条线的身份服务，使用宿主 bcrypt 与暂行的主管理员策略；存储诊断经 log 输出。
+func newIdentity(db *gorm.DB, options identity.Options, log schemas.Logger) (*identity.Services, error) {
+	return identity.New(persistence.NewStore(db, log), hasher.Bcrypt{}, options, nil)
 }
 
 // assembleIdentity 在宿主注册路由前执行：先校验全部部署配置，再迁移身份表、导入旧管理员并构造宿主适配。
@@ -71,16 +71,16 @@ func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer
 	if err = host.Config.ConfigStore.RunMigration(ctx, persistence.MigrateIdentity(log)); err != nil {
 		return nil, errors.New("EE identity migration failed")
 	}
-	service, err := newIdentityService(host.Config.ConfigStore.DB(), options, log)
+	svc, err := newIdentity(host.Config.ConfigStore.DB(), options, log)
 	if err != nil {
 		return nil, err
 	}
-	if err = eehost.ImportLegacyAdministrator(ctx, host, service, log); err != nil {
+	if err = eehost.ImportLegacyAdministrator(ctx, host, svc.Account, log); err != nil {
 		return nil, err
 	}
-	handler, err := identityhttp.NewHandler(service, origin)
+	handler, err := identityhttp.NewHandler(svc, origin)
 	if err != nil {
 		return nil, err
 	}
-	return eehost.NewAuthAdapter(host, service, handler), nil
+	return eehost.NewAuthAdapter(host, svc.Session, handler), nil
 }

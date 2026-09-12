@@ -33,7 +33,7 @@ type quietLogger struct{}
 func (quietLogger) Error(string, ...any) {}
 func (quietLogger) Info(string, ...any)  {}
 
-func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
+func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession, *identity.Services) {
 	t.Helper()
 	db, e := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "auth.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if e != nil {
@@ -45,14 +45,14 @@ func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
 	if e = persistence.MigrateIdentity(quietLogger{})(ctx, db); e != nil {
 		t.Fatal(e)
 	}
-	s, e := identity.NewService(persistence.NewStore(db, quietLogger{}), hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
+	s, e := identity.New(persistence.NewStore(db, quietLogger{}), hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = s.Initialize(ctx, "setup", "admin", "Admin-password-1"); e != nil {
+	if _, e = s.Account.Initialize(ctx, "setup", "admin", "Admin-password-1"); e != nil {
 		t.Fatal(e)
 	}
-	v, e := s.Login(ctx, "admin", "Admin-password-1", "peer")
+	v, e := s.Session.Login(ctx, "admin", "Admin-password-1", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -60,7 +60,7 @@ func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	return NewAuthAdapter(nil, s, h), v
+	return NewAuthAdapter(nil, s.Session, h), v, s
 }
 func request(r *router.Router, method, path, body, token, origin, auth string) *fasthttp.RequestCtx {
 	req := &fasthttp.Request{}
@@ -83,7 +83,7 @@ func request(r *router.Router, method, path, body, token, origin, auth string) *
 	return c
 }
 func TestAdminBoundary(t *testing.T) {
-	a, v := testAdapter(t)
+	a, v, svc := testAdapter(t)
 	r := router.New()
 	m := a.APIMiddleware()
 	a.RegisterSessionRoutes(r, m)
@@ -116,10 +116,10 @@ func TestAdminBoundary(t *testing.T) {
 			t.Fatalf("list %s: status=%d expected=%d", body, c.Response.StatusCode(), code)
 		}
 	}
-	if _, e := a.service.CreateAccount(context.Background(), v.Principal, "alice", ""); e != nil {
+	if _, e := svc.Account.CreateAccount(context.Background(), v.Principal, "alice", ""); e != nil {
 		t.Fatal(e)
 	}
-	member, e := a.service.Login(context.Background(), "alice", "123456", "peer")
+	member, e := svc.Session.Login(context.Background(), "alice", "123456", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -136,7 +136,7 @@ func TestAdminBoundary(t *testing.T) {
 	}
 }
 func TestConfigurationProjection(t *testing.T) {
-	a, v := testAdapter(t)
+	a, v, _ := testAdapter(t)
 	r := router.New()
 	m := a.APIMiddleware()
 	called := false
@@ -170,7 +170,7 @@ func TestConfigurationProjection(t *testing.T) {
 	}
 }
 func TestCookieAndStrictJSON(t *testing.T) {
-	a, _ := testAdapter(t)
+	a, _, _ := testAdapter(t)
 	r := router.New()
 	a.RegisterSessionRoutes(r, a.APIMiddleware())
 	c := request(r, "POST", "/api/identity/login", `{"username":"admin","password":"Admin-password-1"}`, "", a.http.Origin(), "")
@@ -192,7 +192,7 @@ func TestCookieAndStrictJSON(t *testing.T) {
 }
 
 func TestOriginConflictAndTicketValidation(t *testing.T) {
-	a, v := testAdapter(t)
+	a, v, svc := testAdapter(t)
 	for _, tc := range []struct {
 		origin, referer string
 		ok              bool
@@ -210,7 +210,7 @@ func TestOriginConflictAndTicketValidation(t *testing.T) {
 	r := router.New()
 	m := a.APIMiddleware()
 	r.GET("/ws", m(func(c *fasthttp.RequestCtx) { c.SetStatusCode(204) }))
-	ticket, e := a.service.IssueTicket(context.Background(), v.Principal)
+	ticket, e := svc.Session.IssueTicket(context.Background(), v.Principal)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -229,7 +229,7 @@ func TestOriginConflictAndTicketValidation(t *testing.T) {
 }
 
 func TestTemporaryTokenScopes(t *testing.T) {
-	a, admin := testAdapter(t)
+	a, admin, svc := testAdapter(t)
 	ctx := context.Background()
 	store, e := configstore.NewConfigStore(ctx, &configstore.Config{Enabled: true, Type: configstore.ConfigStoreTypeSQLite, Config: &configstore.SQLiteConfig{Path: filepath.Join(t.TempDir(), "host.db")}}, core.NewDefaultLogger(schemas.LogLevelError))
 	if e != nil {
@@ -245,10 +245,10 @@ func TestTemporaryTokenScopes(t *testing.T) {
 		t.Fatal(e)
 	}
 	a.host = &server.BifrostHTTPServer{Config: &lib.Config{ConfigStore: store}, TempTokens: tokens}
-	if _, e = a.service.CreateAccount(ctx, admin.Principal, "member", ""); e != nil {
+	if _, e = svc.Account.CreateAccount(ctx, admin.Principal, "member", ""); e != nil {
 		t.Fatal(e)
 	}
-	member, e := a.service.Login(ctx, "member", "123456", "peer")
+	member, e := svc.Session.Login(ctx, "member", "123456", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -335,7 +335,7 @@ func TestDefaultDirectoryLegacyValidation(t *testing.T) {
 
 // 路径/匿名状态取自批准的HTTP契约，不依赖生产路由表构造预期。
 func TestIdentityRouteContract(t *testing.T) {
-	a, _ := testAdapter(t)
+	a, _, _ := testAdapter(t)
 	r := router.New()
 	a.RegisterSessionRoutes(r, a.APIMiddleware())
 	for _, tt := range []struct {

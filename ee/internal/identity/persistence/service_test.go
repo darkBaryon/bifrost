@@ -56,15 +56,29 @@ func testStore(t *testing.T) (*Store, *gorm.DB) {
 	}
 	return NewStore(db, logs), db
 }
-func newService(t *testing.T, store *Store) *identity.Service {
+
+type services struct {
+	*identity.SessionService
+	*identity.AccountService
+	*identity.PasswordService
+}
+
+func (s services) State(ctx context.Context) (identity.State, error) {
+	return s.SessionService.State(ctx)
+}
+func (s services) RequireAccountManager(ctx context.Context, p identity.Principal) error {
+	return s.SessionService.RequireAccountManager(ctx, p)
+}
+
+func newService(t *testing.T, store *Store) services {
 	t.Helper()
-	s, e := identity.NewService(store, hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
+	s, e := identity.New(store, hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
-	return s
+	return services{s.Session, s.Account, s.Password}
 }
-func fixture(t *testing.T) (*identity.Service, *Store, *gorm.DB, identity.IssuedSession) {
+func fixture(t *testing.T) (services, *Store, *gorm.DB, identity.IssuedSession) {
 	t.Helper()
 	store, db := testStore(t)
 	s := newService(t, store)
@@ -309,10 +323,11 @@ func TestLoginRacingReset(t *testing.T) {
 		t.Fatal(e)
 	}
 	p := pausedPasswords{Bcrypt: hasher.Bcrypt{}, compared: make(chan struct{}), resume: make(chan struct{})}
-	login, e := identity.NewService(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
+	svc, e := identity.New(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
 	if e != nil {
 		t.Fatal(e)
 	}
+	login := services{svc.Session, svc.Account, svc.Password}
 	done := make(chan error, 1)
 	go func() { _, e := login.Login(ctx, "alice", "123456", "peer"); done <- e }()
 	<-p.compared

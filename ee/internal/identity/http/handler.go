@@ -21,20 +21,20 @@ const (
 	messagePasswordChanged  = "Password changed; log in again"
 )
 
-// Handler 持有身份服务与已验证的部署 origin；不信任请求中的代理头。
+// Handler 持有三条线的身份服务与已验证的部署 origin；不信任请求中的代理头。
 type Handler struct {
-	service *identity.Service
-	origin  string
-	secure  bool
+	svc    *identity.Services
+	origin string
+	secure bool
 }
 
 // NewHandler 绑定身份服务与部署 origin。
-func NewHandler(service *identity.Service, origin string) (*Handler, error) {
+func NewHandler(svc *identity.Services, origin string) (*Handler, error) {
 	o, secure, err := ValidateOrigin(origin)
 	if err != nil {
 		return nil, err
 	}
-	return &Handler{service: service, origin: o, secure: secure}, nil
+	return &Handler{svc: svc, origin: o, secure: secure}, nil
 }
 
 // Origin 返回已验证的部署 origin，供宿主适配做 WebSocket 握手的来源检查。
@@ -103,7 +103,7 @@ func (h *Handler) serve(rt route) fasthttp.RequestHandler {
 				Error(c, identity.ErrUnauthorized)
 				return
 			}
-			p, err := h.service.Authenticate(r.ctx, r.cookie())
+			p, err := h.svc.Session.Authenticate(r.ctx, r.cookie())
 			if err != nil {
 				Error(c, err)
 				return
@@ -126,11 +126,11 @@ func (h *Handler) status(r request) (int, any, error) {
 			return 0, nil, err
 		}
 	}
-	state, err := h.service.State(r.ctx)
+	state, err := h.svc.Session.State(r.ctx)
 	if err != nil {
 		return 0, nil, err
 	}
-	p, err := h.service.Authenticate(r.ctx, r.cookie())
+	p, err := h.svc.Session.Authenticate(r.ctx, r.cookie())
 	if err != nil && !errors.Is(err, identity.ErrUnauthorized) {
 		return 0, nil, err
 	}
@@ -144,7 +144,7 @@ func (h *Handler) initialize(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	a, err := h.service.Initialize(r.ctx, q.SetupToken, q.Username, q.Password)
+	a, err := h.svc.Account.Initialize(r.ctx, q.SetupToken, q.Username, q.Password)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -157,7 +157,7 @@ func (h *Handler) login(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	v, err := h.service.Login(r.ctx, q.Username, q.Password, r.c.RemoteIP().String())
+	v, err := h.svc.Session.Login(r.ctx, q.Username, q.Password, r.c.RemoteIP().String())
 	if err != nil {
 		return 0, nil, err
 	}
@@ -171,7 +171,7 @@ func (h *Handler) logout(r request) (int, any, error) {
 	if err := r.decode(&emptyRequest{}); err != nil {
 		return 0, nil, err
 	}
-	if err := h.service.Logout(r.ctx, r.cookie()); err != nil {
+	if err := h.svc.Session.Logout(r.ctx, r.cookie()); err != nil {
 		return 0, nil, err
 	}
 	h.clearCookie(r.c)
@@ -182,7 +182,7 @@ func (h *Handler) me(r request) (int, any, error) {
 	if err := r.decode(&emptyRequest{}); err != nil {
 		return 0, nil, err
 	}
-	a, err := h.service.Me(r.ctx, r.principal)
+	a, err := h.svc.Session.Me(r.ctx, r.principal)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -195,7 +195,7 @@ func (h *Handler) changePassword(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	if err := h.service.ChangePassword(r.ctx, r.principal, q.OldPassword, q.NewPassword); err != nil {
+	if err := h.svc.Password.ChangePassword(r.ctx, r.principal, q.OldPassword, q.NewPassword); err != nil {
 		return 0, nil, err
 	}
 	h.clearCookie(r.c)
@@ -207,7 +207,7 @@ func (h *Handler) createAccount(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	a, err := h.service.CreateAccount(r.ctx, r.principal, q.Username, q.DisplayName)
+	a, err := h.svc.Account.CreateAccount(r.ctx, r.principal, q.Username, q.DisplayName)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -219,7 +219,7 @@ func (h *Handler) listAccounts(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	p, err := h.service.ListAccounts(r.ctx, r.principal, q.Cursor, pageLimit(q.Limit))
+	p, err := h.svc.Account.ListAccounts(r.ctx, r.principal, q.Cursor, pageLimit(q.Limit))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -231,7 +231,7 @@ func (h *Handler) setStatus(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	a, err := h.service.SetAccountStatus(r.ctx, r.principal, q.AccountID, identity.AccountStatus(q.Status))
+	a, err := h.svc.Account.SetAccountStatus(r.ctx, r.principal, q.AccountID, identity.AccountStatus(q.Status))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -243,7 +243,7 @@ func (h *Handler) resetPassword(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	e, err := h.service.ResetPassword(r.ctx, r.principal, q.AccountID, q.OperationID)
+	e, err := h.svc.Password.ResetPassword(r.ctx, r.principal, q.AccountID, q.OperationID)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -255,7 +255,7 @@ func (h *Handler) passwordEvents(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	p, err := h.service.ListPasswordEvents(r.ctx, r.principal, q.TargetID, q.Cursor, pageLimit(q.Limit))
+	p, err := h.svc.Password.ListPasswordEvents(r.ctx, r.principal, q.TargetID, q.Cursor, pageLimit(q.Limit))
 	if err != nil {
 		return 0, nil, err
 	}
@@ -266,7 +266,7 @@ func (h *Handler) wsTicket(r request) (int, any, error) {
 	if err := r.decode(&emptyRequest{}); err != nil {
 		return 0, nil, err
 	}
-	ticket, err := h.service.IssueTicket(r.ctx, r.principal)
+	ticket, err := h.svc.Session.IssueTicket(r.ctx, r.principal)
 	if err != nil {
 		return 0, nil, err
 	}

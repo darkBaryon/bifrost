@@ -23,16 +23,31 @@ import (
 
 type principalKey struct{}
 
+// consoleSessions 是管理鉴权需要的会话能力，由 identity.SessionService 满足；本包按实际需要声明，不持有整个身份服务。
+type consoleSessions interface {
+	Authenticate(context.Context, string) (identity.Principal, error)
+	ValidateSession(context.Context, string) (identity.Principal, error)
+	RequireAccountManager(context.Context, identity.Principal) error
+	ConsumeTicket(context.Context, string) (identity.Principal, error)
+	Me(context.Context, identity.Principal) (identity.Account, error)
+}
+
+// legacyImporter 是导入旧管理员需要的能力，由 identity.AccountService 满足。
+type legacyImporter interface {
+	State(context.Context) (identity.State, error)
+	BootstrapLegacy(ctx context.Context, username, passwordHash string) error
+}
+
 // AuthAdapter 实现宿主的 ConsoleAuthProvider；依赖由 app 装配后注入，宿主对象只用于临时令牌与配置读取。
 type AuthAdapter struct {
-	service *identity.Service
+	service consoleSessions
 	http    *identityhttp.Handler
 	host    *server.BifrostHTTPServer
 }
 
-// NewAuthAdapter 由 app 在身份服务与 HTTP 适配构造完成后调用。
-func NewAuthAdapter(host *server.BifrostHTTPServer, service *identity.Service, handler *identityhttp.Handler) *AuthAdapter {
-	return &AuthAdapter{service: service, http: handler, host: host}
+// NewAuthAdapter 由 app 在身份服务与 HTTP 适配构造完成后调用；只接收会话线，建号、重置、恢复对本包不可见。
+func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler *identityhttp.Handler) *AuthAdapter {
+	return &AuthAdapter{service: sessions, http: handler, host: host}
 }
 
 // Logger 是本包需要的日志能力，由 app 注入宿主 logger；消息为 printf 风格。
@@ -42,8 +57,8 @@ type Logger interface {
 
 // ImportLegacyAdministrator 在身份未初始化时，把宿主已解析的旧管理员凭据导入为主管理员；已初始化时不读取旧配置。
 // 宿主会忽略残缺的文件凭据，所以先直接检查配置文件：残缺或未解析的输入拒绝启动，不能当作空实例开放初始化。
-func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServer, service *identity.Service, log Logger) error {
-	state, err := service.State(ctx)
+func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServer, accounts legacyImporter, log Logger) error {
+	state, err := accounts.State(ctx)
 	if err != nil {
 		return err
 	}
@@ -69,7 +84,7 @@ func ImportLegacyAdministrator(ctx context.Context, host *server.BifrostHTTPServ
 	if username == "" || hash == "" {
 		return errors.New("legacy administrator credentials are incomplete")
 	}
-	if err := service.BootstrapLegacy(ctx, username, hash); err != nil {
+	if err := accounts.BootstrapLegacy(ctx, username, hash); err != nil {
 		// 只有凭据本身不合法才提示去修旧凭据；存储故障等原因照原样带出（identity.Error 已脱敏），
 		// 否则运维会被这句话引向错误的方向。
 		if errors.Is(err, identity.ErrInvalid) {
