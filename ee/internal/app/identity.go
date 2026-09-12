@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	eehost "github.com/darkBaryon/bifrost/ee/internal/bifrost"
+	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"

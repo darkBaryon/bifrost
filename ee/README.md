@@ -14,7 +14,7 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [internal/app/](internal/app/README.md) | 配置、依赖装配与启动接入 |
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
 | [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http与persistence适配 |
-| [internal/bifrost/](internal/bifrost/README.md) | 宿主管理认证替换与兼容策略 |
+| [internal/host/](internal/host/README.md) | 宿主管理认证替换与兼容策略 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |
 

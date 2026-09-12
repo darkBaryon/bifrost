@@ -1,5 +1,5 @@
 // 本文件验证真实路由链的身份旁路、来源校验与配置回送兼容。
-package bifrost
+package host
 
 import (
 	"context"

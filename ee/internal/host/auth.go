@@ -1,5 +1,5 @@
-// Package bifrost 连接 EE 身份服务与宿主路由：替换管理鉴权、导入旧管理员、兼容 WS/配置/临时令牌；不实现账号业务。
-package bifrost
+// Package host 连接 EE 身份服务与宿主路由：替换管理鉴权、导入旧管理员、兼容 WS/配置/临时令牌；不实现账号业务。
+package host
 
 import (
 	"context"
