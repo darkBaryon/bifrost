@@ -14,6 +14,11 @@ func TestPriceFile(t *testing.T) {
 	tests := []struct{ name, old, replacement, want string }{
 		{name: "valid"},
 		{"hosts", `["dashscope.aliyuncs.com"]`, `[]`, "endpoint_hosts"},
+		{"root only host", `dashscope.aliyuncs.com`, `.`, `invalid endpoint host "."`},
+		{"multiple trailing dots host", `dashscope.aliyuncs.com`, `a.com..`, `invalid endpoint host "a.com.."`},
+		{"leading dot host", `dashscope.aliyuncs.com`, `.a.com`, `invalid endpoint host ".a.com"`},
+		{"single trailing dot host", `dashscope.aliyuncs.com`, `a.com.`, ""},
+		{"mixed case host", `dashscope.aliyuncs.com`, `A.com`, ""},
 		{"duplicate model", `"note":"最低档"}`, `"note":"最低档"},{"model":"qwen-test","currency":"CNY","unit":"per_million_tokens","input_cost":1,"output_cost":2}`, "duplicate model"},
 		{"negative", `"input_cost":6`, `"input_cost":-1`, "nonnegative"},
 		{"currency", `"currency":"CNY"`, `"currency":"EUR"`, "unknown currency"},
@@ -34,6 +39,9 @@ func TestPriceFile(t *testing.T) {
 			if tt.want != "" {
 				if err == nil || !strings.Contains(err.Error(), tt.want) {
 					t.Fatalf("want %q, got %v", tt.want, err)
+				}
+				if f.Version != "" || f.Rates != nil || f.Vendors != nil {
+					t.Fatalf("invalid file returned partial catalog: %+v", f)
 				}
 				return
 			}

@@ -5,7 +5,7 @@
 | 文件 | 职责 |
 |---|---|
 | `model.go` | 无 JSON/数据库标签的价格业务模型与币种、取价口径 |
-| `pricefile.go` | 独立 JSON DTO、嵌入文件、解析及整份校验、共享汇率判定 `ValidRate` |
+| `pricefile.go` | 独立 JSON DTO、嵌入文件、解析及整份校验（主机归一后须非空且首尾无点）、共享汇率判定 `ValidRate` |
 | `pricefile_test.go` | 文件契约与非法输入测试 |
 | `data/cn-prices.json` | 随版本发布的价格目录；2026-09-13 官网核对，收录情况见使用说明 |
 | `vendors.go` / `vendors_test.go` | 官方域名匹配（忽略大小写及单个末尾根域点）、手工映射优先和原始厂商名保留 |

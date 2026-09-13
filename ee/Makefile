@@ -47,6 +47,6 @@ smoke: build ## 临时数据库与随机端口，依次执行国内定价、品�
 smoke-identity: build ## 双节点 PostgreSQL 身份冒烟，需要 IDENTITY_TEST_POSTGRES_DSN
 	@python3 scripts/identity-smoke.py --binary tmp/bifrost-http --database postgres
 
-smoke-pricing: build ## 隔离 SQLite 国内定价同步、重启幂等与汇率冒烟
+smoke-pricing: build ## 先跑国内定价失败现场回归，再做隔离 SQLite 同步、重启幂等与汇率冒烟
 	@python3 scripts/pricing-smoke-test.py
 	@python3 scripts/pricing-smoke.py --binary tmp/bifrost-http

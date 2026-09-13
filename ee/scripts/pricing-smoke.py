@@ -148,6 +148,12 @@ def smoke(node):
         'patch': {'input_cost_per_token': 0.000003},
     })
     manual = value['pricing_override']
+    # 原配置、价格文件与环境变量均不改，复用已持久化的登录会话，避免额外登录触发限流。
+    node.stop()
+    node.start(pricing_env=env)
+    assert check_rows(node, models, 7.2, manual) == ids
+    assert f'created=0 updated=0 deleted=0 unchanged={len(models)} unrecognized=[mystery]' in node.current_log()
+    print('PASS: unchanged configuration restart preserves rows with zero creates, updates or deletes')
     # 两次完整重启改用等价根域点地址，共库行与 UUID、手工行金额和时间戳均须保留。
     for host in ('dashscope.aliyuncs.com.', 'DASHSCOPE.ALIYUNCS.COM.:443'):
         node.stop()
@@ -157,7 +163,7 @@ def smoke(node):
         node.login()
         assert check_rows(node, models, 7.2, manual) == ids, host
         assert 'created=0 updated=0 deleted=0 unchanged=2 unrecognized=[mystery]' in node.current_log(), host
-    print('PASS: provider scope, conversion, unknown provider, manual preservation and two idempotent restarts')
+    print('PASS: provider scope, conversion, unknown provider, manual preservation and three idempotent restarts')
     print('PASS: trailing root dot with and without port preserves overrides across restarts')
     invalid = node.root / 'invalid.json'
     invalid.write_text('{invalid')

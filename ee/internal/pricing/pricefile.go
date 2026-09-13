@@ -131,6 +131,10 @@ func (f PriceFile) validate() error {
 			if strings.TrimSpace(host) == "" || strings.ContainsAny(host, "/: @") {
 				return fmt.Errorf("%s: invalid endpoint host %q", v.ID, host)
 			}
+			normalized := normalizeHost(host)
+			if normalized == "" || strings.HasPrefix(normalized, ".") || strings.HasSuffix(normalized, ".") {
+				return fmt.Errorf("%s: invalid endpoint host %q: normalized host must be nonempty and must not start or end with a dot", v.ID, host)
+			}
 		}
 		models := map[string]bool{}
 		for _, m := range v.Models {
