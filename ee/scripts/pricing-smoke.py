@@ -148,14 +148,17 @@ def smoke(node):
         'patch': {'input_cost_per_token': 0.000003},
     })
     manual = value['pricing_override']
-    # 两次完整重启，共库行与 UUID 不变，手工行的金额和时间戳也不变。
-    for _ in range(2):
+    # 两次完整重启改用等价根域点地址，共库行与 UUID、手工行金额和时间戳均须保留。
+    for host in ('dashscope.aliyuncs.com.', 'DASHSCOPE.ALIYUNCS.COM.:443'):
         node.stop()
+        node.config['providers']['myqwen']['network_config']['base_url'] = f'https://{host}/compatible-mode/v1'
+        (node.root / 'config.json').write_text(json.dumps(node.config), encoding='utf-8')
         node.start(pricing_env=env)
         node.login()
-        assert check_rows(node, models, 7.2, manual) == ids
-        assert 'created=0 updated=0 deleted=0 unchanged=2 unrecognized=[mystery]' in node.current_log()
+        assert check_rows(node, models, 7.2, manual) == ids, host
+        assert 'created=0 updated=0 deleted=0 unchanged=2 unrecognized=[mystery]' in node.current_log(), host
     print('PASS: provider scope, conversion, unknown provider, manual preservation and two idempotent restarts')
+    print('PASS: trailing root dot with and without port preserves overrides across restarts')
     invalid = node.root / 'invalid.json'
     invalid.write_text('{invalid')
     node.stop()

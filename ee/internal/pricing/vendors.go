@@ -88,7 +88,7 @@ func matchVendors(providers []Provider, file PriceFile, mapping map[string]strin
 		var matched string
 		for _, v := range file.Vendors {
 			for _, allowed := range v.EndpointHosts {
-				allowed = strings.ToLower(allowed)
+				allowed = normalizeHost(allowed)
 				if host != "" && (host == allowed || strings.HasSuffix(host, "."+allowed)) {
 					if matched != "" && matched != v.ID {
 						return nil, nil, fmt.Errorf("%w: provider %s host %s matches multiple vendors", ErrConfig, p.Name, host)
@@ -124,5 +124,10 @@ func endpointHost(raw string) string {
 	if err != nil {
 		return ""
 	}
-	return strings.ToLower(parsed.Hostname())
+	return normalizeHost(parsed.Hostname())
+}
+
+// DNS 根域点不影响主机身份；只移除一个末尾点，不能把多个末尾点当成合法根域点。
+func normalizeHost(host string) string {
+	return strings.TrimSuffix(strings.ToLower(host), ".")
 }

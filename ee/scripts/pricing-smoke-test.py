@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -65,7 +66,6 @@ class SmokeFailureTests(unittest.TestCase):
         self.addCleanup(node.stop)
         self.assertIsNone(node.process.poll())
         # 真实 SQLite 文件用于证明进程回收后仍保留完整现场。
-        import sqlite3
         with sqlite3.connect(self.root / 'config.db') as db:
             db.execute('create table evidence (value text)')
             db.execute("insert into evidence values ('retained')")

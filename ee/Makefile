@@ -48,4 +48,5 @@ smoke-identity: build ## 双节点 PostgreSQL 身份冒烟，需要 IDENTITY_TES
 	@python3 scripts/identity-smoke.py --binary tmp/bifrost-http --database postgres
 
 smoke-pricing: build ## 隔离 SQLite 国内定价同步、重启幂等与汇率冒烟
+	@python3 scripts/pricing-smoke-test.py
 	@python3 scripts/pricing-smoke.py --binary tmp/bifrost-http

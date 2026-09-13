@@ -33,33 +33,44 @@ func TestMatchVendors(t *testing.T) {
 		{"https", "https://dashscope.aliyuncs.com/compatible-mode", true, true},
 		{"no scheme", "dashscope.aliyuncs.com/v1", true, true},
 		{"subdomain", "https://a.dashscope.aliyuncs.com", true, true},
+		{"root dot", "https://dashscope.aliyuncs.com./compatible-mode/v1", true, true},
+		{"root dot with port", "https://DASHSCOPE.ALIYUNCS.COM.:443/compatible-mode/v1", true, true},
+		{"root dot without scheme", "dashscope.aliyuncs.com.:443/v1", true, true},
+		{"subdomain root dot", "https://a.dashscope.aliyuncs.com.", true, true},
+		{"multiple root dots", "https://dashscope.aliyuncs.com..", true, false},
 		{"international", "https://dashscope-intl.aliyuncs.com", true, false},
 		{"suffix attack", "https://evildashscope.aliyuncs.com", true, false},
+		{"suffix attack root dot", "https://evildashscope.aliyuncs.com.:443", true, false},
+		{"untrusted parent", "https://dashscope.aliyuncs.com.evil.example.", true, false},
 		{"empty", "", true, false},
 		{"built in", "https://dashscope.aliyuncs.com", false, false},
 	} {
-		t.Run(tt.name, func(t *testing.T) {
-			log := &testLogger{}
-			m, u, e := matchVendors([]Provider{{Name: "OriginalName", Custom: tt.custom, BaseURL: tt.url}}, testFile(t), nil, log)
-			if e != nil {
-				t.Fatal(e)
-			}
-			if (len(m) == 1) != tt.match {
-				t.Fatalf("matches=%v", m)
-			}
-			if tt.match && m[0].Provider != "OriginalName" {
-				t.Fatal("provider normalized")
-			}
-			if (len(u) == 1) != (tt.custom && !tt.match) {
-				t.Fatalf("unknown=%v", u)
-			}
-			if !tt.custom && len(log.infos) != 0 {
-				t.Fatal("built in logged")
-			}
-			if len(u) > 0 && !strings.Contains(strings.Join(log.infos, " "), endpointHost(tt.url)) {
-				t.Fatal("host missing")
-			}
-		})
+		for _, allowed := range []string{"dashscope.aliyuncs.com", "DASHSCOPE.ALIYUNCS.COM."} {
+			t.Run(tt.name+"/"+allowed, func(t *testing.T) {
+				f := testFile(t)
+				f.Vendors[0].EndpointHosts = []string{allowed}
+				log := &testLogger{}
+				m, u, e := matchVendors([]Provider{{Name: "OriginalName", Custom: tt.custom, BaseURL: tt.url}}, f, nil, log)
+				if e != nil {
+					t.Fatal(e)
+				}
+				if (len(m) == 1) != tt.match {
+					t.Fatalf("matches=%v", m)
+				}
+				if tt.match && m[0].Provider != "OriginalName" {
+					t.Fatal("provider normalized")
+				}
+				if (len(u) == 1) != (tt.custom && !tt.match) {
+					t.Fatalf("unknown=%v", u)
+				}
+				if !tt.custom && len(log.infos) != 0 {
+					t.Fatal("built in logged")
+				}
+				if len(u) > 0 && !strings.Contains(strings.Join(log.infos, " "), endpointHost(tt.url)) {
+					t.Fatal("host missing")
+				}
+			})
+		}
 	}
 }
 

@@ -115,10 +115,10 @@ func (s *Service) Sync(ctx context.Context) (Report, error) {
 		vendors[v.ID] = v
 	}
 	var desired []OverrideRow
-	for _, match := range matches {
-		v := vendors[match.VendorID]
+	for _, hit := range matches {
+		v := vendors[hit.VendorID]
 		for _, m := range v.Models {
-			row, err := makeOverride(match.Provider, v, m, s.file.Rates)
+			row, err := makeOverride(hit.Provider, v, m, s.file.Rates)
 			if err != nil {
 				return report, err
 			}

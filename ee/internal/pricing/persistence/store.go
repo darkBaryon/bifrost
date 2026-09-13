@@ -24,8 +24,8 @@ func NewOverrides(config configstore.ConfigStore) *Overrides {
 }
 
 // List 读取全表，所有权由业务服务判定。
-func (s *Overrides) List(ctx context.Context) ([]pricing.OverrideRow, error) {
-	rows, err := s.config.GetPricingOverrides(ctx, configstore.PricingOverrideFilters{})
+func (o *Overrides) List(ctx context.Context) ([]pricing.OverrideRow, error) {
+	rows, err := o.config.GetPricingOverrides(ctx, configstore.PricingOverrideFilters{})
 	if err != nil {
 		return nil, err
 	}
@@ -37,18 +37,18 @@ func (s *Overrides) List(ctx context.Context) ([]pricing.OverrideRow, error) {
 }
 
 // Create 将唯一约束冲突映射为 ErrRowExists。
-func (s *Overrides) Create(ctx context.Context, row pricing.OverrideRow) error {
-	return mapError(s.config.CreatePricingOverride(ctx, toTable(row)))
+func (o *Overrides) Create(ctx context.Context, row pricing.OverrideRow) error {
+	return mapError(o.config.CreatePricingOverride(ctx, toTable(row)))
 }
 
 // Update 复用上游 Save，可在行被另一节点删除后重新创建。
-func (s *Overrides) Update(ctx context.Context, row pricing.OverrideRow) error {
-	return mapError(s.config.UpdatePricingOverride(ctx, toTable(row)))
+func (o *Overrides) Update(ctx context.Context, row pricing.OverrideRow) error {
+	return mapError(o.config.UpdatePricingOverride(ctx, toTable(row)))
 }
 
 // Delete 将已不存在映射为 ErrRowMissing，由服务按幂等成功处理。
-func (s *Overrides) Delete(ctx context.Context, id string) error {
-	return mapError(s.config.DeletePricingOverride(ctx, id))
+func (o *Overrides) Delete(ctx context.Context, id string) error {
+	return mapError(o.config.DeletePricingOverride(ctx, id))
 }
 
 // Catalog 适配本节点内存目录，生命周期由宿主管理。
