@@ -1,4 +1,4 @@
-// 本文件提供业务规则测试的内存仓储；不模拟数据库锁、事务隔离或真实会话。
+// 本文件用内存数据支持规则测试，不模拟数据库的锁、回滚或真实登录会话。
 package rbac
 
 import (
@@ -29,7 +29,7 @@ func ruleFixture() (*Service, *ruleStore, Subject) {
 	return New(r), r, Subject{AccountID: "admin"}
 }
 
-func (r *ruleStore) Read(_ context.Context, fn func(ReadView) error) error {
+func (r *ruleStore) Read(_ context.Context, fn func(Queries) error) error {
 	if r.failure != nil {
 		return r.failure
 	}

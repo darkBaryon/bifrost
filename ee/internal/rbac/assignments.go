@@ -1,10 +1,16 @@
-// 本文件管理角色分配、最后有效主管理员与初始化/离线恢复绑定。
+// 本文件给账号分配角色，防止移除最后一个启用的主管理员，并为初始化和离线恢复补上主管理员角色。
 package rbac
 
 import (
 	"context"
 	"slices"
 )
+
+// State 记录系统是否已初始化，以及离线恢复管理员时应恢复哪个账号。
+type State struct {
+	Initialized    bool
+	ChiefAccountID string // 固定的恢复账号，不代表只有这个账号能拥有主管理员角色。
+}
 
 func roleIDs(ids []RoleID) ([]RoleID, error) {
 	if len(ids) > MaxRolesPerAccount {
@@ -21,8 +27,9 @@ func roleIDs(ids []RoleID) ([]RoleID, error) {
 	return out, nil
 }
 
-func remainingChief(v ReadView, target string) error {
-	roles, e := v.AccountRoles(target)
+// remainingChief 检查目标是不是最后一个启用的主管理员；如果是，就不允许停用它或移除它的主管理员角色。
+func remainingChief(queries Queries, target string) error {
+	roles, e := queries.AccountRoles(target)
 	if e != nil {
 		return e
 	}
@@ -33,18 +40,18 @@ func remainingChief(v ReadView, target string) error {
 	if !chief {
 		return nil
 	}
-	account, e := v.Account(target)
+	account, e := queries.Account(target)
 	if e != nil {
 		return e
 	}
 	if !account.Active {
 		return nil
 	}
-	ids, e := v.RoleAccountIDs(ChiefRoleID)
+	ids, e := queries.RoleAccountIDs(ChiefRoleID)
 	if e != nil {
 		return e
 	}
-	n, e := v.CountActiveAccounts(ids)
+	n, e := queries.CountActiveAccounts(ids)
 	if e != nil {
 		return e
 	}
@@ -54,11 +61,12 @@ func remainingChief(v ReadView, target string) error {
 	return nil
 }
 
-// SetAccountRoles 整组替换，禁止改自己；保护检查与关系修改必须共用身份state写锁。
+// SetAccountRoles 替换目标账号的全部角色，空列表表示清空；操作者不能修改自己的角色分配。
+// 检查最后管理员和修改分配必须共用身份模块的 state 写锁，防止同时操作时绕过保护。
 func (s *Service) SetAccountRoles(ctx context.Context, p Subject, target string, ids []RoleID) (Effective, error) {
 	var out Effective
 	e := s.write(ctx, func(tx Tx) error {
-		if e := require(tx, p, UsersManage); e != nil {
+		if e := checkPermission(tx, p, UsersManage); e != nil {
 			return e
 		}
 		if _, e := tx.Account(target); e != nil {
@@ -87,16 +95,17 @@ func (s *Service) SetAccountRoles(ctx context.Context, p Subject, target string,
 		if e := tx.ReplaceAccountRoles(target, normalized); e != nil {
 			return e
 		}
-		out, e = effective(tx, target)
+		out, e = accountPermissions(tx, target)
 		return e
 	})
 	return out, e
 }
 
-// BeforeDisable 只通过identity事务策略调用，绑定仓储不另开事务。
+// BeforeDisable 供身份模块在停用账号前检查操作权限和最后管理员保护，本方法不执行停用。
+// 调用时必须使用身份模块正在执行的事务，不能另开事务，让检查与停用一起成功或失败。
 func (s *Service) BeforeDisable(ctx context.Context, p Subject, target string) error {
 	return s.write(ctx, func(tx Tx) error {
-		if e := require(tx, p, UsersManage); e != nil {
+		if e := checkPermission(tx, p, UsersManage); e != nil {
 			return e
 		}
 		return remainingChief(tx, target)
@@ -116,8 +125,8 @@ func (s *Service) bindChief(ctx context.Context, id string) error {
 	})
 }
 
-// BindInitialChief 仅供迁移或首次初始化钩子调用，不能由角色管理HTTP调用。
+// BindInitialChief 在数据库升级或首次初始化时，给固定的恢复账号补上主管理员角色；不能作为普通角色管理接口开放。
 func (s *Service) BindInitialChief(ctx context.Context, id string) error { return s.bindChief(ctx, id) }
 
-// RestoreChief 仅供离线恢复事务增补恢复锚点角色，保留其他关系。
+// RestoreChief 仅在离线恢复事务中使用，给固定的恢复账号补上主管理员角色，保留它已有的其他角色。
 func (s *Service) RestoreChief(ctx context.Context, id string) error { return s.bindChief(ctx, id) }

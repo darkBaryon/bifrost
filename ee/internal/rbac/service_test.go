@@ -1,4 +1,4 @@
-// 本文件从服务入口验证独立验收批次1A的角色与授权规则。
+// 本文件调用实际业务入口，测试角色管理、角色分配和权限检查。
 package rbac
 
 import (
@@ -170,5 +170,47 @@ func TestPaginationAndAuthorizationOrder(t *testing.T) {
 	}
 	if _, err := s.GetRole(ctx, Subject{AccountID: "member"}, 999); !errors.Is(err, ErrForbidden) {
 		t.Fatal("existence disclosed before authorization", err)
+	}
+}
+
+// Snapshot 和直接判权都必须反映最新角色，且不能把管理权限扩展成查看权限。
+func TestSnapshotReflectsRoleChanges(t *testing.T) {
+	s, _, admin := ruleFixture()
+	ctx := context.Background()
+	member := Subject{AccountID: "member"}
+	role, err := s.CreateRole(ctx, admin, RoleInput{Name: "Log manager", PermissionCodes: []Permission{LogsManage}})
+	mustRule(t, err)
+	_, err = s.SetAccountRoles(ctx, admin, member.AccountID, []RoleID{role.ID})
+	mustRule(t, err)
+
+	access, err := s.Snapshot(ctx, member)
+	mustRule(t, err)
+	if access.AccountID != member.AccountID || access.Chief || !slices.Equal(access.RoleIDs, []RoleID{role.ID}) ||
+		!slices.Equal(access.Permissions, []Permission{LogsManage}) {
+		t.Fatalf("wrong snapshot for custom role: %+v", access)
+	}
+	if !access.Allows(LogsManage) || access.Allows(LogsView) {
+		t.Fatal("snapshot expanded management permission")
+	}
+	mustRule(t, s.Authorize(ctx, member, LogsManage))
+
+	_, err = s.SetAccountRoles(ctx, admin, member.AccountID, []RoleID{ChiefRoleID})
+	mustRule(t, err)
+	access, err = s.Snapshot(ctx, member)
+	mustRule(t, err)
+	if !access.Chief || !slices.Equal(access.RoleIDs, []RoleID{ChiefRoleID}) || !access.Allows(UsersManage) {
+		t.Fatalf("chief assignment not reflected: %+v", access)
+	}
+	mustRule(t, s.Authorize(ctx, member, UsersManage))
+
+	_, err = s.SetAccountRoles(ctx, admin, member.AccountID, nil)
+	mustRule(t, err)
+	access, err = s.Snapshot(ctx, member)
+	mustRule(t, err)
+	if access.Chief || len(access.RoleIDs) != 0 || len(access.Permissions) != 0 {
+		t.Fatalf("snapshot retained revoked permissions: %+v", access)
+	}
+	if err := s.Authorize(ctx, member, UsersManage); !errors.Is(err, ErrForbidden) {
+		t.Fatal("authorization retained revoked permissions", err)
 	}
 }

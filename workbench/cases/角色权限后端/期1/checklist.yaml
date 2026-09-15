@@ -1,59 +1,59 @@
-# 重新拆分后的批次1A检查清单；不代表完整期1或旧整包预飞。
+# 批次1A收口清单；固定用户确认后的源码，不再要求等同抽取前的原文件。
 方案合同:
   版本: 5
   批次: 1A
-  已定稿: false
-  评审状态: 待评审（本次仅抽取独立代码候选）
+  已定稿: true
+  评审状态: 2026-09-16 用户逐文件阅读确认1A；不代表完整期1 Gate 2
 必过命令:
-  - name: isolated-scope-and-source
-    run: |
-      python3 - <<'CHECK'
-      import subprocess
-      from pathlib import Path
-      base = 'f371548b5444693d7e259033bec9f4a467e3748b'
-      source = 'b38493b07'
-      assert subprocess.check_output(['git', 'branch', '--show-current'], text=True).strip() == 'feat/user-permissions-phase1'
-      production = ['model.go', 'permissions.go', 'authorize.go', 'roles.go', 'assignments.go']
-      root = Path('ee/internal/rbac')
-      allowed = set(production + ['roles_test.go', 'fixture_test.go', 'service_test.go', 'README.md'])
-      assert {p.name for p in root.iterdir()} == allowed, '本批混入了额外文件或后续包'
-      total = 0
-      for name in production:
-          raw = subprocess.check_output(['git', 'show', source + ':ee/internal/rbac/' + name], text=True)
-          if name == 'authorize.go':
-              raw = raw[:raw.index('// ValidateNotificationAudience')].rstrip() + '\n'
-          actual = (root / name).read_text()
-          assert actual == raw, name + '与固定抽取源发生未说明差异'
-          total += len(actual.splitlines())
-      assert total == 829, total
-      changed = subprocess.check_output(['git', 'diff', '--name-only', '-z', base], text=True).split('\0')
-      new = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'], text=True).split('\0')
-      assert all(not p or p.startswith(('ee/internal/rbac/', 'workbench/')) for p in changed + new), '带入运行时或其他业务改动'
-      print('批次1A：5个业务文件829行，源版本一致，无运行时接入')
-      CHECK
-  - { name: whitespace, run: 'git diff --check' }
-  - { name: go-format, run: 'gofmt -l ee/internal/rbac', expect_empty: true }
-  - { name: ee-vet, run: 'cd ee && GOWORK=off go vet ./cmd/... ./internal/...' }
-  - { name: ee-tests-race, run: 'cd ee && GOWORK=off go test -race ./cmd/... ./internal/...' }
-  - { name: ee-build, run: 'cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1a ./cmd/bifrost-http' }
-  - { name: workbench, run: 'python3 workbench/tools/build_views.py --check' }
+- name: isolated-scope-and-approved-source
+  run: "python3 - <<'CHECK'\nimport hashlib, subprocess\nfrom pathlib import Path\nbase = 'f371548b5444693d7e259033bec9f4a467e3748b'\n\
+    root = Path('ee/internal/rbac')\napproved = {'permissions.go': '338526d748eb51fe2213afde0118740d1d1b411d7e0dba220830e30682df1bc8',\
+    \ 'roles.go': 'bc3200845066c804ebad1ea13b264bbf8691c6a40328e28e9932451267d0c676', 'authorize.go': 'b08d5e85712ee5bd05edc62d692d9fd7cac4568f9d036ccb24f8136bd3af2c7b',\
+    \ 'assignments.go': '8b86a3757690df8d595f31bdae00eee8736148fecb9f2dfd4cc03e6ab01a7749', 'repository.go': '69112c37ac434b95e7b50d02956954c0de3654a826939c909eaddc8df6de48c3',\
+    \ 'errors.go': '90d7cdfc1a1ef65138d816fb257ea5c397ecdf4d3446d804ef01c4ebae96d4b8'}\nallowed = set(approved)\
+    \ | {'roles_test.go', 'fixture_test.go', 'service_test.go', 'README.md'}\nassert {p.name for p in root.iterdir()}\
+    \ == allowed, '本批混入了额外文件或后续包'\nfor name, digest in approved.items():\n    assert hashlib.sha256((root / name).read_bytes()).hexdigest()\
+    \ == digest, name + '偏离用户确认的1A版本'\nchanged = subprocess.check_output(['git', 'diff', '--name-only', '-z', base],\
+    \ text=True).split('\\0')\nnew = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard',\
+    \ '-z'], text=True).split('\\0')\nassert all(not p or p.startswith(('ee/internal/rbac/', 'workbench/')) for\
+    \ p in changed + new), '带入运行时或其他业务改动'\nprint('批次1A：6个业务文件913行，已确认源码一致，无运行时接入')\nCHECK\n"
+- name: whitespace
+  run: git diff --check
+- name: go-format
+  run: gofmt -l ee/internal/rbac
+  expect_empty: true
+- name: ee-vet
+  run: cd ee && GOWORK=off go vet ./cmd/... ./internal/...
+- name: ee-tests-race
+  run: cd ee && GOWORK=off go test -race ./cmd/... ./internal/...
+- name: ee-build
+  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1a ./cmd/bifrost-http
+- name: workbench
+  run: python3 workbench/tools/build_views.py --check
 必存产物:
-  - ee/internal/rbac/README.md
-  - ee/internal/rbac/model.go
-  - ee/internal/rbac/permissions.go
-  - ee/internal/rbac/authorize.go
-  - ee/internal/rbac/roles.go
-  - ee/internal/rbac/assignments.go
-  - ee/internal/rbac/roles_test.go
-  - ee/internal/rbac/fixture_test.go
-  - ee/internal/rbac/service_test.go
-  - workbench/cases/角色权限后端/开发蓝图.md
-  - workbench/cases/角色权限后端/期1/方案v5.md
+- ee/internal/rbac/README.md
+- ee/internal/rbac/permissions.go
+- ee/internal/rbac/authorize.go
+- ee/internal/rbac/roles.go
+- ee/internal/rbac/assignments.go
+- ee/internal/rbac/roles_test.go
+- ee/internal/rbac/fixture_test.go
+- ee/internal/rbac/service_test.go
+- workbench/cases/角色权限后端/开发蓝图.md
+- workbench/cases/角色权限后端/期1/方案v5.md
+- ee/internal/rbac/repository.go
+- ee/internal/rbac/errors.go
+- workbench/evidence/角色权限后端-期1-批次1A阅读与验收.md
 必含符号:
-  - { grep: 'TestMultipleRolesSourcesAndRevocation', in: 'ee/internal/rbac' }
-  - { grep: 'TestChiefAssignmentAndRecoveryRules', in: 'ee/internal/rbac' }
+- grep: TestMultipleRolesSourcesAndRevocation
+  in: ee/internal/rbac
+- grep: TestChiefAssignmentAndRecoveryRules
+  in: ee/internal/rbac
+- grep: type Queries interface
+  in: ee/internal/rbac/repository.go
 收敛评审:
   风险等级: L3
   基线: f371548b5444693d7e259033bec9f4a467e3748b
-  开发指南: [ee/internal/rbac/README.md]
+  开发指南:
+  - ee/internal/rbac/README.md
 禁留标记: []

@@ -1,49 +1,7 @@
-// 本文件是固定权限目录及预置角色的唯一来源。
+// 本文件统一定义有哪些模块、每个模块有哪些权限，并提供权限查询。
 package rbac
 
-// Permission 是可持久化的固定权限编码。
-type Permission string
-
-const (
-	ModelProviderView      Permission = "ModelProvider.View"
-	ModelProviderManage    Permission = "ModelProvider.Manage"
-	ModelProviderRevealKey Permission = "ModelProvider.RevealKey"
-	VirtualKeysView        Permission = "VirtualKeys.View"
-	VirtualKeysManage      Permission = "VirtualKeys.Manage"
-	VirtualKeysRevealKey   Permission = "VirtualKeys.RevealKey"
-	GovernanceView         Permission = "Governance.View"
-	GovernanceManage       Permission = "Governance.Manage"
-	RoutingRulesView       Permission = "RoutingRules.View"
-	RoutingRulesManage     Permission = "RoutingRules.Manage"
-	LogsView               Permission = "Logs.View"
-	LogsManage             Permission = "Logs.Manage"
-	LogsRevealContent      Permission = "Logs.RevealContent"
-	LogsExport             Permission = "Logs.Export"
-	MCPGatewayView         Permission = "MCPGateway.View"
-	MCPGatewayManage       Permission = "MCPGateway.Manage"
-	PluginsView            Permission = "Plugins.View"
-	PluginsManage          Permission = "Plugins.Manage"
-	PluginsLoadNative      Permission = "Plugins.LoadNative"
-	PromptRepositoryView   Permission = "PromptRepository.View"
-	PromptRepositoryManage Permission = "PromptRepository.Manage"
-	SettingsView           Permission = "Settings.View"
-	SettingsManage         Permission = "Settings.Manage"
-	SettingsAuthConfig     Permission = "Settings.AuthConfig"
-	SettingsImportConfig   Permission = "Settings.ImportConfig"
-	NotificationsView      Permission = "Notifications.View"
-	NotificationsManage    Permission = "Notifications.Manage"
-	UsersView              Permission = "Users.View"
-	UsersManage            Permission = "Users.Manage"
-)
-
-// PermissionDefinition 描述权限显示名及该基线是否有合法操作入口。
-type PermissionDefinition struct {
-	Code      Permission
-	Name      string
-	Available bool
-}
-
-// ModuleCode 是权限目录的稳定产品分组编码。
+// ModuleCode 是模块的英文标识，例如 ModelProvider 表示“模型厂商”。
 type ModuleCode string
 
 const (
@@ -60,14 +18,24 @@ const (
 	ModuleUsers            ModuleCode = "Users"
 )
 
-// Module 是目录中的产品分组。
+// Module 表示一个功能模块，包含模块名称和它下面的权限项。
 type Module struct {
 	Code        ModuleCode
 	Name        string
 	Permissions []PermissionDefinition
 }
 
-// Catalogue 返回独立目录副本，调用方不能修改程序定义。
+// Permission 是具体操作的权限标识，例如 ModelProvider.View 表示“查看模型厂商”。
+type Permission string
+
+// PermissionDefinition 描述一个权限叫什么，以及是否有对应的操作入口。
+type PermissionDefinition struct {
+	Code      Permission
+	Name      string
+	Available bool // 是否有对应的操作入口；不表示当前账号有权限，也不表示接口已接入权限检查。
+}
+
+// Catalogue 列出所有模块及其权限项。每次返回新的一份，修改返回值不会影响后续调用。
 func Catalogue() []Module {
 	return []Module{
 		{Code: ModuleModelProvider, Name: "模型厂商", Permissions: []PermissionDefinition{
@@ -124,7 +92,62 @@ func Catalogue() []Module {
 	}
 }
 
-// Permissions 按固定目录次序列出全部权限，包括已预留但未开放的权限。
+// 下面按模块列出权限标识和用途；哪些接口使用这些权限，由各模块接入时决定。
+// 查看、管理和敏感操作分别授权；有管理权限，不代表能查看或执行敏感操作。
+const (
+	// 模型与厂商：网关连接的模型服务商、模型及厂商密钥。
+	ModelProviderView      Permission = "ModelProvider.View"      // 查看厂商、模型和密钥列表，不含完整密钥。
+	ModelProviderManage    Permission = "ModelProvider.Manage"    // 新增、修改和删除厂商、模型及密钥配置。
+	ModelProviderRevealKey Permission = "ModelProvider.RevealKey" // 预留敏感权限：查看厂商密钥完整值，当前无开放入口。
+
+	// 虚拟密钥：调用方访问网关时使用的凭据，与厂商密钥不同。
+	VirtualKeysView      Permission = "VirtualKeys.View"      // 查看虚拟密钥列表与详情，不含完整密钥。
+	VirtualKeysManage    Permission = "VirtualKeys.Manage"    // 新增、修改、删除和轮换虚拟密钥。
+	VirtualKeysRevealKey Permission = "VirtualKeys.RevealKey" // 敏感权限：查看虚拟密钥完整值。
+
+	// 治理：团队、客户、预算和请求限流的管理。
+	GovernanceView   Permission = "Governance.View"   // 查看团队、客户、预算和限流配置。
+	GovernanceManage Permission = "Governance.Manage" // 新增、修改和删除上述治理配置。
+
+	// 路由规则：决定请求交给哪个厂商或模型处理。
+	RoutingRulesView   Permission = "RoutingRules.View"   // 查看请求路由规则。
+	RoutingRulesManage Permission = "RoutingRules.Manage" // 新增、修改和删除请求路由规则。
+
+	// 日志与费用：模型调用记录、统计和费用报表。
+	LogsView          Permission = "Logs.View"          // 查看日志列表、统计和报表，不含请求与响应正文。
+	LogsManage        Permission = "Logs.Manage"        // 清理日志、重算费用等管理操作。
+	LogsRevealContent Permission = "Logs.RevealContent" // 敏感权限：查看请求与响应正文。
+	LogsExport        Permission = "Logs.Export"        // 敏感权限：导出日志数据；正文访问仍受正文权限限制。
+
+	// MCP网关：通过MCP协议连接供模型使用的外部工具服务。
+	MCPGatewayView   Permission = "MCPGateway.View"   // 查看工具服务及工具列表。
+	MCPGatewayManage Permission = "MCPGateway.Manage" // 管理工具服务、连接和授权配置。
+
+	// 插件：扩展网关处理能力；原生插件可以在网关服务器上执行代码。
+	PluginsView       Permission = "Plugins.View"       // 查看插件列表与配置。
+	PluginsManage     Permission = "Plugins.Manage"     // 新增、修改和删除插件配置。
+	PluginsLoadNative Permission = "Plugins.LoadNative" // 敏感权限：加载在服务器上执行代码的原生插件。
+
+	// 提示词库：集中维护供模型调用使用的提示词与技能。
+	PromptRepositoryView   Permission = "PromptRepository.View"   // 查看提示词与技能。
+	PromptRepositoryManage Permission = "PromptRepository.Manage" // 新增、修改和删除提示词与技能。
+
+	// 系统设置：网关常规配置，以及单独授权的认证配置和配置导入。
+	SettingsView         Permission = "Settings.View"         // 查看允许展示的系统配置。
+	SettingsManage       Permission = "Settings.Manage"       // 修改常规配置、代理、功能开关和缓存设置。
+	SettingsAuthConfig   Permission = "Settings.AuthConfig"   // 预留敏感权限：修改登录认证设置，当前无开放入口。
+	SettingsImportConfig Permission = "Settings.ImportConfig" // 预留敏感权限：导入整份配置，当前无开放入口。
+
+	// 通知与Webhook：控制台消息，以及向其他系统发送事件数据的通知机制。
+	NotificationsView   Permission = "Notifications.View"   // 查看通知及Webhook配置。
+	NotificationsManage Permission = "Notifications.Manage" // 管理通知及Webhook配置、执行相关管理操作。
+
+	// 账号与角色：控制台使用者，以及授予他们的操作权限。
+	UsersView   Permission = "Users.View"   // 查看账号、角色和角色分配。
+	UsersManage Permission = "Users.Manage" // 管理账号、增删改角色、分配角色，仍要遵守管理员保护规则。
+)
+
+// Permissions 按目录顺序列出所有权限标识，包括已定义但还没有开放入口的权限。
 func Permissions() []Permission {
 	out := []Permission{}
 	for _, m := range Catalogue() {
@@ -135,7 +158,7 @@ func Permissions() []Permission {
 	return out
 }
 
-// KnownPermission 判断是否属于本版目录；未知码不允许写入角色。
+// KnownPermission 检查权限标识是否在目录里；目录里没有的权限，不能配置给角色。
 func KnownPermission(p Permission) bool {
 	for _, v := range Permissions() {
 		if p == v {
@@ -143,33 +166,4 @@ func KnownPermission(p Permission) bool {
 		}
 	}
 	return false
-}
-
-// PresetRoles 返回首次迁移用的存储形态（chief 不含逐项权限），重启不覆盖已编辑角色。
-func PresetRoles() []Role {
-	chief := Role{ID: ChiefRoleID, Name: "主管理员", SystemCode: SystemChief, PermissionCodes: []Permission{}}
-	dev := Role{ID: DeveloperRoleID, Name: "开发者", SystemCode: SystemDeveloper, PermissionCodes: []Permission{ModelProviderView, ModelProviderManage, VirtualKeysView, VirtualKeysManage, GovernanceView, GovernanceManage, RoutingRulesView, RoutingRulesManage, LogsView, LogsManage, MCPGatewayView, MCPGatewayManage, PluginsView, PluginsManage, PromptRepositoryView, PromptRepositoryManage, SettingsView, SettingsManage, NotificationsView, NotificationsManage}}
-	read := Role{ID: ReadonlyRoleID, Name: "只读", SystemCode: SystemReadonly, PermissionCodes: []Permission{ModelProviderView, VirtualKeysView, GovernanceView, RoutingRulesView, LogsView, MCPGatewayView, PluginsView, PromptRepositoryView, SettingsView, NotificationsView, UsersView}}
-	return []Role{chief, dev, read}
-}
-
-// rolePermissions 在读取时展开chief全权；写入时由storedPermissions保持无逐项关系。
-func rolePermissions(role Role) []Permission {
-	if role.SystemCode == SystemChief {
-		return Permissions()
-	}
-	return append([]Permission{}, role.PermissionCodes...)
-}
-
-func presentedRole(role Role) Role {
-	role.PermissionCodes = rolePermissions(role)
-	return role
-}
-
-// storedPermissions 遵循首版存储合同：chief 不存逐项关系，读时动态展开目录。
-func storedPermissions(role Role, codes []Permission) []Permission {
-	if role.SystemCode == SystemChief {
-		return []Permission{}
-	}
-	return append([]Permission{}, codes...)
 }
