@@ -9,7 +9,7 @@ VERSION ?= v2.0.0-ee.0
 UI_DIST ?= $(ROOT)/ui/out
 UI_EMBED := cmd/bifrost-http/ui
 
-.PHONY: help workspace ui-sync build-ui build dev smoke smoke-identity test
+.PHONY: help workspace ui-sync build-ui build dev smoke smoke-identity smoke-pricing test
 
 help: ## 列出目标
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-12s %s\n", $$1, $$2}'
@@ -39,9 +39,14 @@ test: workspace ## go vet + go test
 dev: workspace ui-sync ## 从源码起 ee 版 API (无热重载); UI 开发服务器另起: cd ui && npm run dev (3000 → 8080)
 	@go run ./cmd/bifrost-http -port $(PORT) -app-dir $(APP_DIR) -log-style pretty
 
-smoke: build ## 临时数据库与随机端口，验证品牌、鉴权与重启保留，再跑 SQLite 身份冒烟
+smoke: build ## 临时数据库与随机端口，依次执行国内定价、品牌鉴权与重启保留、SQLite 身份冒烟
+	@python3 scripts/pricing-smoke.py --binary tmp/bifrost-http
 	@python3 scripts/branding-smoke.py --binary tmp/bifrost-http
 	@python3 scripts/identity-smoke.py --binary tmp/bifrost-http --database sqlite
 
 smoke-identity: build ## 双节点 PostgreSQL 身份冒烟，需要 IDENTITY_TEST_POSTGRES_DSN
 	@python3 scripts/identity-smoke.py --binary tmp/bifrost-http --database postgres
+
+smoke-pricing: build ## 先跑国内定价失败现场回归，再做隔离 SQLite 同步、重启幂等与汇率冒烟
+	@python3 scripts/pricing-smoke-test.py
+	@python3 scripts/pricing-smoke.py --binary tmp/bifrost-http

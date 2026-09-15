@@ -197,3 +197,21 @@ triggered_by: [身份模块整理]
 evidence: "ee/internal/identity/persistence/store.go 的到期清理 sweepExpired 自取 time.Now().UTC()，而同文件 ReserveLogin 与 Tx 的 RevokeSession/ConsumeTicket 均由业务层传 at；identity 侧只有 core.go now() 一个时钟。改 Tx.InsertSession/InsertTicket 签名超出方案 §6 白名单，本期不做；R5 已把时钟读取收敛到一处；来源:收敛评审1 取舍项 S1"
 convert_when: "下次需要可注入时钟（测试或时钟漂移排查），或 Tx 因其他原因要改签名时一并收口"
 ```
+
+## 国内定价（2026-09-13，用户通读代码）
+
+```yaml
+id: FIND-022
+status: 观察中
+triggered_by: [国内定价]
+evidence: "五轮收敛评审（claude-opus-5/high，轮次 1–5）均未发现 ee/internal/pricing/README.md 违反编码规范第 43 节「先讲负责什么、解决什么问题」——原文通篇只有文件表，没有一句交代包为何存在；评审第 2 轮反而肯定了该 README 的其他方面。同轮次对 Service.Sync 87 行的控制流判为「读得顺、无问题」，用户读后认为难读。两处均由用户在 Gate 2 前自行发现（3a00bf7f6 已修）。来源:用户直接指出"
+convert_when: "下一个 Change 的收敛评审启动前，评估是否在提示词模板中加入「逐条对照编码规范明文要求」的机械检查项；若再次出现规范明文违规被评审放过，升级为流程 Change"
+```
+
+```yaml
+id: FIND-023
+status: 观察中
+triggered_by: [国内定价]
+evidence: "上游覆盖匹配区分大小写：datasheet 基准查询用 makeKey(model,provider,mode) 拼接字典键（framework/modelcatalog/datasheet/types.go:380），覆盖精确匹配用 c.exact[model] 直接查（overrides.go:226），两条路径都不做大小写归一。本地定价表里同一模型两种写法并存（wafer/GLM-5.1 大写、zai/glm-4.5 小写，全表 glm 行 27 条小写 4 条含大写）。2026-09-15 实测智谱官方 /models 返回 10 个模型全为小写，与价格文件 8 条同名项大小写完全一致，本期未踩到；但若将来某厂商官方端点使用大写模型名，覆盖会静默失效、费用回落为零且无任何报错。来源:用户提问后核实"
+convert_when: "新增厂商或收到费用为零的反馈时，先核对官方模型名大小写；若需根治，向上游提 issue 让覆盖匹配忽略大小写（改上游代码，不在本 fork 原则内）"
+```

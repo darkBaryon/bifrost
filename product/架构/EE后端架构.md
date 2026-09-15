@@ -41,6 +41,7 @@ ee/
 │   ├── identity/          账号、凭据、会话
 │   ├── rbac/              角色、权限目录、账号角色关系
 │   ├── branding/          品牌设置
+│   ├── pricing/           国内官网价格与启动期定价覆盖同步
 │   ├── audit/             管理审计
 │   ├── guardrails/        内容护栏
 │   └── host/              宿主与上游能力集成
@@ -50,7 +51,7 @@ ee/
 └── Makefile
 ```
 
-现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`及`internal/host/`；完整角色权限等模块后续按需建立。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
+现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`、`internal/pricing/`及`internal/host/`；完整角色权限等模块后续按需建立。`pricing` 只在启动期运行一次，没有 HTTP、插件或 Worker 入口，是「按调用来源决定入口」的一个实例：它写上游既有的定价覆盖表并更新内存目录，不新建表、不改上游代码。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
 
 ## 4. 模块内部的职责
 

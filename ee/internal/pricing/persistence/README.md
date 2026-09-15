@@ -1,0 +1,11 @@
+# 国内定价存储适配
+
+把 pricing 定义的覆盖 CRUD、厂商列表和目录增量接口适配到 ConfigStore 与 ModelCatalog。只复用上游完整操作，不接触 HTTP Server、不建新表，连接生命周期属于宿主。
+
+| 文件 | 职责 |
+|---|---|
+| `store.go` | 双向行转换、上游错误哨兵映射、nil 网络配置处理、表与目录接口 |
+| `cost_test.go` | 空基础价目表下，仅靠生成覆盖计算费用的闭环 |
+| `store_test.go` | 错误映射、完整行往返、nil 网络配置与目录增删 |
+
+`NewOverrides(config)`、`NewCatalog(catalog)`、`NewProviders(config)` 分别构造覆盖 CRUD、目录和厂商读取适配器，由 app 独立注入；表与目录的更新顺序由 `pricing.Service` 协调。适配器将 `ErrAlreadyExists` / `ErrNotFound` 转为根包的 `ErrRowExists` / `ErrRowMissing`，其余错误保留原因交业务服务与 app 分流。目录只增量 Upsert / Delete，不全量替换管理员覆盖。费用测试使用空基础价目表，验证仅靠覆盖也能计算三类请求、流式与缓存费用。

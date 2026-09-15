@@ -14,6 +14,7 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [internal/app/](internal/app/README.md) | 配置、依赖装配与启动接入 |
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
 | [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http/、persistence/、hasher/ 分别适配入口、存储和 bcrypt |
+| [internal/pricing/](internal/pricing/README.md) | 国内厂商识别、价格换算与启动同步；persistence/ 适配上游定价覆盖和模型目录 |
 | [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、会话路由、WebSocket 重验、配置投影 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |
@@ -31,13 +32,16 @@ make -C ee help
 make -C ee dev     # EE API，默认 8080；前端开发服务器另行启动
 make -C ee build   # 构建并嵌入 UI，输出 ee/tmp/bifrost-http
 make -C ee test    # EE 模块的 go vet + go test
-make -C ee smoke            # 构建并执行隔离冒烟：品牌 + SQLite 身份
+make -C ee smoke            # 构建并执行隔离冒烟：国内定价 + 品牌 + SQLite 身份
+make -C ee smoke-pricing    # 国内定价失败现场回归与 HTTP 冒烟
 make -C ee smoke-identity   # 双节点 PostgreSQL 身份冒烟，需要 IDENTITY_TEST_POSTGRES_DSN
 ```
 
 首次前端构建先在根 `ui/` 执行 `npm ci`。workspace 目标将 EE 加入根 go.work（缺失时初始化），dev/build 同步前端覆盖层。构建产物位于 `cmd/bifrost-http/ui/`，不入库。
 
 冒烟使用临时配置、随机端口和自有进程：品牌冒烟验证宿主接入、品牌操作与重启保留，身份冒烟验证初始化竞争、账号与密码流程、跨节点撤销、WS 与离线恢复；两者共用 `scripts/identity-smoke.py` 里的进程夹具。骨架探针接口、空插件、表注册和页面/响应标记已移除；已有数据库中的旧测试表不再使用。
+
+定价冒烟 `scripts/pricing-smoke.py` 验证覆盖同步、等价域名重启保留、汇率换算和非法文件降级；`smoke-pricing` 先运行失败现场回归脚本 `scripts/pricing-smoke-test.py`，验证进程回收、失败证据保留及金额断言诊断，再执行 HTTP 冒烟。
 
 ## 账号认证
 

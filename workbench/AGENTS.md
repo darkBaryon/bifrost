@@ -53,6 +53,7 @@ SCHEMA.md                     # frontmatter 字段、状态机、风险分级定
 - 实施完成的信号：方案尾部补**实施记录三章节**（实施记录 / 实施偏差记录 / 蓝图验证备忘；无偏差也写「无」）→ `status: 已实施`，这是触发评审的信号。
 - 预飞自检：`python3 tools/preflight.py --config cases/<案子>/期<N>/checklist.yaml`，**全绿才请评审，不绿先修**。
 - **每个 Change 必经收敛评审**（与代码评审并行、均须与实施上下文隔离；出口三态落 frontmatter `verdict`，立债/挂账同步登记 `findings.md`；有Blocking 阻塞 Gate 2）。（此条 2026-09-02 补：UI完整中文化期1 因锚点缺失漏做，补做后修订）
+- 代码评审由实施方运行 `python3 tools/code_review.py start --config cases/<案子>/期<N>/checklist.yaml --round <R>` 启动（Codex 新会话，`gpt-6-astra` / high；差量轮加 `--since <上一轮候选>`，脚本自动把最新收敛评审的「转代码评审」栏交给评审者），用 `status` / `wait` 后台监控；记录由脚本落盘为 `代码评审<R>.md`。（2026-09-13 补：此前由用户手工开 Codex 会话粘贴模板）
 - 收敛评审由实施方运行 `python3 tools/convergence_review.py start --config cases/<案子>/期<N>/checklist.yaml --round <R>` 启动（Claude Code 新会话，`claude-opus-5` / high；差量轮加 `--since <上一轮候选>`），用 `status` / `wait` 后台监控；不手写提示词、不限定范围、不改写落盘的记录。执行者分工见 [规范/流程.md](规范/流程.md#职责)。
 - Gate 2 通过：落 `验收记录.md`，方案 → `已归档`，需求 → `已交付`。
 
@@ -64,6 +65,8 @@ python3 tools/build_views.py --check    # 仅校验（钩子/CI 用，含视图�
 python3 tools/build_site.py             # 生成 site/ 静态站点（build_views 只更新 md；看站点效果前必跑本命令）
 python3 tools/serve_site.py --port 8767 # 本地起站点
 python3 tools/preflight.py --config <checklist.yaml> [--repo <项目根>] [--out facts.md]
+python3 tools/code_review.py start --config <checklist.yaml> --round <R> [--since <commit>] [--dry-run]   # Codex 代码评审
+python3 tools/code_review.py status|wait --config <checklist.yaml> --round <R>
 python3 tools/convergence_review.py start --config <checklist.yaml> --round <R> [--since <commit>] [--dry-run]
 python3 tools/convergence_review.py status|wait --config <checklist.yaml> --round <R>
 PYTHONPATH=. python3 -m pytest workbench/tests -q   # 工具自测（在仓库根）
