@@ -1,3 +1,4 @@
+// 本文件检查业务错误对应的HTTP状态，以及返回内容是否隐藏了内部错误原文。
 package rbachttp
 
 import (
@@ -10,7 +11,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// 自有接口与宿主策略必须对同一业务错误给出一致状态，未知错误不能泄漏原文。
+// 同一种业务错误必须返回同一个HTTP状态；不认识的错误统一隐藏原文。
 func TestBusinessErrorResponse(t *testing.T) {
 	cases := []struct {
 		err    error

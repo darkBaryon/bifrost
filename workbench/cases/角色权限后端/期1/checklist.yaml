@@ -3,16 +3,16 @@
   版本: 7
   批次: 1C
   已定稿: true
-  评审状态: 已准备候选，待用户逐项阅读；非完整期1验收
+  评审状态: 2026-09-16用户认可1C整体框架并跳过细节阅读；非完整期1验收
 必过命令:
 - name: batch-1c-scope
   run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase = '99d03e6b2'\n\
     root = Path('ee/internal/rbac')\nfor name in subprocess.check_output(['git', 'ls-tree',\
     \ '-r', '--name-only', base, 'ee/internal/rbac', 'ee/internal/identity'], text=True).splitlines():\n\
     \    if name.endswith('.go'):\n        assert Path(name).read_bytes() == subprocess.check_output(['git',\
-    \ 'show', base + ':' + name]), '覆盖已确认代码：' + name\nhttp = {'handler.go', 'roles.go',\
-    \ 'dto.go', 'protocol.go', 'errors.go', 'protocol_test.go', 'errors_test.go'}\n\
-    assert {p.name for p in (root / 'http').iterdir()} == http\nallowed = {'ee/internal/rbac/http/'\
+    \ 'show', base + ':' + name]), '覆盖已确认代码：' + name\nhttp = {'handler.go', 'api.go',\
+    \ 'protocol.go', 'matrix.go', 'protocol_test.go', 'errors_test.go'}\nassert {p.name\
+    \ for p in (root / 'http').iterdir()} == http\nallowed = {'ee/internal/rbac/http/'\
     \ + n for n in http}\nallowed.update('ee/internal/app/' + n for n in ['bootstrap.go',\
     \ 'identity.go', 'rbac.go', 'recovery.go', 'README.md'])\nallowed.update('ee/internal/host/'\
     \ + n for n in ['auth.go', 'config.go', 'rbac_test.go', 'README.md'])\nallowed.update(['ee/README.md',\

@@ -26,11 +26,10 @@
 | [persistence/roles.go](persistence/roles.go) | 角色及分配关系的数据库读写 |
 | [persistence/migration.go](persistence/migration.go) | 建表、预置角色及首次绑定，重复执行不覆盖用户修改 |
 | [identity/policy.go](identity/policy.go) | 把账号动作对应到权限检查，将初始化和恢复绑定加入身份事务 |
-| [http/handler.go](http/handler.go) | 九个POST接口注册，以及Cookie认证、同源检查和统一响应 |
-| [http/roles.go](http/roles.go) | 把请求转换成业务调用，再整理返回结果 |
-| [http/protocol.go](http/protocol.go) | 校验JSON字段、角色编号和账号编号 |
-| [http/dto.go](http/dto.go) | 对外角色、权限来源及前端权限矩阵的字段转换 |
-| [http/errors.go](http/errors.go) | 将业务错误转换成HTTP状态和安全错误正文 |
+| [http/handler.go](http/handler.go) | 九个接口的路由注册、请求方法检查，以及共同的来源检查、Cookie认证和响应输出 |
+| [http/api.go](http/api.go) | 九个接口按角色管理、账号角色分配和权限查询分组，各组输入和返回字段就近放置 |
+| [http/protocol.go](http/protocol.go) | 公共JSON校验、编号解析，以及HTTP错误状态和响应内容 |
+| [http/matrix.go](http/matrix.go) | 将权限转换为前端使用的功能开关 |
 | [roles_test.go](roles_test.go) | 权限目录与分页游标的规则测试 |
 | [service_test.go](service_test.go) | 从业务入口验证角色操作、分配、撤权和保护规则 |
 | [fixture_test.go](fixture_test.go) | 为规则测试提供内存数据，不模拟真实会话或数据库事务 |

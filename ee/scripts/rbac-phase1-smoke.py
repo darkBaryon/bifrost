@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""复用认证冒烟的传输辅助，在隔离存储上验证批次1C真实角色HTTP闭环与升级恢复。"""
+"""启动临时Bifrost实例和测试数据库，通过真实HTTP请求验证角色管理、权限撤回和升级恢复。"""
 import argparse
 import contextlib
 import json
@@ -18,7 +18,7 @@ Node, psql = auth['Node'], auth['psql']
 
 
 def chief_has_no_permission_rows(node):
-    # chief 权限只在读取时展开；新迁移、更新及升级回退均不得写入派生关系。
+    # 主管理员的全部权限在查询时补齐；初始化、修改和升级回退都不能把这些权限逐项存进表。
     query = 'SELECT COUNT(*) FROM ee_rbac_role_permissions WHERE role_id=1'
     store = node.config['config_store']
     if store['type'] == 'sqlite':
@@ -79,7 +79,7 @@ def exercise(nodes):
     projected, _ = a.expect(200, '/api/config', method='GET', token=admin)
     assert projected['auth_config']['admin_username']['value'] == 'admin'
     assert projected['auth_config']['admin_password']['value'] == '<redacted>'
-    # 两个节点共享数据库：撤分配后下一次请求必须重新判权。
+    # 两个节点共享数据库：移除角色分配后，下一次请求必须重新检查权限。
     a.expect(200, '/api/accounts/set-roles', {'account_id': member_id, 'role_ids': []}, token=admin)
     b.expect(403, '/api/roles/create', {'name': 'revoked', 'permission_codes': []}, token=member)
     a.expect(200, '/api/roles/delete', {'role_id': role_id}, token=admin)
@@ -133,7 +133,7 @@ def upgrade(nodes, baseline, candidate):
     b.expect(401, '/api/permissions/me', {}, token=old_admin)
     role, _ = b.expect(200, '/api/roles/get', {'role_id': 2}, token=successor)
     assert role['role']['permission_codes'] == ['Users.View'], 'restart reseeded role'
-    # 切换授权语义并运行旧恢复命令前，先停止所有节点。
+    # 准备回退旧版本并运行它的恢复命令，先停止所有共享这个数据库的实例。
     for node in nodes:
         node.stop()
     recover(a, baseline, 'Rollback-password-1')
@@ -144,7 +144,7 @@ def upgrade(nodes, baseline, candidate):
     b.expect(403, '/api/accounts/list', {}, token=successor)
     switch(nodes, candidate)
     chief_has_no_permission_rows(a)
-    # 迁移只执行一次；重启新版不会给旧恢复锚点补上 chief。
+    # 首次角色初始化只执行一次；重新启动新版，不会自动给原管理员补回已被移除的主管理员角色。
     now, _ = a.expect(200, '/api/permissions/me', {}, token=rollback_admin)
     assert all(r['system_code'] != 'chief' for r in now['roles'])
     for node in nodes:
