@@ -215,3 +215,21 @@ triggered_by: [国内定价]
 evidence: "上游覆盖匹配区分大小写：datasheet 基准查询用 makeKey(model,provider,mode) 拼接字典键（framework/modelcatalog/datasheet/types.go:380），覆盖精确匹配用 c.exact[model] 直接查（overrides.go:226），两条路径都不做大小写归一。本地定价表里同一模型两种写法并存（wafer/GLM-5.1 大写、zai/glm-4.5 小写，全表 glm 行 27 条小写 4 条含大写）。2026-09-15 实测智谱官方 /models 返回 10 个模型全为小写，与价格文件 8 条同名项大小写完全一致，本期未踩到；但若将来某厂商官方端点使用大写模型名，覆盖会静默失效、费用回落为零且无任何报错。来源:用户提问后核实"
 convert_when: "新增厂商或收到费用为零的反馈时，先核对官方模型名大小写；若需根治，向上游提 issue 让覆盖匹配忽略大小写（改上游代码，不在本 fork 原则内）"
 ```
+
+## EE 架构（2026-09-15，用户读代码后提出）
+
+```yaml
+id: FIND-024
+status: 观察中
+triggered_by: [国内定价, 角色权限后端]
+evidence: "ee/internal/host/ 是按技术分类切的目录，放在 feature-first 的 ee/internal/ 下不一致；其中 auth.go 与 config.go 全部是身份模块的宿主接入（会话中间件、旧 session 路由接管、WebSocket 重验、旧管理员导入、/api/config 认证字段投影），引用方只有 app/bootstrap.go 与 app/identity.go。RBAC 新增的宿主适配已按用户决定放在 rbac/host/，实践上已否定「统一放 internal/host」。正确位置是 ee/internal/identity/host/，届时架构 §7 第一条应改为「宿主适配归所属模块的 host 子包」，internal/host 不再存在。来源:用户提出"
+convert_when: "角色权限后端合入 develop 之后立重构 Change：搬两个文件、改包名、改两处引用，按重构类流程给基线行为盘点与公共符号白名单；不在权限线推进期间做，避免它每批重对基线"
+```
+
+```yaml
+id: FIND-025
+status: 观察中
+triggered_by: [角色权限后端]
+evidence: "RBAC 为接入判权，在 ee/internal/host/auth.go 上开了三个可选接缝：WithConsoleAccess（认证后交由权限组件判权）、WithAdditionalRoutes（其他自管模块的路由归属）、WithRecoveryAnchor（恢复锚点查询），均为纯增量且遵守架构 §7「只声明窄接口、由 app 注入」。期1 设计时 RBAC 不存在，未预留扩展点是合理的 YAGNI，不算缺陷。问题在于这种「一个合作者一个构造选项」的开法不可扩展：审计模块要的是「每次管理操作后记一笔」，形状与三者都不同，接入时认证包要加第四个选项并重跑鉴权边界测试。来源:用户提问「是不是应该修改认证模块本身」"
+convert_when: "第三个模块需要在认证链上开缝时，先重构认证的扩展模型（认证只负责识别身份，授权/审计/限制各自注册进一条定义好的处理管线，认证包不再知道具体合作者名字），不要加第四个构造选项；届时手上有三个真实用例可供设计"
+```
