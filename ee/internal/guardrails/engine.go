@@ -61,10 +61,11 @@ func (e *Engine) HasRules(stage Stage) bool {
 func (e *Engine) MaxTextBytes() int { return e.maxTextBytes }
 
 // Check 检查完整文本。取消、非法输入及超限返回 error；检测器失败则由规则决定，记录为 Failed。
+// 返回 error 时 Action 恒为 Block，Events 保留出错前已完成规则的事件，调用方仍可记录。
 // 超时依赖检测器协作取消；即使检测器迟返回成功，超过期限的结果也按失败处理。
 func (e *Engine) Check(ctx context.Context, stage Stage, text string) (Result, error) {
 	result := Result{Action: Block}
-	if e == nil || e.maxTextBytes <= 0 || ctx == nil || !validStage(stage) || !utf8.ValidString(text) {
+	if e == nil || e.maxTextBytes <= 0 || ctx == nil || !validStage(stage) {
 		return result, ErrInvalidInput
 	}
 	if err := ctx.Err(); err != nil {
@@ -72,6 +73,9 @@ func (e *Engine) Check(ctx context.Context, stage Stage, text string) (Result, e
 	}
 	if len(text) > e.maxTextBytes {
 		return result, ErrTextTooLarge
+	}
+	if !utf8.ValidString(text) {
+		return result, ErrInvalidInput
 	}
 	result.Action = Allow
 	for _, rule := range e.rules {

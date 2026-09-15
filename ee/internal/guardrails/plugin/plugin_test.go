@@ -190,7 +190,10 @@ func TestUpstreamErrorAndCancellation(t *testing.T) {
 }
 
 func TestPluginConstruction(t *testing.T) {
-	e, _ := guardrails.New(nil, nil, 100)
+	e, err := guardrails.New(nil, nil, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
 	log := &testLogger{}
 	for _, options := range []safety.Options{{}, {StatusCode: 200, DenyMessage: "denied"}, {StatusCode: 600, DenyMessage: "denied"}, {StatusCode: 400}} {
 		if _, err := safety.New(e, options, log); err == nil {
@@ -203,10 +206,6 @@ func TestPluginConstruction(t *testing.T) {
 	}
 	if _, err := safety.New(e, options, nil); err == nil {
 		t.Fatal("nil logger accepted")
-	}
-	var missingLogger *testLogger
-	if _, err := safety.New(e, options, missingLogger); err == nil {
-		t.Fatal("typed nil logger accepted")
 	}
 	p, _ := newPlugin(t, nil, nil)
 	if p.GetName() != "ee-content-safety" || p.Cleanup() != nil || p.PreRequestHook(nil, nil) != nil {

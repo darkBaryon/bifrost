@@ -49,6 +49,9 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 		{"tool definitions", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
 			r.ChatRequest.Params = &schemas.ChatParameters{Tools: []schemas.ChatTool{{}}}
 		}},
+		{"message name", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
+			r.ChatRequest.Input[0].Name = schemas.Ptr("unsafe")
+		}},
 		{"reasoning", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
 			r.ChatRequest.Input[0].ChatAssistantMessage = &schemas.ChatAssistantMessage{Reasoning: schemas.Ptr("unsafe")}
 		}},
@@ -84,29 +87,46 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 
 func TestUnsupportedOutputCarriers(t *testing.T) {
 	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
-	for _, mutate := range []func(*schemas.BifrostResponse){
-		func(r *schemas.BifrostResponse) {
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*schemas.BifrostResponse)
+	}{
+		{"refusal", func(r *schemas.BifrostResponse) {
 			r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{Refusal: schemas.Ptr("unsafe")}
-		},
-		func(r *schemas.BifrostResponse) {
+		}},
+		{"extra params", func(r *schemas.BifrostResponse) {
 			r.ChatResponse.ExtraParams = map[string]any{"extra_content": "unsafe"}
-		},
-		func(r *schemas.BifrostResponse) { r.ChatResponse.Citations = []string{"unsafe"} },
-		func(r *schemas.BifrostResponse) { r.ChatResponse.ExtraFields.RawResponse = "unsafe raw response" },
-		func(r *schemas.BifrostResponse) { r.ChatResponse.ExtraFields.RawRequest = "unsafe raw request" },
-		func(r *schemas.BifrostResponse) {
+		}},
+		{"citations", func(r *schemas.BifrostResponse) { r.ChatResponse.Citations = []string{"unsafe"} }},
+		{"raw response", func(r *schemas.BifrostResponse) { r.ChatResponse.ExtraFields.RawResponse = "unsafe raw response" }},
+		{"raw request", func(r *schemas.BifrostResponse) { r.ChatResponse.ExtraFields.RawRequest = "unsafe raw request" }},
+		{"stream choice", func(r *schemas.BifrostResponse) {
 			r.ChatResponse.Choices[0].ChatStreamResponseChoice = &schemas.ChatStreamResponseChoice{}
-		},
-		func(r *schemas.BifrostResponse) { r.ChatResponse.Choices = nil },
-		func(r *schemas.BifrostResponse) { r.ChatResponse.Choices[0].Message = nil },
+		}},
+		{"no choices", func(r *schemas.BifrostResponse) { r.ChatResponse.Choices = nil }},
+		{"no message", func(r *schemas.BifrostResponse) { r.ChatResponse.Choices[0].Message = nil }},
+		{"message name", func(r *schemas.BifrostResponse) { r.ChatResponse.Choices[0].Message.Name = schemas.Ptr("unsafe") }},
+		{"stop text", func(r *schemas.BifrostResponse) { r.ChatResponse.Choices[0].StopString = schemas.Ptr("unsafe") }},
+		{"content logprobs", func(r *schemas.BifrostResponse) {
+			r.ChatResponse.Choices[0].LogProbs = &schemas.BifrostLogProbs{Content: []schemas.ContentLogProb{{Token: "unsafe"}}}
+		}},
+		{"candidate logprobs", func(r *schemas.BifrostResponse) {
+			r.ChatResponse.Choices[0].LogProbs = &schemas.BifrostLogProbs{Content: []schemas.ContentLogProb{{Token: "safe", TopLogProbs: []schemas.LogProb{{Token: "unsafe"}}}}}
+		}},
+		{"refusal logprobs", func(r *schemas.BifrostResponse) {
+			r.ChatResponse.Choices[0].LogProbs = &schemas.BifrostLogProbs{Refusal: []schemas.LogProb{{Token: "unsafe"}}}
+		}},
 	} {
-		r := response("safe")
-		mutate(r)
-		got, bErr, err := p.PostLLMHook(testContext(), r, nil)
-		if got != nil || err != nil {
-			t.Fatalf("got=%+v err=%v", got, err)
-		}
-		requireCode(t, bErr, "content_safety_unsupported_content")
+		t.Run(tc.name, func(t *testing.T) {
+			r := response("safe")
+			tc.mutate(r)
+			got, bErr, err := p.PostLLMHook(testContext(), r, nil)
+			if got != nil || err != nil {
+				t.Fatalf("got=%+v err=%v", got, err)
+			}
+			requireCode(t, bErr, "content_safety_unsupported_content")
+		})
 	}
 }
 
@@ -137,4 +157,20 @@ func TestTextBudgetAndEmptyText(t *testing.T) {
 	if err != nil || bErr != nil || strings.Join(seen, "|") != "one|two" {
 		t.Fatalf("seen=%v err=%v bErr=%v", seen, err, bErr)
 	}
+}
+
+func TestExtractionChecksSizeBeforeUTF8(t *testing.T) {
+	oversized := strings.Repeat("x", 512) + string([]byte{0xff})
+	input, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
+	_, short, err := input.PreLLMHook(testContext(), request(oversized))
+	if err != nil || short == nil {
+		t.Fatalf("short=%+v err=%v", short, err)
+	}
+	requireCode(t, short.Error, "content_safety_text_too_large")
+	output, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
+	got, bErr, err := output.PostLLMHook(testContext(), response(oversized), nil)
+	if err != nil || got != nil {
+		t.Fatalf("got=%+v err=%v", got, err)
+	}
+	requireCode(t, bErr, "content_safety_text_too_large")
 }

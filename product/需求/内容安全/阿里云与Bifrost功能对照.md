@@ -43,7 +43,7 @@
 
 表中官方事实来源：[阿里网关接入](https://help.aliyun.com/zh/document_detail/2980055.html)、[Bifrost 护栏规则与档案](https://docs.getbifrost.ai/enterprise/guardrails)、[Bifrost 判官异常行为](https://docs.getbifrost.ai/enterprise/guardrails/prompt-guardrails)。最后一列是需求讨论项，不是已批准配置。
 
-流式讨论已收敛到“完整检测后交付”：BF 匹配可拦截的输出规则时，缓存完整流，生成和检测结束后才决定交付；默认连续释放缓存事件，不人为增加回放间隔。阿里 AI 网关文档则说明响应检查会使流式变为非流式。用户接受这种先等待、再交付的方向；我方最终是否保留 SSE 格式等契约仍需落实。[Bifrost 流式说明](https://docs.getbifrost.ai/enterprise/guardrails#streaming-output-guardrails)、[阿里网关说明](https://help.aliyun.com/zh/document_detail/2980055.html)
+竞品的流式交付行为：BF 匹配可拦截的输出规则时，缓存完整流，生成和检测结束后才决定交付；默认连续释放缓存事件，不人为增加回放间隔。阿里 AI 网关文档则说明响应检查会使流式变为非流式。我方最新范围已由用户选择方案 1：本轮开启输出检查时，在调用模型前拒绝流式请求；仅输入检查允许流式。此前讨论的完整缓存后释放不在本轮实现。[Bifrost 流式说明](https://docs.getbifrost.ai/enterprise/guardrails#streaming-output-guardrails)、[阿里网关说明](https://help.aliyun.com/zh/document_detail/2980055.html)
 
 ### 各种情况怎么处理
 

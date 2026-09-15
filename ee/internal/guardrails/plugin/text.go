@@ -68,7 +68,7 @@ func outputTexts(resp *schemas.BifrostResponse, limit int) ([]string, error) {
 	texts := make([]string, 0, len(chat.Choices))
 	remaining := limit
 	for _, choice := range chat.Choices {
-		if choice.ChatStreamResponseChoice != nil || choice.TextCompletionResponseChoice != nil || choice.ChatNonStreamResponseChoice == nil || choice.Message == nil {
+		if choice.LogProbs != nil || choice.ChatStreamResponseChoice != nil || choice.TextCompletionResponseChoice != nil || choice.ChatNonStreamResponseChoice == nil || choice.Message == nil || choice.StopString != nil {
 			return nil, errUnsupported
 		}
 		var b strings.Builder
@@ -82,7 +82,7 @@ func outputTexts(resp *schemas.BifrostResponse, limit int) ([]string, error) {
 }
 
 func appendMessage(b *strings.Builder, message schemas.ChatMessage, limit int) error {
-	if message.ChatToolMessage != nil || message.Role == schemas.ChatMessageRoleTool {
+	if message.Name != nil || message.ChatToolMessage != nil || message.Role == schemas.ChatMessageRoleTool {
 		return errUnsupported
 	}
 	if a := message.ChatAssistantMessage; a != nil {
@@ -115,11 +115,11 @@ func appendMessage(b *strings.Builder, message schemas.ChatMessage, limit int) e
 }
 
 func appendText(b *strings.Builder, text string, limit int) error {
-	if !utf8.ValidString(text) {
-		return errUnsupported
-	}
 	if len(text) > limit-b.Len() {
 		return guardrails.ErrTextTooLarge
+	}
+	if !utf8.ValidString(text) {
+		return errUnsupported
 	}
 	b.WriteString(text)
 	return nil

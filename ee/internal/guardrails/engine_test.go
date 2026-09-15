@@ -180,3 +180,92 @@ func TestConfigurationSnapshotAndConcurrentChecks(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+func TestInvalidRules(t *testing.T) {
+	d := detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, nil })
+	for _, tc := range []struct {
+		name   string
+		change func(*guardrails.Rule)
+	}{
+		{"id", func(r *guardrails.Rule) { r.ID = "" }},
+		{"detector", func(r *guardrails.Rule) { r.DetectorID = "missing" }},
+		{"stage", func(r *guardrails.Rule) { r.Stage = "" }},
+		{"category", func(r *guardrails.Rule) { r.Category = "D2" }},
+		{"threshold", func(r *guardrails.Rule) { r.Threshold = 0 }},
+		{"match", func(r *guardrails.Rule) { r.OnMatch = guardrails.Allow }},
+		{"failure", func(r *guardrails.Rule) { r.OnError = "" }},
+		{"timeout", func(r *guardrails.Rule) { r.Timeout = 0 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := rule("one")
+			tc.change(&r)
+			if _, err := guardrails.New([]guardrails.Rule{r}, map[string]guardrails.Detector{"one": d}, 100); err == nil {
+				t.Fatal("accepted invalid rule")
+			}
+		})
+	}
+	if _, err := guardrails.New([]guardrails.Rule{rule("one"), rule("one")}, map[string]guardrails.Detector{"one": d}, 100); err == nil {
+		t.Fatal("duplicate accepted")
+	}
+	if _, err := guardrails.New(nil, nil, 0); err == nil {
+		t.Fatal("missing byte limit accepted")
+	}
+	var missing detectorFunc
+	if _, err := guardrails.New([]guardrails.Rule{rule("one")}, map[string]guardrails.Detector{"one": missing}, 100); err == nil {
+		t.Fatal("typed nil detector accepted")
+	}
+}
+
+func TestUninitializedEngineAndContext(t *testing.T) {
+	for _, e := range []*guardrails.Engine{nil, {}} {
+		result, err := e.Check(context.Background(), guardrails.Input, "")
+		if !errors.Is(err, guardrails.ErrInvalidInput) || result.Action != guardrails.Block {
+			t.Fatalf("uninitialized result=%+v err=%v", result, err)
+		}
+	}
+	e := mustEngine(t, nil, nil)
+	if _, err := e.Check(nil, guardrails.Input, ""); !errors.Is(err, guardrails.ErrInvalidInput) {
+		t.Fatalf("nil context: %v", err)
+	}
+	result, err := e.Check(context.Background(), guardrails.Input, strings.Repeat("x", 1024))
+	if err != nil || result.Action != guardrails.Allow {
+		t.Fatalf("exact limit result=%+v err=%v", result, err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err = e.Check(ctx, guardrails.Input, "")
+	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block {
+		t.Fatalf("canceled empty policy result=%+v err=%v", result, err)
+	}
+}
+
+// 超限和取消必须先于线性 UTF-8 扫描；出错不能丢失此前已完成的观察事件。
+func TestCheckErrorPrecedenceAndEvents(t *testing.T) {
+	e := mustEngine(t, nil, nil)
+	oversized := strings.Repeat("x", 1024) + string([]byte{0xff})
+	if _, err := e.Check(context.Background(), guardrails.Input, oversized); !errors.Is(err, guardrails.ErrTextTooLarge) {
+		t.Fatalf("size must precede UTF-8 validation: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := e.Check(ctx, guardrails.Input, oversized); !errors.Is(err, context.Canceled) {
+		t.Fatalf("cancellation must precede text validation: %v", err)
+	}
+	ctx, cancel = context.WithCancel(context.Background())
+	defer cancel()
+	first, second := rule("first"), rule("second")
+	first.OnMatch = guardrails.Observe
+	e = mustEngine(t, []guardrails.Rule{first, second}, map[string]guardrails.Detector{
+		"first": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			return []guardrails.Finding{{Level: guardrails.High}}, nil
+		}),
+		"second": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			cancel()
+			return nil, context.Canceled
+		}),
+	})
+	result, err := e.Check(ctx, guardrails.Input, "text")
+	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block || len(result.Events) != 1 || result.Events[0].Action != guardrails.Observe {
+		t.Fatalf("completed event lost: result=%+v err=%v", result, err)
+	}
+}

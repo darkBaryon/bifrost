@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"strings"
 
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
@@ -33,18 +32,10 @@ var _ schemas.LLMPlugin = (*Plugin)(nil)
 // HTTP 错误响应范围；本轮不支持用成功状态码伪装成正常模型回答。
 const minErrorStatus, maxErrorStatus = 400, 599
 
-// New 构造可注册的插件；真实检测器与生产装配由调用方负责。
+// New 构造可注册的插件；调用方须提供可用的 logger 实例，并负责真实检测器与生产装配。
 func New(engine *guardrails.Engine, options Options, logger Logger) (*Plugin, error) {
 	if engine == nil || engine.MaxTextBytes() <= 0 || logger == nil {
 		return nil, fmt.Errorf("guardrails plugin: engine and logger are required")
-	}
-	// 宿主通常注入指针，也可能使用命名函数；不能把接口里的 typed nil 留到请求时崩溃。
-	v := reflect.ValueOf(logger)
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		if v.IsNil() {
-			return nil, fmt.Errorf("guardrails plugin: logger must not be nil")
-		}
 	}
 	if options.StatusCode < minErrorStatus || options.StatusCode > maxErrorStatus || strings.TrimSpace(options.DenyMessage) == "" {
 		return nil, fmt.Errorf("guardrails plugin: explicit error status and denial message are required")
@@ -82,7 +73,7 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	if input {
 		text, err := inputText(req.ChatRequest, p.engine.MaxTextBytes())
 		if err != nil {
-			return reject(extractionCode(err))
+			return reject(errorCode(err, guardrails.UnsupportedContent))
 		}
 		if code := p.check(ctx, guardrails.Input, text); code != "" {
 			return reject(code)
@@ -98,7 +89,7 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostR
 	}
 	texts, err := outputTexts(resp, p.engine.MaxTextBytes())
 	if err != nil {
-		return nil, p.reject(ctx, extractionCode(err)), nil
+		return nil, p.reject(ctx, errorCode(err, guardrails.UnsupportedContent)), nil
 	}
 	for _, text := range texts {
 		if code := p.check(ctx, guardrails.Output, text); code != "" {
@@ -117,13 +108,7 @@ func (p *Plugin) check(ctx *schemas.BifrostContext, stage guardrails.Stage, text
 		p.logger.Info("content safety: request=%q rule=%q detector=%q category=%s stage=%s outcome=%s action=%s failure=%s level=%d", requestID(ctx), event.RuleID, event.DetectorID, event.Category, event.Stage, event.Outcome, event.Action, event.Failure, event.HighestLevel)
 	}
 	if err != nil {
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return guardrails.CheckCanceled
-		}
-		if errors.Is(err, guardrails.ErrTextTooLarge) {
-			return guardrails.TextTooLarge
-		}
-		return guardrails.CheckFailed
+		return errorCode(err, guardrails.CheckFailed)
 	}
 	if result.Action == guardrails.Block {
 		if len(result.Events) > 0 && result.Events[len(result.Events)-1].Outcome == guardrails.Failed {
@@ -153,11 +138,14 @@ func (p *Plugin) reject(ctx *schemas.BifrostContext, code guardrails.ErrorCode) 
 		Error: &schemas.ErrorField{Type: schemas.Ptr(string(code)), Code: schemas.Ptr(string(code)), Message: message}}
 }
 
-func extractionCode(err error) guardrails.ErrorCode {
+func errorCode(err error, fallback guardrails.ErrorCode) guardrails.ErrorCode {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return guardrails.CheckCanceled
+	}
 	if errors.Is(err, guardrails.ErrTextTooLarge) {
 		return guardrails.TextTooLarge
 	}
-	return guardrails.UnsupportedContent
+	return fallback
 }
 
 func requestID(ctx *schemas.BifrostContext) string {
