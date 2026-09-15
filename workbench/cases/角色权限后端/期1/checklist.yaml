@@ -3,7 +3,7 @@
   版本: 6
   批次: 1B
   已定稿: true
-  评审状态: 按用户授权准备独立候选；1B尚待用户阅读确认
+  评审状态: 2026-09-16用户接受行为验证结果并跳过1B代码阅读；非完整期1验收
 必过命令:
 - name: batch-1b-scope
   run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase = 'd811dfd07'\nroot = Path('ee/internal/rbac')\n\
