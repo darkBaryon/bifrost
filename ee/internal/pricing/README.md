@@ -23,7 +23,7 @@ cmd/bifrost-http/main.go
         ├── vendors.go          按接入地址主机名认出自定义厂商，手工对应表优先
         ├── overrides.go        换算单价，算出稳定 UUID，组装成覆盖行
         └── sync.go             与库内现状对差，增删改，再推进内存目录
-            └── persistence/    翻译成上游的 ConfigStore 与 ModelCatalog 调用
+            └── persistence/    翻译成上游调用：配置数据库 ConfigStore、内存价目表 ModelCatalog
 ```
 
 另有 `model.go` 放业务模型与币种，`data/cn-prices.json` 是随版本发布的价格目录。
