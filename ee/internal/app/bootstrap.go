@@ -9,6 +9,7 @@ import (
 	brandinghandler "github.com/darkBaryon/bifrost/ee/internal/branding/http"
 	eeconfig "github.com/darkBaryon/bifrost/ee/internal/branding/persistence"
 	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
+	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
@@ -34,7 +35,11 @@ func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log sche
 	if auth == nil {
 		return errors.New("ee: console auth factory was not invoked by the host")
 	}
-	return attach(ctx, s, auth.APIMiddleware())
+	if err := attach(ctx, s, auth.APIMiddleware()); err != nil {
+		return err
+	}
+	s.Server.Handler = rbachttp.GuardMethods(s.Server.Handler)
+	return nil
 }
 
 // attach 在上游 Bootstrap 之后、Start 之前运行。此时上游对象已装配完成但尚未监听，

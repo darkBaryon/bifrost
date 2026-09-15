@@ -1,21 +1,23 @@
 # 应用装配
 
-把 EE 的业务服务、存储和宿主接入装到上游 `BifrostHTTPServer` 上。只做构造与连线，不含运行期业务规则。
+## 解决什么问题
 
-## 做什么
+把身份、角色权限和品牌能力接到同一个Bifrost应用，共用服务器、路由和配置数据库。
+启动时先迁移身份和角色数据，再构造服务和接口；离线恢复也使用相同的身份/角色协作。
 
-- `Bootstrap`：先把身份装配工厂埋进 `ConsoleAuthFactory`，再跑上游 `Bootstrap`（它在建好数据库、注册路由前回调工厂），最后 `attach` 品牌路由并复用同一份 EE 鉴权中间件。
-- `assembleIdentity`：读 `EE_*` 环境变量并校验、跑身份表迁移、`identity.New` 装配三条线、导入旧管理员、构造 HTTP 层和宿主适配。适配只拿会话线，导入只拿账号线。
-- `RecoverAdmin`：离线 `identity recover-admin` 子命令，不起 HTTP，用同一套装配重置主管理员密码；密码从隐藏终端或 stdin 读。
+## 代码在哪
 
-## 不做什么
-
-品牌图片校验在 [branding](../branding/README.md)；宿主中间件在 [host](../host/README.md)；共享的 Server、Router、数据库连接由上游创建与关闭。
-
-## 文件
-
-| 文件 | 内容 |
+| 文件 | 职责 |
 |---|---|
-| [bootstrap.go](bootstrap.go) | `Bootstrap` 与 `attach` |
-| [identity.go](identity.go) | 环境变量、`newIdentity`、`assembleIdentity` |
-| [recovery.go](recovery.go) | 离线恢复子命令 |
+| [bootstrap.go](bootstrap.go) | 在宿主注册路由前接入身份装配，启动后补充品牌路由 |
+| [identity.go](identity.go) | 读取部署配置、执行身份/角色迁移，构造接口与宿主认证适配 |
+| [rbac.go](rbac.go) | 把身份事务、角色存储及账号操作策略连接起来 |
+| [recovery.go](recovery.go) | 离线恢复前核对迁移完整性，恢复账号并补回主管理员角色 |
+
+## 改之前要知道什么
+
+- 本包只负责构造和连接；运行时业务规则在各业务模块中。
+- 身份和角色必须共用事务，不能给回调中的角色检查另开数据库事务。
+- 迁移或旧账号导入失败必须停止启动；离线恢复不隐式建表。
+- 角色/账号接口自行判权；其余宿主管理接口仍限定固定主管理员。
+- 共享服务器和数据库连接由宿主创建和关闭，不重复创建或释放。

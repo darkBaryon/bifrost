@@ -6,7 +6,7 @@
 让管理员将权限组成角色、把角色分配给账号，并判断账号能否执行某项操作、权限来自哪些角色。
 同时保护预置角色和最后一个可用的主管理员，避免误操作后无人能管理系统。
 
-本包包含业务规则、数据库实现和身份协作。当前应用尚未装配本包；真实数据库及会话通过集成测试连接，HTTP接入留到后续批次。
+本包包含业务规则、数据库实现和身份协作。应用启动时装配本包，提供角色、权限目录和账号角色接口。其他宿主管理功能仍沿用固定主管理员限制，按后续批次逐步接入角色授权。
 账号、密码和会话由身份模块负责；调用模型使用的虚拟密钥权限也不属于这里。
 
 ## 代码在哪
@@ -26,6 +26,11 @@
 | [persistence/roles.go](persistence/roles.go) | 角色及分配关系的数据库读写 |
 | [persistence/migration.go](persistence/migration.go) | 建表、预置角色及首次绑定，重复执行不覆盖用户修改 |
 | [identity/policy.go](identity/policy.go) | 把账号动作对应到权限检查，将初始化和恢复绑定加入身份事务 |
+| [http/handler.go](http/handler.go) | 九个POST接口注册，以及Cookie认证、同源检查和统一响应 |
+| [http/roles.go](http/roles.go) | 把请求转换成业务调用，再整理返回结果 |
+| [http/protocol.go](http/protocol.go) | 校验JSON字段、角色编号和账号编号 |
+| [http/dto.go](http/dto.go) | 对外角色、权限来源及前端权限矩阵的字段转换 |
+| [http/errors.go](http/errors.go) | 将业务错误转换成HTTP状态和安全错误正文 |
 | [roles_test.go](roles_test.go) | 权限目录与分页游标的规则测试 |
 | [service_test.go](service_test.go) | 从业务入口验证角色操作、分配、撤权和保护规则 |
 | [fixture_test.go](fixture_test.go) | 为规则测试提供内存数据，不模拟真实会话或数据库事务 |

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	rbacstore "github.com/darkBaryon/bifrost/ee/internal/rbac/persistence"
 	"github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
@@ -71,7 +72,10 @@ func RecoverAdmin(args []string) error {
 	if e != nil {
 		return e
 	}
-	svc, e := newIdentity(store.DB(), options, log)
+	if e = rbacstore.RequireComplete(ctx, store.DB()); e != nil {
+		return errors.New("complete RBAC migration is required for recovery")
+	}
+	svc, _, e := newConsoleServices(store.DB(), options, log)
 	if e != nil {
 		return e
 	}

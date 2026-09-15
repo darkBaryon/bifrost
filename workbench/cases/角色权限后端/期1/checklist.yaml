@@ -1,76 +1,76 @@
-# 当前检查对象为1B；1A在d811dfd07冻结，清单另存checklist-1A.yaml。
+# 当前检查对象为1C；1A/1B清单分别冻结保留。
 方案合同:
-  版本: 6
-  批次: 1B
+  版本: 7
+  批次: 1C
   已定稿: true
-  评审状态: 2026-09-16用户接受行为验证结果并跳过1B代码阅读；非完整期1验收
+  评审状态: 已准备候选，待用户逐项阅读；非完整期1验收
 必过命令:
-- name: batch-1b-scope
-  run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase = 'd811dfd07'\nroot = Path('ee/internal/rbac')\n\
-    production = ['permissions.go', 'roles.go', 'authorize.go', 'assignments.go', 'repository.go', 'errors.go']\n\
-    for name in production:\n    expected = subprocess.check_output(['git', 'show', base + ':ee/internal/rbac/'\
-    \ + name])\n    assert (root / name).read_bytes() == expected, '覆盖了1A已确认文件：' + name\nassert {p.name for p in\
-    \ root.iterdir()} == set(production + ['README.md', 'roles_test.go', 'service_test.go', 'fixture_test.go', 'identity',\
-    \ 'persistence'])\nidentity = {'README.md', 'access.go', 'accounts.go', 'core.go', 'model.go', 'passwords.go',\
-    \ 'session.go', 'persistence/README.md', 'persistence/scope.go', 'persistence/store.go'}\nallowed = {'ee/internal/identity/'\
-    \ + name for name in identity}\nallowed.add('ee/internal/rbac/README.md')\nfor folder, names in {\n    'persistence':\
-    \ ['store.go', 'rows.go', 'roles.go', 'migration.go', 'service_test.go', 'lifecycle_test.go', 'scope_test.go',\
-    \ 'concurrency_test.go'],\n    'identity': ['policy.go', 'policy_test.go'],\n}.items():\n    assert {p.name\
-    \ for p in (root / folder).iterdir()} == set(names)\n    allowed.update('ee/internal/rbac/' + folder + '/' +\
-    \ name for name in names)\nchanged = subprocess.check_output(['git', 'diff', '--name-only', '-z', base], text=True).split('\\\
-    0')\nnew = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'], text=True).split('\\\
-    0')\nassert all(not p or p in allowed or p.startswith('workbench/') for p in changed + new), '混入了本批范围外代码'\n\
-    for name in allowed:\n    if name.endswith('.go') and not name.endswith('_test.go'):\n        text = Path(name).read_text()\n\
-    \        assert 'OpenConsoleStream' not in text and 'rbac/http' not in text and 'rbac/host' not in text, name\n\
-    \        assert len(text.splitlines()) <= 500, name + '超过文件行数上限'\nprint('1B范围通过：保留1A六个文件，无HTTP/app/host/上游或通知授权接线')\n\
+- name: batch-1c-scope
+  run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase = '99d03e6b2'\n\
+    root = Path('ee/internal/rbac')\nfor name in subprocess.check_output(['git', 'ls-tree',\
+    \ '-r', '--name-only', base, 'ee/internal/rbac', 'ee/internal/identity'], text=True).splitlines():\n\
+    \    if name.endswith('.go'):\n        assert Path(name).read_bytes() == subprocess.check_output(['git',\
+    \ 'show', base + ':' + name]), '覆盖已确认代码：' + name\nhttp = {'handler.go', 'roles.go',\
+    \ 'dto.go', 'protocol.go', 'errors.go', 'protocol_test.go', 'errors_test.go'}\n\
+    assert {p.name for p in (root / 'http').iterdir()} == http\nallowed = {'ee/internal/rbac/http/'\
+    \ + n for n in http}\nallowed.update('ee/internal/app/' + n for n in ['bootstrap.go',\
+    \ 'identity.go', 'rbac.go', 'recovery.go', 'README.md'])\nallowed.update('ee/internal/host/'\
+    \ + n for n in ['auth.go', 'config.go', 'rbac_test.go', 'README.md'])\nallowed.update(['ee/README.md',\
+    \ 'ee/internal/rbac/README.md', 'ee/internal/identity/README.md', 'ee/scripts/rbac-phase1-smoke.py'])\n\
+    changed = subprocess.check_output(['git', 'diff', '--name-only', base], text=True).splitlines()\n\
+    new = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard'],\
+    \ text=True).splitlines()\nassert all(p in allowed or p.startswith('workbench/')\
+    \ or p.startswith('\"workbench/') for p in changed + new), '混入本批范围外文件'\nassert\
+    \ not (root / 'host').exists()\nfor name in allowed:\n    if name.endswith('.go')\
+    \ and not name.endswith('_test.go'):\n        content = Path(name).read_text()\n\
+    \        assert 'rbac/host' not in content and 'OpenConsoleStream' not in content,\
+    \ name\n        assert len(content.splitlines()) <= 500, name + '超过行数上限'\nhandler\
+    \ = (root / 'http/handler.go').read_text()\nassert handler.count('{\"/api/') ==\
+    \ 9 and 'func GuardMethods(' in handler\nprint('1C范围通过：1A/1B Go不变，九接口与必要app/host接线，无后续模块接入')\n\
     CHECK\n"
 - name: whitespace
   run: git diff --check
 - name: go-format
-  run: gofmt -l ee/internal/rbac ee/internal/identity
+  run: gofmt -l ee/internal/app ee/internal/host ee/internal/rbac/http
   expect_empty: true
-- name: sqlite-integration
-  run: cd ee && env -u RBAC_TEST_POSTGRES_DSN -u IDENTITY_TEST_POSTGRES_DSN GOWORK=off go test -race ./internal/rbac/...
-    ./internal/identity/persistence
-- name: postgres-integration
-  run: test -n "$RBAC_TEST_POSTGRES_DSN" && test -n "$IDENTITY_TEST_POSTGRES_DSN" && cd ee && GOWORK=off go test
-    -race ./internal/rbac/... ./internal/identity/persistence
 - name: ee-vet
   run: cd ee && GOWORK=off go vet ./cmd/... ./internal/...
 - name: ee-tests-race
   run: cd ee && GOWORK=off go test -race ./cmd/... ./internal/...
 - name: ee-build
-  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1b ./cmd/bifrost-http
+  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1c ./cmd/bifrost-http
+- name: sqlite-http
+  run: python3 ee/scripts/rbac-phase1-smoke.py --binary ee/tmp/bifrost-rbac-phase1c
+    --database sqlite
+- name: sqlite-upgrade
+  run: python3 ee/scripts/rbac-phase1-smoke.py --binary ee/tmp/bifrost-rbac-phase1c
+    --database sqlite --upgrade-from ee/tmp/bifrost-rbac-phase1b
+- name: postgres-http
+  run: python3 ee/scripts/rbac-phase1-smoke.py --binary ee/tmp/bifrost-rbac-phase1c
+    --database postgres
+- name: postgres-upgrade
+  run: python3 ee/scripts/rbac-phase1-smoke.py --binary ee/tmp/bifrost-rbac-phase1c
+    --database postgres --upgrade-from ee/tmp/bifrost-rbac-phase1b
 - name: workbench
   run: python3 workbench/tools/build_views.py --check
 必存产物:
 - ee/internal/rbac/README.md
-- ee/internal/rbac/persistence/rows.go
-- ee/internal/rbac/persistence/store.go
-- ee/internal/rbac/persistence/roles.go
-- ee/internal/rbac/persistence/migration.go
-- ee/internal/rbac/identity/policy.go
-- ee/internal/identity/access.go
-- ee/internal/identity/persistence/scope.go
-- workbench/cases/角色权限后端/期1/方案v6.md
-- workbench/cases/角色权限后端/期1/checklist-1A.yaml
-- workbench/evidence/角色权限后端-期1-批次1B阅读与验收.md
+- ee/internal/app/rbac.go
+- ee/internal/rbac/http/handler.go
+- ee/scripts/rbac-phase1-smoke.py
+- workbench/cases/角色权限后端/期1/方案v7.md
+- workbench/cases/角色权限后端/期1/checklist-1B.yaml
+- workbench/evidence/角色权限后端-期1-批次1C阅读与验收.md
 必含符号:
-- grep: TestConcurrentLastChiefAcrossFeatures
-  in: ee/internal/rbac/persistence
-- grep: TestLastChiefDisableBeforeUnassign
-  in: ee/internal/rbac/persistence
-- grep: TestLifecycleFailureRollsBackBothFeatures
-  in: ee/internal/rbac/persistence
-- grep: TestConcurrentDeleteAndAssign
-  in: ee/internal/rbac/persistence
-- grep: TestFirstBindingDatabaseFailure
-  in: ee/internal/rbac/persistence
-- grep: TestPermissionQueryFailureDoesNotDowngradeOrCommit
-  in: ee/internal/rbac/persistence
+- grep: GuardMethods
+  in: ee/internal/app/bootstrap.go
+- grep: TestAnchorFailureDoesNotFallBackToTemporaryToken
+  in: ee/internal/host/rbac_test.go
+- grep: RequireComplete
+  in: ee/internal/app/recovery.go
 收敛评审:
   风险等级: L3
-  基线: d811dfd07
+  基线: 99d03e6b2
   开发指南:
   - ee/internal/rbac/README.md
 禁留标记: []

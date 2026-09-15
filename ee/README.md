@@ -14,11 +14,12 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [internal/app/](internal/app/README.md) | 配置、依赖装配与启动接入 |
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
 | [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http/、persistence/、hasher/ 分别适配入口、存储和 bcrypt |
+| [internal/rbac/](internal/rbac/README.md) | 角色、权限目录、账号角色分配及对应HTTP接口 |
 | [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、会话路由、WebSocket 重验、配置投影 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |
 
-双方共享 HTTP Server、Router 和已有数据库连接；EE 内嵌上游 Handler 链，按业务需要增加外层处理。账号认证后端已实现，完整角色权限与认证页面后续开发。
+双方共享 HTTP Server、Router 和已有数据库连接；EE 内嵌上游 Handler 链，按业务需要增加外层处理。账号认证和角色管理接口已接入；Provider、日志、设置等宿主管理的逐项权限接入及认证页面仍在后续范围。
 
 前端继续放在 `ee/ui/`，与 Go 后端保持各自的依赖和构建职责；本次迁移保留现有覆盖方式。
 

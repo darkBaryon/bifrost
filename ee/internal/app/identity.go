@@ -12,12 +12,12 @@ import (
 
 	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
+	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
+	rbacstore "github.com/darkBaryon/bifrost/ee/internal/rbac/persistence"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
-	"gorm.io/gorm"
 )
 
 // 账号认证的部署环境变量；初始化密钥复用宿主已解析的 BIFROST_SETUP_TOKEN。
@@ -46,12 +46,7 @@ func identityOptions(setupToken string) (identity.Options, error) {
 	return options, nil
 }
 
-// newIdentity 在已迁移的共享数据库上构造三条线的身份服务，使用宿主 bcrypt 与暂行的主管理员策略；存储诊断经 log 输出。
-func newIdentity(db *gorm.DB, options identity.Options, log schemas.Logger) (*identity.Services, error) {
-	return identity.New(persistence.NewStore(db, log), hasher.Bcrypt{}, options, nil)
-}
-
-// assembleIdentity 在宿主注册路由前执行：先校验全部部署配置，再迁移身份表、导入旧管理员并构造宿主适配。
+// assembleIdentity 在宿主注册路由前执行：先校验全部部署配置，再迁移身份和角色表、导入旧管理员并构造接口与宿主适配。
 func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer, log schemas.Logger) (*eehost.AuthAdapter, error) {
 	ctx = identity.WithDiagnosticOperation(ctx, "identity.bootstrap")
 	if host.Config == nil || host.Config.ConfigStore == nil || host.Config.ConfigStore.DB() == nil {
@@ -71,7 +66,10 @@ func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer
 	if err = host.Config.ConfigStore.RunMigration(ctx, persistence.MigrateIdentity(log)); err != nil {
 		return nil, errors.New("EE identity migration failed")
 	}
-	svc, err := newIdentity(host.Config.ConfigStore.DB(), options, log)
+	if err = host.Config.ConfigStore.RunMigration(ctx, rbacstore.MigrateRBAC(log)); err != nil {
+		return nil, errors.New("EE RBAC migration failed")
+	}
+	svc, permissions, err := newConsoleServices(host.Config.ConfigStore.DB(), options, log)
 	if err != nil {
 		return nil, err
 	}
@@ -82,5 +80,6 @@ func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer
 	if err != nil {
 		return nil, err
 	}
-	return eehost.NewAuthAdapter(host, svc.Session, handler), nil
+	routes := rbachttp.NewHandler(permissions, svc.Session, handler)
+	return eehost.NewAuthAdapter(host, svc.Session, handler, eehost.WithAdditionalRoutes(routes), eehost.WithRecoveryAnchor(svc.Account.RecoveryAnchor)), nil
 }

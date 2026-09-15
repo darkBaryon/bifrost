@@ -45,16 +45,41 @@ type identityRoutes interface {
 	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
 }
 
+// AdditionalRoutes 注册由业务模块自行认证和判权的精确路由。
+type AdditionalRoutes interface {
+	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
+	OwnsRoute(string, string) bool
+}
+
+// AuthOption 在启动时为认证适配器补充模块路由及固定主管理员查询。
+type AuthOption func(*AuthAdapter)
+
+// WithAdditionalRoutes 接入角色等模块的自管端点。
+func WithAdditionalRoutes(routes AdditionalRoutes) AuthOption {
+	return func(a *AuthAdapter) { a.additional = routes }
+}
+
+// WithRecoveryAnchor 提供系统初始化时指定的主管理员信息，不包含密码。
+func WithRecoveryAnchor(lookup func(context.Context) (identity.Account, error)) AuthOption {
+	return func(a *AuthAdapter) { a.anchor = lookup }
+}
+
 // AuthAdapter 实现宿主的 ConsoleAuthProvider；依赖由 app 装配后注入，宿主对象只用于临时令牌与配置读取。
 type AuthAdapter struct {
-	service consoleSessions
-	http    identityRoutes
-	host    *server.BifrostHTTPServer
+	service    consoleSessions
+	http       identityRoutes
+	host       *server.BifrostHTTPServer
+	additional AdditionalRoutes
+	anchor     func(context.Context) (identity.Account, error)
 }
 
 // NewAuthAdapter 由 app 在身份服务与 HTTP 适配构造完成后调用；只接收会话线与路由接入能力，建号、重置、恢复对本包不可见。
-func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler identityRoutes) *AuthAdapter {
-	return &AuthAdapter{service: sessions, http: handler, host: host}
+func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler identityRoutes, options ...AuthOption) *AuthAdapter {
+	a := &AuthAdapter{service: sessions, http: handler, host: host}
+	for _, option := range options {
+		option(a)
+	}
+	return a
 }
 
 // Logger 是本包需要的日志能力，由 app 注入宿主 logger；消息为 printf 风格。
@@ -148,6 +173,9 @@ func validateLegacyFile(appDir string) error {
 // RegisterSessionRoutes 用身份路由替换宿主的旧会话路由。
 func (a *AuthAdapter) RegisterSessionRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
 	a.http.RegisterRoutes(r, m...)
+	if a.additional != nil {
+		a.additional.RegisterRoutes(r, m...)
+	}
 }
 
 // public 列出无需管理身份的 GET 入口：健康检查、版本、静态资源及各协议自行验证的 OAuth 发现路径。
@@ -208,6 +236,25 @@ func (a *AuthAdapter) authorizeTemporary(c *fasthttp.RequestCtx) error {
 	return nil
 }
 
+// requireHostAdministrator 保留尚未接入角色授权的宿主入口限制；调用前必须已验证本次会话。
+// Users.Manage只授予账号/角色管理，不能因此获得全部宿主管理能力。
+func (a *AuthAdapter) requireHostAdministrator(ctx context.Context, p identity.Principal) error {
+	if a.anchor == nil {
+		return a.service.RequireAccountManager(ctx, p)
+	}
+	if p.MustChangePassword {
+		return identity.ErrForbidden
+	}
+	account, err := a.anchor(ctx)
+	if err != nil {
+		return identity.SafeError(err)
+	}
+	if p.AccountID != account.ID {
+		return identity.ErrForbidden
+	}
+	return nil
+}
+
 // APIMiddleware 是全部管理路由的鉴权：只有正常的主管理员会话放行，并为通知等上游能力设置 localAdmin 兼容标记。
 // 身份路由与公开入口直接放行；WebSocket 握手用票据或 Cookie 并绑定重验回调；/api/config 做认证投影与预检。
 func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
@@ -218,7 +265,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			c.RemoveUserValue(principalKey{})
 			c.RemoveUserValue(handlers.WebSocketAuthorizeContextKey)
 			method, path := string(c.Method()), string(c.Path())
-			if public(method, path) || identityhttp.OwnsRoute(method, path) {
+			if public(method, path) || identityhttp.OwnsRoute(method, path) || (a.additional != nil && a.additional.OwnsRoute(method, path)) {
 				next(c)
 				return
 			}
@@ -249,10 +296,10 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				p, err = a.service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
 			}
 			if err == nil {
-				err = a.service.RequireAccountManager(ctx, p)
+				err = a.requireHostAdministrator(ctx, p)
 			}
 			if err != nil {
-				if temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
+				if (errors.Is(err, identity.ErrUnauthorized) || errors.Is(err, identity.ErrForbidden)) && temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
 					if err = a.authorizeTemporary(c); err == nil {
 						next(c)
 						return
@@ -275,7 +322,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 					if err != nil {
 						return err
 					}
-					return a.service.RequireAccountManager(ctx, p)
+					return a.requireHostAdministrator(ctx, p)
 				})
 			}
 			if path == "/api/config" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) {

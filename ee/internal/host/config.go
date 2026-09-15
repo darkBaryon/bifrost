@@ -42,11 +42,15 @@ func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p
 	}
 }
 
-// projection 是旧 auth_config 的只读投影：认证启用、当前调用者的登录名、脱敏密码。
-// 暂行策略下能到达这里的只有主管理员，所以登录名即主管理员名（方案 4.5 B2）；RBAC 替换 AccountPolicy 后
-// 须改为按 State.ChiefAccountID 读取，否则不同管理员会看到不同的 admin_username，PUT 同值回送也会互相 409。
+// projection 输出固定恢复锚点的只读认证信息；独立认证兼容模式仍查询当前主管理员。
 func (a *AuthAdapter) projection(ctx context.Context, p identity.Principal) (map[string]any, error) {
-	account, err := a.service.Me(ctx, p)
+	var account identity.Account
+	var err error
+	if a.anchor != nil {
+		account, err = a.anchor(ctx)
+	} else {
+		account, err = a.service.Me(ctx, p)
+	}
 	if err != nil {
 		return nil, err
 	}
