@@ -74,6 +74,7 @@ func (e *Engine) Check(ctx context.Context, stage Stage, text string) (Result, e
 	if len(text) > e.maxTextBytes {
 		return result, ErrTextTooLarge
 	}
+	// 先判取消和长度，再做线性的 UTF-8 扫描，避免超限输入消耗扫描成本。
 	if !utf8.ValidString(text) {
 		return result, ErrInvalidInput
 	}

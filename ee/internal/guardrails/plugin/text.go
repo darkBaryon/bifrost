@@ -118,6 +118,7 @@ func appendText(b *strings.Builder, text string, limit int) error {
 	if len(text) > limit-b.Len() {
 		return guardrails.ErrTextTooLarge
 	}
+	// 先判剩余预算，再做线性的 UTF-8 扫描，避免超限片段消耗扫描成本。
 	if !utf8.ValidString(text) {
 		return errUnsupported
 	}

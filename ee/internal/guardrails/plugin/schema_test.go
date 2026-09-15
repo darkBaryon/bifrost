@@ -15,6 +15,7 @@ func TestReviewedChatSchema(t *testing.T) {
 		value  any
 		fields string
 	}{
+		{schemas.BifrostChatRequest{}, "Provider Model Input Params Fallbacks RawRequestBody"},
 		{schemas.ChatParameters{}, "Audio FrequencyPenalty LogitBias LogProbs MaxCompletionTokens Metadata Modalities N ParallelToolCalls Prediction PresencePenalty PromptCacheKey PromptCacheRetention PromptCacheOptions Reasoning ResponseFormat SafetyIdentifier Seed ServiceTier StreamOptions Stop Store Temperature TopLogProbs TopP ToolChoice Tools User Verbosity WebSearchOptions TopK Speed InferenceGeo MCPServers Container CacheControl TaskBudget ContextManagement IncludeServerSideToolInvocations ExtraParams"},
 		{schemas.ChatMessage{}, "Name Role Content ChatToolMessage ChatAssistantMessage"},
 		{schemas.ChatMessageContent{}, "ContentStr ContentBlocks"},
