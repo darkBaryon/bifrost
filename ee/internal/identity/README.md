@@ -14,7 +14,9 @@
 
 ## 不做什么
 
-HTTP 在 [http/](http/README.md)，SQL 在 [persistence/](persistence/README.md)，bcrypt 在 [hasher/](hasher/README.md)，接上游在 [host](../host/README.md)。
+HTTP 在 [http/](http/README.md)，SQL 在 [persistence/](persistence/README.md)，接上游在 [host](../host/README.md)。
+
+`hasher/` 是单文件子包，把上游加密工具包里的 bcrypt 包成本包要求的哈希接口。它多做一件事：判断一个字符串是不是完整的 bcrypt 哈希（版本、cost、盐与摘要长度都对），导入旧管理员凭据时用它把残缺值挡在外面。它适配的是一个库而不是运行中的宿主对象，所以放在本模块下而不是宿主接入包。
 
 ## 文件
 
