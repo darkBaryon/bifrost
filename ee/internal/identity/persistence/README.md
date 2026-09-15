@@ -14,7 +14,7 @@
 
 ## 不做什么
 
-bcrypt 在 [hasher](../hasher/README.md)；业务规则在 [identity](../README.md)。
+bcrypt 包装在 `../hasher/`（说明见 [identity](../README.md)）；业务规则在 [identity](../README.md)。
 
 ## 文件
 
