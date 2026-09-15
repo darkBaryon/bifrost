@@ -15,6 +15,7 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
 | [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http/、persistence/、hasher/ 分别适配入口、存储和 bcrypt |
 | [internal/pricing/](internal/pricing/README.md) | 国内厂商识别、价格换算与启动同步；persistence/ 适配上游定价覆盖和模型目录 |
+| [internal/guardrails/](internal/guardrails/README.md) | 本地内容安全规则框架及 BF Chat Hook；真实检测器和生产装配尚未接入 |
 | [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、会话路由、WebSocket 重验、配置投影 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |

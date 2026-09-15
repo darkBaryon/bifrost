@@ -1,0 +1,30 @@
+必过命令:
+  - name: ee-vet
+    run: cd ee && GOWORK=off go vet ./...
+  - name: ee-race
+    run: cd ee && GOWORK=off go test -race ./...
+  - name: ee-build
+    run: cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http
+  - name: guardrails-format
+    run: gofmt -l ee/internal/guardrails
+    expect_empty: true
+  - name: diff-check
+    run: git diff --check
+  - name: workbench-views
+    run: python3 workbench/tools/build_views.py --check
+必存产物:
+  - ee/internal/guardrails/README.md
+  - ee/internal/guardrails/engine.go
+  - ee/internal/guardrails/plugin/plugin.go
+必含符号:
+  - {grep: 'type Detector interface', in: ee/internal/guardrails}
+收敛评审:
+  风险等级: L2
+  基线: 7c81459aa0e62750f22f57b57c3c4a4750a98cfc
+  开发指南:
+    - ee/internal/guardrails/README.md
+禁留标记:
+  - {grep: 'proxywasm', in: ee/internal/guardrails}
+  - {grep: 'wasm-go', in: ee/internal/guardrails}
+  - {grep: 'net/http', in: ee/internal/guardrails}
+  - {grep: 'fasthttp', in: ee/internal/guardrails}

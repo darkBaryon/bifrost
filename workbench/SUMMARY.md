@@ -10,6 +10,7 @@
     - [ee 包壳骨架](reports/ee包壳骨架.md)
     - [workbench 外壳重设计](reports/workbench外壳重设计.md)
     - [zh 中文化层 TS/mjs 孪生实现收敛](reports/zh中文化层TS-mjs孪生收敛.md)
+    - [内容安全框架](reports/内容安全框架.md)
     - [品牌后端简化](reports/品牌后端简化.md)
     - [国内定价](reports/国内定价.md)
     - [工作台代码风格与评审指引](reports/工作台代码风格与评审指引.md)
@@ -100,6 +101,13 @@
             - [代码评审](cases/workbench外壳重设计/期2/代码评审1.md)
             - [收敛评审](cases/workbench外壳重设计/期2/收敛评审1.md)
             - [验收记录](cases/workbench外壳重设计/期2/验收记录.md)
+    - 内容安全框架
+        - [主页](cases/内容安全框架/index.md)
+        - 期1
+            - [方案 v1](cases/内容安全框架/期1/方案v1.md)
+            - [方案评审](cases/内容安全框架/期1/方案评审1.md)
+            - [方案 v2（当前）](cases/内容安全框架/期1/方案v2.md)
+            - [方案评审](cases/内容安全框架/期1/方案评审2.md)
     - 品牌后端简化
         - [主页](cases/品牌后端简化/index.md)
         - 期1
