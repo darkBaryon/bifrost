@@ -240,7 +240,7 @@ convert_when: "第三个模块需要在认证链上开缝时，先重构认证�
 id: FIND-026
 status: 观察中
 triggered_by: [内容安全框架]
-evidence: "既有 ee/scripts/branding-smoke.py:129 使用 TemporaryDirectory，异常离开 with 时也删除数据库和 server.log。内容安全框架代码评审 1/2 额外运行品牌冒烟，因未嵌入 UI 在第 67 行失败，现场随即清理，无法继续定位。安全框架不改品牌脚本，失败事实已保留在两份独立评审记录。"
+evidence: "既有 ee/scripts/branding-smoke.py:126 使用 TemporaryDirectory，异常离开 with 时也删除数据库和 server.log。内容安全框架代码评审 1/2 额外运行品牌冒烟，因未嵌入 UI 在第 67 行失败，现场随即清理，无法继续定位。安全框架不改品牌脚本，失败事实已保留在两份独立评审记录。"
 convert_when: "下次修改品牌冒烟脚本或调查品牌冒烟失败时，改成失败保留并打印现场路径，成功时清理；保留目录中的测试凭据仍应限制权限"
 ```
 
