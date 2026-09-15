@@ -14,6 +14,7 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
+	rbachost "github.com/darkBaryon/bifrost/ee/internal/rbac/host"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	rbacstore "github.com/darkBaryon/bifrost/ee/internal/rbac/persistence"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -48,39 +49,41 @@ func identityOptions(setupToken string) (identity.Options, error) {
 
 // assembleIdentity 准备身份和角色接口，并把它们接到Bifrost的登录检查中。
 // 先检查配置、准备数据表并导入旧管理员，全部成功后才返回；任何一步失败都会阻止启动。
-func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer, log schemas.Logger) (*eehost.AuthAdapter, error) {
+func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer, log schemas.Logger) (*eehost.AuthAdapter, *rbachost.Adapter, error) {
 	ctx = identity.WithDiagnosticOperation(ctx, "identity.bootstrap")
 	if host.Config == nil || host.Config.ConfigStore == nil || host.Config.ConfigStore.DB() == nil {
-		return nil, errors.New("EE identity requires a database config store")
+		return nil, nil, errors.New("EE identity requires a database config store")
 	}
 	options, err := identityOptions(host.Config.SetupToken)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	origin := os.Getenv(envPublicOrigin)
 	if origin == "" {
 		origin = "http://" + net.JoinHostPort(host.Host, host.Port)
 	}
 	if _, _, err = identityhttp.ValidateOrigin(origin); err != nil {
-		return nil, fmt.Errorf("%s must be an HTTPS origin and is required for a non-loopback listener", envPublicOrigin)
+		return nil, nil, fmt.Errorf("%s must be an HTTPS origin and is required for a non-loopback listener", envPublicOrigin)
 	}
 	if err = host.Config.ConfigStore.RunMigration(ctx, persistence.MigrateIdentity(log)); err != nil {
-		return nil, errors.New("EE identity migration failed")
+		return nil, nil, errors.New("EE identity migration failed")
 	}
 	if err = host.Config.ConfigStore.RunMigration(ctx, rbacstore.MigrateRBAC(log)); err != nil {
-		return nil, errors.New("EE RBAC migration failed")
+		return nil, nil, errors.New("EE RBAC migration failed")
 	}
 	svc, permissions, err := newConsoleServices(host.Config.ConfigStore.DB(), options, log)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err = eehost.ImportLegacyAdministrator(ctx, host, svc.Account, log); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	handler, err := identityhttp.NewHandler(svc, origin)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	routes := rbachttp.NewHandler(permissions, svc.Session, handler)
-	return eehost.NewAuthAdapter(host, svc.Session, handler, eehost.WithAdditionalRoutes(routes), eehost.WithRecoveryAnchor(svc.Account.RecoveryAnchor)), nil
+	permissionsAdapter := rbachost.NewAdapter(permissions, log)
+	adapter := eehost.NewAuthAdapter(host, svc.Session, handler, eehost.WithAdditionalRoutes(routes), eehost.WithRecoveryAnchor(svc.Account.RecoveryAnchor), eehost.WithConsoleAccess(permissionsAdapter))
+	return adapter, permissionsAdapter, nil
 }

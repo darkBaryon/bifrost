@@ -9,36 +9,42 @@ import (
 	brandinghandler "github.com/darkBaryon/bifrost/ee/internal/branding/http"
 	eeconfig "github.com/darkBaryon/bifrost/ee/internal/branding/persistence"
 	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
+	rbachost "github.com/darkBaryon/bifrost/ee/internal/rbac/host"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
 
-// Bootstrap 启动前先告诉Bifrost如何创建身份和角色服务，再完成Bifrost自身的准备，最后接入品牌和角色请求方法检查。
+// Bootstrap 启动前先告诉Bifrost如何创建身份和角色服务，再完成Bifrost自身的准备，最后接入品牌并核对所有接口的权限规则。
 // log 由程序入口传入，所有EE日志都使用这份配置。
 func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log schemas.Logger) error {
 	var auth *eehost.AuthAdapter
+	var permissions *rbachost.Adapter
 	// Bifrost准备好数据库后、注册管理路由前，会调用这个函数。
 	// 失败时直接返回nil；如果把空指针放进接口，Bifrost就无法用接口是否为nil来识别缺失的实现。
 	s.ConsoleAuthFactory = func(ctx context.Context, host *bifrostServer.BifrostHTTPServer) (bifrostServer.ConsoleAuthProvider, error) {
-		adapter, err := assembleIdentity(ctx, host, log)
+		adapter, permissionAdapter, err := assembleIdentity(ctx, host, log)
 		if err != nil {
 			return nil, err
 		}
 		auth = adapter
+		permissions = permissionAdapter
 		return adapter, nil
 	}
 	if err := s.Bootstrap(ctx); err != nil {
 		return err
 	}
 	// 如果Bifrost没有调用上面的函数，说明登录检查尚未接好，必须停止启动。
-	if auth == nil {
+	if auth == nil || permissions == nil {
 		return errors.New("ee: console auth factory was not invoked by the host")
 	}
 	if err := attach(ctx, s, auth.APIMiddleware()); err != nil {
 		return err
 	}
-	s.Server.Handler = rbachttp.GuardMethods(s.Server.Handler)
+	if err := permissions.VerifyRoutes(s.Router); err != nil {
+		return err
+	}
+	s.Server.Handler = rbachttp.GuardMethods(permissions.RootGuard(s.Server.Handler))
 	return nil
 }
 

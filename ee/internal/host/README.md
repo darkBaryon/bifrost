@@ -4,10 +4,10 @@
 
 ## 做什么
 
-- 管理接口的鉴权中间件：验 `ee_session` Cookie，只放行主管理员；通过后按上游规矩写 `is_local_admin` 标记，上游的通知、WebSocket 功能靠它判断权限。通过注入取得会话、固定主管理员查询和自管路由能力。Users.Manage只用于账号与角色管理，不能据此放行其他宿主功能。
+- 管理接口的鉴权中间件：验 `ee_session` Cookie，通过注入的权限组件检查已接入接口，其余仍只放行初始化管理员。已有通知、WebSocket入口保留管理员标记和会话重验。Users.Manage只用于账号与角色管理，不能据此放行其他功能。
 - 接管旧的 `/api/session/*` 路由，并注册角色接口；自管接口分别执行认证和业务判权。
 - WebSocket 连接每次推送前重新验证会话，撤销即断开。
-- `GET /api/config` 把旧认证字段替换成只读投影；`PUT` 拒绝对它的修改。
+- `GET /api/config` 把旧认证字段替换成管理员名字和隐藏后的密码；`PUT` 拒绝对它的修改。
 - 启动时把上游旧配置里的管理员导入为主管理员（只在首次）。
 
 ## 不做什么
@@ -19,5 +19,5 @@
 | 文件 | 内容 |
 |---|---|
 | [auth.go](auth.go) | 中间件、会话路由、WebSocket 重验、旧管理员导入 |
-| [config.go](config.go) | `/api/config` 的读投影与写预检 |
-| [auth_test.go](auth_test.go)、[rbac_test.go](rbac_test.go) | 真实路由链的鉴权边界，以及身份查询故障不得回退临时令牌 |
+| [config.go](config.go) | `/api/config` 的认证字段输出和保存前检查 |
+| [auth_test.go](auth_test.go)、[rbac_test.go](rbac_test.go)、[permissions_test.go](permissions_test.go) | 真实路由链的鉴权边界，以及身份或权限查询失败时不能改用旧规则放行 |

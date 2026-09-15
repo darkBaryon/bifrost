@@ -46,6 +46,17 @@ type identityRoutes interface {
 	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
 }
 
+// ConsoleAccess 检查已接入角色授权的接口，并返回本次请求的处理包装；其余接口仍使用初始化管理员限制。
+type ConsoleAccess interface {
+	Manages(method, path string) bool
+	Prepare(context.Context, *fasthttp.RequestCtx, identity.Principal) (schemas.BifrostHTTPMiddleware, error)
+}
+
+// WithConsoleAccess 接入角色权限组件；已接入接口检查失败时直接拒绝，不回退管理员检查。
+func WithConsoleAccess(access ConsoleAccess) AuthOption {
+	return func(a *AuthAdapter) { a.access = access }
+}
+
 // AdditionalRoutes 让角色等模块注册自己的接口，并告诉Bifrost哪些请求由该模块处理。
 // 匹配到的请求交给模块自己检查登录和权限。
 type AdditionalRoutes interface {
@@ -72,6 +83,7 @@ type AuthAdapter struct {
 	service    consoleSessions
 	http       identityRoutes
 	host       *server.BifrostHTTPServer
+	access     ConsoleAccess
 	additional AdditionalRoutes
 	anchor     func(context.Context) (identity.Account, error)
 }
@@ -260,7 +272,7 @@ func (a *AuthAdapter) requireHostAdministrator(ctx context.Context, p identity.P
 }
 
 // APIMiddleware 在Bifrost处理管理请求前检查登录；身份和角色接口交给各自模块检查，公开接口直接放行。
-// 其余管理接口仍要求系统初始化时指定的管理员；原有临时令牌入口按原规则验证。
+// 已接入的管理接口使用角色权限，其余仍要求系统初始化时指定的管理员；原有临时令牌入口按原规则验证。
 // WebSocket连接会再次检查登录，配置接口还会限制旧认证字段的读写。
 func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -300,8 +312,16 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			} else {
 				p, err = a.service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
 			}
+			var wrapper schemas.BifrostHTTPMiddleware
 			if err == nil {
-				err = a.requireHostAdministrator(ctx, p)
+				if a.access != nil && a.access.Manages(method, path) {
+					wrapper, err = a.access.Prepare(ctx, c, p)
+					if err == nil && wrapper == nil {
+						err = identity.ErrUnavailable
+					}
+				} else {
+					err = a.requireHostAdministrator(ctx, p)
+				}
 			}
 			if err != nil {
 				if (errors.Is(err, identity.ErrUnauthorized) || errors.Is(err, identity.ErrForbidden)) && temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
@@ -318,8 +338,10 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				return
 			}
 			c.SetUserValue(principalKey{}, p)
-			c.SetUserValue(schemas.IsLocalAdminContextKey, true)
-			if path == "/ws" {
+			if wrapper == nil {
+				c.SetUserValue(schemas.IsLocalAdminContextKey, true)
+			}
+			if path == "/ws" && wrapper == nil {
 				sessionID := p.SessionID // 连接后还会检查登录，只保留会话编号，避免继续引用已结束的HTTP请求。
 				c.SetUserValue(handlers.WebSocketAuthorizeContextKey, func(ctx context.Context) error {
 					ctx = identity.WithDiagnosticOperation(ctx, "identity.websocket")
@@ -331,10 +353,18 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				})
 			}
 			if path == "/api/config" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) {
-				a.serveConfig(ctx, c, p, next)
+				configHandler := next
+				if wrapper != nil {
+					configHandler = wrapper(next)
+				}
+				a.serveConfig(ctx, c, p, configHandler)
 				return
 			}
-			next(c)
+			if wrapper != nil {
+				wrapper(next)(c)
+			} else {
+				next(c)
+			}
 		}
 	}
 }

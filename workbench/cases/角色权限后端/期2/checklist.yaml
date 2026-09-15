@@ -1,0 +1,67 @@
+方案合同:
+  版本: 1
+  批次: 期2
+  已定稿: true
+  评审状态: 按用户授权准备候选，待逐步阅读确认；非正式Gate2
+必过命令:
+- name: phase2-scope
+  run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase='972c2efd9'\n\
+    for name in subprocess.check_output(['git','ls-tree','-r','--name-only',base,'ee/internal/rbac','ee/internal/identity'],text=True).splitlines():\n\
+    \    if name.endswith('.go'):\n        assert Path(name).read_bytes()==subprocess.check_output(['git','show',base+':'+name]),\
+    \ '改动了期1代码：'+name\nfiles={'authorization.go','routes.go','request.go','response.go','providers.go','authorization_test.go','routes_test.go','request_test.go','response_test.go','routes.txt','README.md'}\n\
+    root=Path('ee/internal/rbac/host')\nassert {p.name for p in root.iterdir()}==files\n\
+    allowed={'ee/internal/rbac/host/'+n for n in files}\nallowed.update(['ee/internal/app/bootstrap.go','ee/internal/app/identity.go','ee/internal/host/auth.go','ee/internal/host/permissions_test.go','ee/scripts/rbac-phase2-smoke.py','ee/README.md','ee/internal/app/README.md','ee/internal/host/README.md','ee/internal/rbac/README.md','product/上游改动/README.md','transports/bifrost-http/handlers/providers.go','transports/bifrost-http/handlers/consolepolicy.go','transports/bifrost-http/handlers/consolepolicy_test.go'])\n\
+    changed=subprocess.check_output(['git','-c','core.quotepath=false','diff','--name-only',base],text=True).splitlines()\n\
+    new=subprocess.check_output(['git','-c','core.quotepath=false','ls-files','--others','--exclude-standard'],text=True).splitlines()\n\
+    assert all(p in allowed or p.startswith('workbench/') for p in changed+new), '超出期2范围'\n\
+    for name in allowed:\n    if name.endswith('.go'):\n        assert len(Path(name).read_text().splitlines())<=500\
+    \ or name=='transports/bifrost-http/handlers/providers.go',name\nfor name in files:\n\
+    \    if name.endswith('.go') and not name.endswith('_test.go'):\n        s=(root/name).read_text()\n\
+    \        assert not any(word in s for word in ['guardLogsQuery','guardPluginMutation','guardSettingsInput','guardNotificationPolicy','guardWebhookInput','guardWebsocket','projectionLogsContent','projectionPluginSafe','projectionSettingsSafe','projectionWebhookSafe','projectionMessageFilter']),name\n\
+    num=subprocess.check_output(['git','diff','--numstat',base,'--','transports/bifrost-http/handlers/providers.go'],text=True).split()\n\
+    assert num[:2]==['9','0'], 'Provider扩展点不再是纯增量'\nprint('期2范围通过：期1 Go冻结，五个主体文件，无期3/4授权，上游Provider只增加9行')\n\
+    CHECK\n"
+- name: whitespace
+  run: git diff --check
+- name: go-format
+  run: gofmt -l ee/internal/rbac/host ee/internal/host/auth.go ee/internal/host/permissions_test.go
+    ee/internal/app/bootstrap.go ee/internal/app/identity.go transports/bifrost-http/handlers/consolepolicy.go
+    transports/bifrost-http/handlers/consolepolicy_test.go transports/bifrost-http/handlers/providers.go
+  expect_empty: true
+- name: ee-vet
+  run: cd ee && GOWORK=off go vet ./cmd/... ./internal/...
+- name: ee-race
+  run: cd ee && GOWORK=off go test -race ./cmd/... ./internal/...
+- name: provider-policy
+  run: go test ./transports/bifrost-http/handlers -run 'TestProviderPolicy|Test.*WebSocket|TestRequestLogTarget'
+- name: ee-build
+  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase2 ./cmd/bifrost-http
+- name: sqlite-http
+  run: python3 ee/scripts/rbac-phase2-smoke.py --binary ee/tmp/bifrost-rbac-phase2
+    --database sqlite
+- name: postgres-http
+  run: python3 ee/scripts/rbac-phase2-smoke.py --binary ee/tmp/bifrost-rbac-phase2
+    --database postgres
+- name: workbench
+  run: python3 workbench/tools/build_views.py --check
+必存产物:
+- ee/internal/rbac/host/routes.txt
+- ee/internal/rbac/host/README.md
+- ee/scripts/rbac-phase2-smoke.py
+- workbench/cases/角色权限后端/期2/方案v1.md
+- workbench/evidence/角色权限后端-期2-阅读与验收.md
+必含符号:
+- grep: TestEveryManagedRouteAuthorization
+  in: ee/internal/rbac/host
+- grep: TestRouteSourceDigest
+  in: ee/internal/rbac/host
+- grep: TestRolePolicyFailureDoesNotFallBack
+  in: ee/internal/host/permissions_test.go
+- grep: ConsoleProviderUpdatePolicy
+  in: transports/bifrost-http/handlers/providers.go
+收敛评审:
+  风险等级: L3
+  基线: 972c2efd9
+  开发指南:
+  - ee/internal/rbac/host/README.md
+禁留标记: []
