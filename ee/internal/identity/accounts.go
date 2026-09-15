@@ -23,7 +23,10 @@ func (s *AccountService) BootstrapLegacy(ctx context.Context, username, password
 		if err := tx.InsertAccount(c); err != nil {
 			return err
 		}
-		return tx.SaveState(State{Initialized: true, ChiefAccountID: c.ID})
+		if err := tx.SaveState(State{Initialized: true, ChiefAccountID: c.ID}); err != nil {
+			return err
+		}
+		return s.accessPolicy(tx).AfterInitialize(ctx, tx.State())
 	}))
 }
 
@@ -62,12 +65,12 @@ func (s *AccountService) Initialize(ctx context.Context, setupToken, username, p
 			return err
 		}
 		out = c.Account
-		return nil
+		return s.accessPolicy(tx).AfterInitialize(ctx, tx.State())
 	})
 	return out, SafeError(err)
 }
 
-// CreateAccount 由主管理员建号，使用部署初始密码并要求首次登录改密。
+// CreateAccount 经 CreateAccounts 策略授权后建号，使用部署初始密码并要求首次登录改密。
 // 用户名重复返回 ErrConflict；哈希在事务外计算，事务内再次核对调用方权限。
 func (s *AccountService) CreateAccount(ctx context.Context, p Principal, username, displayName string) (Account, error) {
 	if err := s.RequireAccountManager(ctx, p); err != nil {
@@ -82,7 +85,7 @@ func (s *AccountService) CreateAccount(ctx context.Context, p Principal, usernam
 	}
 	var out Account
 	err = s.repo.Transaction(ctx, func(tx Tx) error {
-		if _, err := s.manager(tx, p); err != nil {
+		if _, err := s.actor(ctx, tx, p, CreateAccounts, ""); err != nil {
 			return err
 		}
 		if _, err := tx.AccountByName(username); err == nil {
@@ -102,14 +105,14 @@ func (s *AccountService) CreateAccount(ctx context.Context, p Principal, usernam
 }
 
 // SetAccountStatus 启用或停用账号并撤销其全部会话；同状态幂等，不升版本也不撤销。
-// 主管理员不能停用自己；启用不恢复旧会话。
+// 操作者不能停用自己；启用不恢复旧会话。
 func (s *AccountService) SetAccountStatus(ctx context.Context, p Principal, id string, status AccountStatus) (Account, error) {
 	if status != StatusActive && status != StatusDisabled {
 		return Account{}, ErrInvalid
 	}
 	var out Account
 	err := s.repo.Transaction(ctx, func(tx Tx) error {
-		if _, err := s.manager(tx, p); err != nil {
+		if _, err := s.actor(ctx, tx, p, ChangeAccountStatus, id); err != nil {
 			return err
 		}
 		if id == p.AccountID && status == StatusDisabled {
@@ -120,6 +123,9 @@ func (s *AccountService) SetAccountStatus(ctx context.Context, p Principal, id s
 			return err
 		}
 		if c.Status != status {
+			if err := s.accessPolicy(tx).BeforeStatusChange(ctx, tx.State(), p, c.Account, status); err != nil {
+				return err
+			}
 			c.Status = status
 			c.AuthVersion++
 			c.UpdatedAt = now()
@@ -136,10 +142,10 @@ func (s *AccountService) SetAccountStatus(ctx context.Context, p Principal, id s
 	return out, SafeError(err)
 }
 
-// ListAccounts 由主管理员分页读取账号；多取一条判断是否还有下一页。
+// ListAccounts 经 ReadAccounts 策略授权后分页读取账号；多取一条判断是否还有下一页。
 func (s *AccountService) ListAccounts(ctx context.Context, p Principal, cursor string, limit int) (AccountPage, error) {
 	out := AccountPage{Items: []Account{}}
-	if err := s.RequireAccountManager(ctx, p); err != nil {
+	if err := s.requireAction(ctx, p, ReadAccounts, ""); err != nil {
 		return out, err
 	}
 	c, err := page(cursor, limit)

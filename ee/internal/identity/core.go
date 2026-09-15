@@ -175,40 +175,15 @@ func fullSession(p Principal) error {
 	return nil
 }
 
-// authorize 要求正常会话且具备账号管理权限。
-func (s *core) authorize(state State, p Principal) error {
-	if err := fullSession(p); err != nil {
-		return err
-	}
-	return s.policy.RequireAccountManager(state, p)
-}
-
-// manager 在事务内核对调用方仍是正常会话且有账号管理权限，返回其账号记录。
-func (s *core) manager(tx Tx, p Principal) (AccountRecord, error) {
-	actual, c, err := current(tx.AuthByID, p)
-	if err != nil {
-		return c, err
-	}
-	return c, s.authorize(tx.State(), actual)
-}
-
-// State 返回初始化状态与主管理员账号；经嵌入提升到三条线，外部从任意一条调用等价。
+// State 返回初始化状态与固定恢复锚点账号；经嵌入提升到三条线，外部从任意一条调用等价。
 func (s *core) State(ctx context.Context) (State, error) {
 	v, err := s.repo.State(ctx)
 	return v, SafeError(err)
 }
 
-// RequireAccountManager 供宿主对管理路由使用：重新核对会话，并要求正常会话与管理权限；同 State，三条线上等价。
+// RequireAccountManager 供既有宿主入口使用：重验正常会话并应用 CreateAccounts 策略；同 State，三条线上等价。
 func (s *core) RequireAccountManager(ctx context.Context, p Principal) error {
-	actual, _, err := s.current(ctx, p)
-	if err != nil {
-		return err
-	}
-	state, err := s.State(ctx)
-	if err != nil {
-		return err
-	}
-	return s.authorize(state, actual)
+	return s.requireAction(ctx, p, CreateAccounts, "")
 }
 
 // page 校验分页参数并解码游标：limit 必须在 1 到 MaxPageSize 之间，游标为空或可解码；不改写 limit。

@@ -50,7 +50,7 @@ type EventAction string
 
 const (
 	ActionPasswordChange EventAction = "password_change" // 本人改密
-	ActionPasswordReset  EventAction = "password_reset"  // 主管理员重置
+	ActionPasswordReset  EventAction = "password_reset"  // 管理者重置
 	ActionAdminRecovery  EventAction = "admin_recovery"  // 离线恢复命令
 )
 
@@ -130,7 +130,7 @@ type AccountRecord struct {
 	UpdatedAt    time.Time
 }
 
-// State 是身份单例状态：是否已初始化以及主管理员账号。
+// State 是身份单例状态：是否已初始化以及固定恢复锚点账号。
 type State struct {
 	Initialized    bool
 	ChiefAccountID string
@@ -206,9 +206,11 @@ type LoginLimit struct {
 	Window time.Duration
 }
 
-// Repository 由存储实现；读取方法在事务外执行，写入通过 Transaction。
+// Repository 提供账号存储；Read让一组查询看到同一份数据，Transaction让一组修改一起提交或回滚。
 // 读取未找到时返回 ErrNotFound，同时返回的值是零值，调用方不得使用；存储故障原样返回，由服务折叠为 ErrUnavailable。
 type Repository interface {
+	// Read执行一组账号查询，传入的Queries只供本次回调使用。
+	Read(context.Context, func(Queries) error) error
 	// State 读取单例状态；迁移完成后该行必然存在。
 	State(context.Context) (State, error)
 	// RecordByName 按登录名读取完整账号记录。
@@ -228,6 +230,8 @@ type Repository interface {
 
 // Tx 是一个已锁定 state 的身份事务；读取未找到时返回 ErrNotFound。
 type Tx interface {
+	// AccessPolicy返回加入当前事务的账号操作策略；未配置时由业务服务使用默认策略。
+	AccessPolicy() AccountPolicy
 	State() State
 	SaveState(State) error
 	Account(string) (AccountRecord, error)
@@ -251,27 +255,6 @@ type PasswordHasher interface {
 	Hash(string) (string, error)
 	Compare(string, string) (bool, error)
 	ValidHash(string) bool
-}
-
-// AccountPolicy 决定谁能管理账号；State 由服务在同一读取或事务中提供，后续 RBAC 通过装配替换。
-// 受限会话（仍需改密）的限制由服务执行，策略不必重复检查。
-type AccountPolicy interface {
-	RequireAccountManager(State, Principal) error
-	CanReadAllPasswordEvents(State, Principal) (bool, error)
-}
-
-// ChiefPolicy 是 RBAC 接入前的暂行策略：只有主管理员能管理账号并查看全部事件。
-type ChiefPolicy struct{}
-
-func (ChiefPolicy) RequireAccountManager(state State, p Principal) error {
-	if !state.Initialized || p.AccountID != state.ChiefAccountID {
-		return ErrForbidden
-	}
-	return nil
-}
-
-func (c ChiefPolicy) CanReadAllPasswordEvents(state State, p Principal) (bool, error) {
-	return c.RequireAccountManager(state, p) == nil, nil
 }
 
 // 诊断关联：入口为一次操作分配 ID，存储在失败时连同操作名一起记录，日志不含凭据或 HTTP 对象。

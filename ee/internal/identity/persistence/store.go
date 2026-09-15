@@ -18,13 +18,18 @@ import (
 
 // Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
 type Store struct {
-	db  *gorm.DB
-	log Logger
+	db            *gorm.DB
+	log           Logger
+	policyFactory PolicyFactory
 }
 
 // NewStore 复用宿主的数据库连接；存储故障经 log 记录安全诊断。
-func NewStore(db *gorm.DB, log Logger) *Store {
-	return &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}), log: log}
+func NewStore(db *gorm.DB, log Logger, options ...Option) *Store {
+	s := &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}), log: log}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 func notFound(err error) error {
@@ -105,9 +110,10 @@ func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, e
 
 // transaction 实现 identity.Tx；stage 记录最近执行的操作，供失败诊断定位阶段。
 type transaction struct {
-	db    *gorm.DB
-	state identity.State
-	stage string
+	db     *gorm.DB
+	state  identity.State
+	stage  string
+	policy identity.AccountPolicy
 }
 
 func (t *transaction) State() identity.State { return t.state }
@@ -228,19 +234,20 @@ func (s *Store) transaction(ctx context.Context, fn func(*transaction) error) er
 		phase = "transaction.begin"
 		return s.db.WithContext(ctx).Transaction(func(db *gorm.DB) error {
 			phase = "transaction.lock"
-			result := db.Model(&stateRow{}).Where("id = 1").UpdateColumn("revision", gorm.Expr("revision + 1"))
-			if result.Error != nil {
-				return result.Error
-			}
-			if result.RowsAffected != 1 {
-				return identity.ErrUnavailable
-			}
-			var row stateRow
-			if e := db.First(&row, 1).Error; e != nil {
+			t, e := lockTransaction(db)
+			if e != nil {
 				return e
 			}
-			t := &transaction{db: db, state: identity.State{Initialized: row.Initialized, ChiefAccountID: row.ChiefAccountID}, stage: "transaction.operation"}
-			e := fn(t)
+			if s.policyFactory != nil {
+				t.policy, e = s.policyFactory(db, readView{t})
+				if e != nil {
+					return e
+				}
+				if t.policy == nil {
+					return identity.ErrUnavailable
+				}
+			}
+			e = fn(t)
 			phase = t.stage
 			if e == nil {
 				phase = "transaction.commit"

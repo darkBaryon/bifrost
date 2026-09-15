@@ -1,59 +1,76 @@
-# 批次1A收口清单；固定用户确认后的源码，不再要求等同抽取前的原文件。
+# 当前检查对象为1B；1A在d811dfd07冻结，清单另存checklist-1A.yaml。
 方案合同:
-  版本: 5
-  批次: 1A
+  版本: 6
+  批次: 1B
   已定稿: true
-  评审状态: 2026-09-16 用户逐文件阅读确认1A；不代表完整期1 Gate 2
+  评审状态: 按用户授权准备独立候选；1B尚待用户阅读确认
 必过命令:
-- name: isolated-scope-and-approved-source
-  run: "python3 - <<'CHECK'\nimport hashlib, subprocess\nfrom pathlib import Path\nbase = 'f371548b5444693d7e259033bec9f4a467e3748b'\n\
-    root = Path('ee/internal/rbac')\napproved = {'permissions.go': '338526d748eb51fe2213afde0118740d1d1b411d7e0dba220830e30682df1bc8',\
-    \ 'roles.go': 'bc3200845066c804ebad1ea13b264bbf8691c6a40328e28e9932451267d0c676', 'authorize.go': 'b08d5e85712ee5bd05edc62d692d9fd7cac4568f9d036ccb24f8136bd3af2c7b',\
-    \ 'assignments.go': '8b86a3757690df8d595f31bdae00eee8736148fecb9f2dfd4cc03e6ab01a7749', 'repository.go': '69112c37ac434b95e7b50d02956954c0de3654a826939c909eaddc8df6de48c3',\
-    \ 'errors.go': '90d7cdfc1a1ef65138d816fb257ea5c397ecdf4d3446d804ef01c4ebae96d4b8'}\nallowed = set(approved)\
-    \ | {'roles_test.go', 'fixture_test.go', 'service_test.go', 'README.md'}\nassert {p.name for p in root.iterdir()}\
-    \ == allowed, '本批混入了额外文件或后续包'\nfor name, digest in approved.items():\n    assert hashlib.sha256((root / name).read_bytes()).hexdigest()\
-    \ == digest, name + '偏离用户确认的1A版本'\nchanged = subprocess.check_output(['git', 'diff', '--name-only', '-z', base],\
-    \ text=True).split('\\0')\nnew = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard',\
-    \ '-z'], text=True).split('\\0')\nassert all(not p or p.startswith(('ee/internal/rbac/', 'workbench/')) for\
-    \ p in changed + new), '带入运行时或其他业务改动'\nprint('批次1A：6个业务文件913行，已确认源码一致，无运行时接入')\nCHECK\n"
+- name: batch-1b-scope
+  run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase = 'd811dfd07'\nroot = Path('ee/internal/rbac')\n\
+    production = ['permissions.go', 'roles.go', 'authorize.go', 'assignments.go', 'repository.go', 'errors.go']\n\
+    for name in production:\n    expected = subprocess.check_output(['git', 'show', base + ':ee/internal/rbac/'\
+    \ + name])\n    assert (root / name).read_bytes() == expected, '覆盖了1A已确认文件：' + name\nassert {p.name for p in\
+    \ root.iterdir()} == set(production + ['README.md', 'roles_test.go', 'service_test.go', 'fixture_test.go', 'identity',\
+    \ 'persistence'])\nidentity = {'README.md', 'access.go', 'accounts.go', 'core.go', 'model.go', 'passwords.go',\
+    \ 'session.go', 'persistence/README.md', 'persistence/scope.go', 'persistence/store.go'}\nallowed = {'ee/internal/identity/'\
+    \ + name for name in identity}\nallowed.add('ee/internal/rbac/README.md')\nfor folder, names in {\n    'persistence':\
+    \ ['store.go', 'rows.go', 'roles.go', 'migration.go', 'service_test.go', 'lifecycle_test.go', 'scope_test.go',\
+    \ 'concurrency_test.go'],\n    'identity': ['policy.go', 'policy_test.go'],\n}.items():\n    assert {p.name\
+    \ for p in (root / folder).iterdir()} == set(names)\n    allowed.update('ee/internal/rbac/' + folder + '/' +\
+    \ name for name in names)\nchanged = subprocess.check_output(['git', 'diff', '--name-only', '-z', base], text=True).split('\\\
+    0')\nnew = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'], text=True).split('\\\
+    0')\nassert all(not p or p in allowed or p.startswith('workbench/') for p in changed + new), '混入了本批范围外代码'\n\
+    for name in allowed:\n    if name.endswith('.go') and not name.endswith('_test.go'):\n        text = Path(name).read_text()\n\
+    \        assert 'OpenConsoleStream' not in text and 'rbac/http' not in text and 'rbac/host' not in text, name\n\
+    \        assert len(text.splitlines()) <= 500, name + '超过文件行数上限'\nprint('1B范围通过：保留1A六个文件，无HTTP/app/host/上游或通知授权接线')\n\
+    CHECK\n"
 - name: whitespace
   run: git diff --check
 - name: go-format
-  run: gofmt -l ee/internal/rbac
+  run: gofmt -l ee/internal/rbac ee/internal/identity
   expect_empty: true
+- name: sqlite-integration
+  run: cd ee && env -u RBAC_TEST_POSTGRES_DSN -u IDENTITY_TEST_POSTGRES_DSN GOWORK=off go test -race ./internal/rbac/...
+    ./internal/identity/persistence
+- name: postgres-integration
+  run: test -n "$RBAC_TEST_POSTGRES_DSN" && test -n "$IDENTITY_TEST_POSTGRES_DSN" && cd ee && GOWORK=off go test
+    -race ./internal/rbac/... ./internal/identity/persistence
 - name: ee-vet
   run: cd ee && GOWORK=off go vet ./cmd/... ./internal/...
 - name: ee-tests-race
   run: cd ee && GOWORK=off go test -race ./cmd/... ./internal/...
 - name: ee-build
-  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1a ./cmd/bifrost-http
+  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1b ./cmd/bifrost-http
 - name: workbench
   run: python3 workbench/tools/build_views.py --check
 必存产物:
 - ee/internal/rbac/README.md
-- ee/internal/rbac/permissions.go
-- ee/internal/rbac/authorize.go
-- ee/internal/rbac/roles.go
-- ee/internal/rbac/assignments.go
-- ee/internal/rbac/roles_test.go
-- ee/internal/rbac/fixture_test.go
-- ee/internal/rbac/service_test.go
-- workbench/cases/角色权限后端/开发蓝图.md
-- workbench/cases/角色权限后端/期1/方案v5.md
-- ee/internal/rbac/repository.go
-- ee/internal/rbac/errors.go
-- workbench/evidence/角色权限后端-期1-批次1A阅读与验收.md
+- ee/internal/rbac/persistence/rows.go
+- ee/internal/rbac/persistence/store.go
+- ee/internal/rbac/persistence/roles.go
+- ee/internal/rbac/persistence/migration.go
+- ee/internal/rbac/identity/policy.go
+- ee/internal/identity/access.go
+- ee/internal/identity/persistence/scope.go
+- workbench/cases/角色权限后端/期1/方案v6.md
+- workbench/cases/角色权限后端/期1/checklist-1A.yaml
+- workbench/evidence/角色权限后端-期1-批次1B阅读与验收.md
 必含符号:
-- grep: TestMultipleRolesSourcesAndRevocation
-  in: ee/internal/rbac
-- grep: TestChiefAssignmentAndRecoveryRules
-  in: ee/internal/rbac
-- grep: type Queries interface
-  in: ee/internal/rbac/repository.go
+- grep: TestConcurrentLastChiefAcrossFeatures
+  in: ee/internal/rbac/persistence
+- grep: TestLastChiefDisableBeforeUnassign
+  in: ee/internal/rbac/persistence
+- grep: TestLifecycleFailureRollsBackBothFeatures
+  in: ee/internal/rbac/persistence
+- grep: TestConcurrentDeleteAndAssign
+  in: ee/internal/rbac/persistence
+- grep: TestFirstBindingDatabaseFailure
+  in: ee/internal/rbac/persistence
+- grep: TestPermissionQueryFailureDoesNotDowngradeOrCommit
+  in: ee/internal/rbac/persistence
 收敛评审:
   风险等级: L3
-  基线: f371548b5444693d7e259033bec9f4a467e3748b
+  基线: d811dfd07
   开发指南:
   - ee/internal/rbac/README.md
 禁留标记: []

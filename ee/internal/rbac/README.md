@@ -6,7 +6,7 @@
 让管理员将权限组成角色、把角色分配给账号，并判断账号能否执行某项操作、权限来自哪些角色。
 同时保护预置角色和最后一个可用的主管理员，避免误操作后无人能管理系统。
 
-目前只有业务规则及所需的存储接口，尚未接入真实数据库、登录会话或 HTTP，应用还没有调用本包。
+本包包含业务规则、数据库实现和身份协作。当前应用尚未装配本包；真实数据库及会话通过集成测试连接，HTTP接入留到后续批次。
 账号、密码和会话由身份模块负责；调用模型使用的虚拟密钥权限也不属于这里。
 
 ## 代码在哪
@@ -21,6 +21,11 @@
 | [assignments.go](assignments.go) | 给账号分配角色，保护最后主管理员，以及初始化和恢复时使用的账号信息与角色绑定 |
 | [repository.go](repository.go) | `Queries` 提供查询，`Tx` 增加修改，`Repository` 管理事务；数据库实现需遵守的约定 |
 | [errors.go](errors.go) | 对外返回的错误，以及数据库内部错误的隐藏处理 |
+| [persistence/rows.go](persistence/rows.go) | 角色、角色权限和账号角色三张表 |
+| [persistence/store.go](persistence/store.go) | 实现查询/事务接口，复用身份模块提供的连接和账号查询 |
+| [persistence/roles.go](persistence/roles.go) | 角色及分配关系的数据库读写 |
+| [persistence/migration.go](persistence/migration.go) | 建表、预置角色及首次绑定，重复执行不覆盖用户修改 |
+| [identity/policy.go](identity/policy.go) | 把账号动作对应到权限检查，将初始化和恢复绑定加入身份事务 |
 | [roles_test.go](roles_test.go) | 权限目录与分页游标的规则测试 |
 | [service_test.go](service_test.go) | 从业务入口验证角色操作、分配、撤权和保护规则 |
 | [fixture_test.go](fixture_test.go) | 为规则测试提供内存数据，不模拟真实会话或数据库事务 |
@@ -35,4 +40,5 @@
 - 删除角色要计入停用账号的关联；离线恢复只补回恢复账号的主管理员角色，保留其他角色。
 
 规则测试：在 `ee/` 执行 `GOWORK=off go test -race ./internal/rbac`。
-数据库、接口及管理功能的接入边界见[开发蓝图](../../../workbench/cases/角色权限后端/开发蓝图.md)。
+存储集成测试在 `persistence/*_test.go`，默认使用临时SQLite；设置 `RBAC_TEST_POSTGRES_DSN` 后使用独立PostgreSQL schema。
+接口及管理功能的接入边界见[开发蓝图](../../../workbench/cases/角色权限后端/开发蓝图.md)。
