@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DsKLSDJq.js";import{t}from"./contactUsView-BXa4SrBS.js";var n=e();function r({icon:e,title:r,description:i,readmeLink:a,testIdPrefix:o}){return(0,n.jsx)(`div`,{className:`h-full w-full`,children:(0,n.jsx)(t,{className:`mx-auto min-h-[80vh]`,icon:e,title:r,description:i,readmeLink:a,testIdPrefix:o})})}export{r as t};

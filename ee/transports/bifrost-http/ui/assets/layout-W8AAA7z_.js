@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DsKLSDJq.js";import{t}from"./noPermissionView-C9FCYogK.js";import{ui as n}from"./index-Bw4AbbHt.js";import{i as r,r as i,t as a}from"./lib-Dg9XXLRc.js";var o=e();function s(){return r(i.Governance,a.View)?(0,o.jsx)(n,{}):(0,o.jsx)(t,{entity:`alerting`})}export{s as component};

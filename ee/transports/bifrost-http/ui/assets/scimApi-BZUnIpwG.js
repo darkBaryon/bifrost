@@ -1,0 +1,1 @@
+var e=(e,t)=>({data:void 0,isLoading:!1,isError:!1,error:null}),t=(e,t)=>({data:[],isLoading:!1,isError:!1,error:null});export{t as n,e as t};

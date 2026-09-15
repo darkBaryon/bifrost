@@ -1,0 +1,1 @@
+import{t as e}from"./clsx-CjueKrWZ.js";import{t}from"./bundle-mjs-_luiSGPg.js";function n(...n){return t(e(n))}var r=e=>{let t=e.relatedTarget;t?.getAttribute(`role`)===`dialog`||t?.getAttribute(`role`)===`tabpanel`||t?.focus()};export{r as n,n as t};

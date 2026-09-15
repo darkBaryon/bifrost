@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DsKLSDJq.js";import{ei as t,ti as n}from"./index-Bw4AbbHt.js";var r=e();function i({className:e}){return(0,r.jsx)(`div`,{className:n(`h-base pb-1/2 flex items-center justify-center`,e),children:(0,r.jsx)(t,{className:`h-4 w-4 animate-spin`})})}export{i as t};

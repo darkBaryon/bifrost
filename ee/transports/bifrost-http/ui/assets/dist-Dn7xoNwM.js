@@ -1,0 +1,1 @@
+import{r as e}from"./chunk-QTnfLwEv.js";import{t}from"./react-DRwH9hAb.js";import{s as n}from"./dist-nPPmFN9G.js";var r=e(t(),1),i=r.useId||(()=>void 0),a=0;function o(e){let[t,o]=r.useState(i());return n(()=>{e||o(e=>e??String(a++))},[e]),e||(t?`radix-${t}`:``)}export{o as t};

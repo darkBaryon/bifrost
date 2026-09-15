@@ -1,6 +1,6 @@
 # 密码哈希适配
 
-把上游 `framework/encrypt` 的 bcrypt 包装成 `identity.PasswordHasher`，由 [app](../../app/README.md) 注入身份服务。放在 `identity/` 下而不是宿主接入包，因为它适配的是一个库，不触及运行中的宿主对象。
+上游有一个加密工具包，里面有现成的 bcrypt 实现。本包把它包成身份模块要求的哈希接口，由 [app](../../app/README.md) 注入。放在 `identity/` 下而不是宿主接入包，因为它适配的是一个库，不触及运行中的宿主对象。
 
 ## 做什么
 

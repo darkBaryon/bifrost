@@ -1,0 +1,1 @@
+import{r as e}from"./chunk-QTnfLwEv.js";import{t}from"./react-DRwH9hAb.js";var n=e(t()),r=768;function i(){let[e,t]=n.useState(void 0);return n.useEffect(()=>{let e=window.matchMedia(`(max-width: ${r-1}px)`),n=()=>{t(window.innerWidth<r)};return e.addEventListener(`change`,n),t(window.innerWidth<r),()=>e.removeEventListener(`change`,n)},[]),!!e}export{i as t};

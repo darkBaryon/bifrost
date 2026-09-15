@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DsKLSDJq.js";import{t}from"./modelLimitsView-fpZNMHaj.js";var n=e();function r(){return(0,n.jsx)(`div`,{className:`no-padding-parent mx-auto flex h-[calc(var(--app-content-viewport)_-_var(--app-bottom-padding))] min-h-0 w-full flex-col overflow-hidden p-4`,children:(0,n.jsx)(t,{})})}function i(){return(0,n.jsx)(r,{})}export{i as component};

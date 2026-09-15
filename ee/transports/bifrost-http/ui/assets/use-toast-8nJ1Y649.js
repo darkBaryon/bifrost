@@ -1,0 +1,1 @@
+import{n as e}from"./dist-ByP1CZZF.js";function t(){return{toast:({title:t,description:n,variant:r})=>{let i=n?`${t}: ${n}`:t;r===`destructive`?e.error(i):e.success(i)}}}export{t};

@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DsKLSDJq.js";import{t}from"./noPermissionView-C9FCYogK.js";import{i as n,r,t as i}from"./lib-Dg9XXLRc.js";function a(){return null}var o=e();function s(){return(0,o.jsx)(a,{})}function c(){return n(r.UserProvisioning,i.View)?(0,o.jsx)(s,{}):(0,o.jsx)(t,{entity:`user provisioning`})}export{c as component};
