@@ -67,3 +67,33 @@ temp/
 # Go workspaces (local only)
 go.work
 go.work.sum
+
+# 本地递归依赖、构建输出和工作区不进入 EE 构建上下文。
+**/node_modules
+**/go.work
+**/go.work.sum
+**/tmp
+**/out
+ui/app/enterprise
+ee/cmd/bifrost-http/ui
+ee/transports/bifrost-http/ui
+transports/bifrost-http/ui
+.worktrees
+worktrees
+specs
+workbench
+product
+
+# 运行配置、数据库和密钥只在部署时挂载。
+**/.env
+**/.env.*
+**/*.env
+**/*.db
+**/*.db-*
+**/*.sqlite
+**/*.sqlite-*
+**/id_rsa
+**/id_ed25519
+**/.ssh
+**/.kube
+**/.docker
