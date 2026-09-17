@@ -251,3 +251,21 @@ triggered_by: [内容安全框架]
 evidence: "workbench/tools/convergence_review.py:71 的 section 仅匹配 startswith('转收敛评审')，但代码评审模板产出的栏目带数字，例如本案代码评审 2 的「## 5. 转收敛评审 / 挂账」，导致 :174 提取为空、脚本未自动附上转交项。已将原栏目不作改写地附入方案 v2 的实施记录供差量复核读取；未修改评审记录、提示词或工具代码。"
 convert_when: "下次修改独立评审启动工具时，支持编号标题并增加带编号/不带编号的提取回归，避免两侧转交项静默遗漏"
 ```
+
+## 内容安全框架（2026-09-17，开发联调补审）
+
+```yaml
+id: FIND-028
+status: 观察中
+triggered_by: [内容安全框架]
+evidence: "收敛评审 5 S1：ee/scripts/identity-smoke.py 的 Node.start 新增 extra_env 后，pricing-smoke.py 仍复制启动逻辑。定价子类另有变量白名单、log_offset 和 JSON 日志等差异，暂不机械替换；其仅因父类剥离环境变量而复制的说明需要重新核实。"
+convert_when: "下次修改定价冒烟启动或环境隔离逻辑时，评估复用父类新增参数，并保留定价变量白名单、日志起点和日志格式需求"
+```
+
+```yaml
+id: FIND-029
+status: 观察中
+triggered_by: [内容安全框架]
+evidence: "收敛评审 5 S2：从 origin/develop 53d83a9ee 带入的 deploy/构建基础镜像.md:40 仍写本次修改未提交，deploy/K8s部署步骤.md:35 包含个人 kubeconfig 路径，末尾混有单次验证记录。这些文件不是本安全 Change 编写。"
+convert_when: "下次维护部署操作说明时，移除过时的提交状态，个人路径改成配置参数，分清长期操作步骤和单次验证证据"
+```

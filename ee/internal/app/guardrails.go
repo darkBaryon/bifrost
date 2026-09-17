@@ -13,6 +13,7 @@ import (
 	safetyplugin "github.com/darkBaryon/bifrost/ee/internal/guardrails/plugin"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
+	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -21,9 +22,12 @@ const (
 	fakeInputBlock    = "input-block"
 	fakeInputObserve  = "input-observe"
 	fakeOutputBlock   = "output-block"
-	// 以下为开发夹具的固定预算，不代表生产防护策略。
+	// 以下为开发夹具的固定配置，不代表生产防护策略。
+	fakeDetectorID   = "dev-fake"
 	fakeMaxTextBytes = 64 * 1024
 	fakeTimeout      = time.Second
+	// 开发夹具的拒绝状态。
+	fakeDenyStatus = fasthttp.StatusBadRequest
 	// 在内置插件之前执行，覆盖可能提前返回的缓存等响应。
 	fakePluginOrder = math.MinInt
 )
@@ -34,7 +38,7 @@ func assembleGuardrails(ctx context.Context, host *bifrostServer.BifrostHTTPServ
 		return nil
 	}
 	rule := guardrails.Rule{
-		ID: "dev-fake", DetectorID: "dev-fake", Category: guardrails.BusinessRule,
+		ID: fakeDetectorID, DetectorID: fakeDetectorID, Category: guardrails.BusinessRule,
 		Stage: guardrails.Input, Threshold: guardrails.High,
 		OnMatch: guardrails.Block, OnError: guardrails.Block, Timeout: fakeTimeout,
 	}
@@ -47,12 +51,12 @@ func assembleGuardrails(ctx context.Context, host *bifrostServer.BifrostHTTPServ
 	default:
 		return fmt.Errorf("%s must be input-block, input-observe or output-block; unset it to disable", envGuardrailsFake)
 	}
-	checker, err := guardrails.New([]guardrails.Rule{rule}, map[string]guardrails.Detector{"dev-fake": fake.Detector{}}, fakeMaxTextBytes)
+	checker, err := guardrails.New([]guardrails.Rule{rule}, map[string]guardrails.Detector{fakeDetectorID: fake.Detector{}}, fakeMaxTextBytes)
 	if err != nil {
 		return err
 	}
 	plugin, err := safetyplugin.New(checker, safetyplugin.Options{
-		StatusCode: 400, DenyMessage: "开发测试：内容命中假检测器，已拦截",
+		StatusCode: fakeDenyStatus, DenyMessage: "开发测试：内容命中假检测器，已拦截",
 	}, log)
 	if err != nil {
 		return err

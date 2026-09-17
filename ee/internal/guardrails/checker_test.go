@@ -216,7 +216,7 @@ func TestInvalidRules(t *testing.T) {
 	}
 }
 
-func TestUninitializedEngineAndContext(t *testing.T) {
+func TestUninitializedCheckerAndContext(t *testing.T) {
 	for _, e := range []*guardrails.Checker{nil, {}} {
 		result, err := e.Check(context.Background(), guardrails.Input, "")
 		if !errors.Is(err, guardrails.ErrInvalidInput) || result.Action != guardrails.Block {
@@ -239,8 +239,8 @@ func TestUninitializedEngineAndContext(t *testing.T) {
 	}
 }
 
-// 超限和取消必须先于线性 UTF-8 扫描；出错不能丢失此前已完成的观察事件。
-func TestCheckErrorPrecedenceAndEvents(t *testing.T) {
+// 超限和取消必须先于线性 UTF-8 扫描；出错不能丢失此前已完成的规则执行结果。
+func TestCheckErrorPrecedenceAndRuleEvaluations(t *testing.T) {
 	e := mustChecker(t, nil, nil)
 	oversized := strings.Repeat("x", 1024) + string([]byte{0xff})
 	if _, err := e.Check(context.Background(), guardrails.Input, oversized); !errors.Is(err, guardrails.ErrTextTooLarge) {
@@ -266,6 +266,6 @@ func TestCheckErrorPrecedenceAndEvents(t *testing.T) {
 	})
 	result, err := e.Check(ctx, guardrails.Input, "text")
 	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block || len(result.RuleEvaluations) != 1 || result.RuleEvaluations[0].Action != guardrails.Observe {
-		t.Fatalf("completed event lost: result=%+v err=%v", result, err)
+		t.Fatalf("completed rule evaluation lost: result=%+v err=%v", result, err)
 	}
 }

@@ -60,12 +60,12 @@
 |---|---|
 | [plugin/plugin.go](plugin/plugin.go) | 请求前与响应后入口，校验请求准入条件，调用检查器并记录规则执行结果 |
 | [plugin/text.go](plugin/text.go) | 支持范围判断、输入和输出文本提取、长度限制 |
+| [plugin/deny.go](plugin/deny.go) | 客户端错误映射、拒绝响应构造，禁止回退其他模型重试 |
 | [checker.go](checker.go) | 保存规则快照，按阶段和顺序执行检查，汇总结果 |
 | [evaluation.go](evaluation.go) | 调用单条规则绑定的检测器，处理超时、阈值和失败策略 |
 | [rule.go](rule.go) | 规则定义及校验 |
 | [detector.go](detector.go) | 检测器接口、检测发现和风险等级 |
 | [detectors/fake/detector.go](detectors/fake/detector.go) | 开发用标记检测器，只匹配 `[guardrails-test]` |
-| [plugin/deny.go](plugin/deny.go) | 客户端错误映射、拒绝响应构造，禁止回退其他模型重试 |
 
 ## 后续怎样接入具体功能
 
