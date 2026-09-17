@@ -132,12 +132,7 @@ func projectSettings(value any) {
 		for _, key := range []string{"pricing_url", "model_parameters_url", "mcp_library_url"} {
 			maskURL(v, key)
 		}
-		if raw, ok := v["url"].(string); ok {
-			u, err := parseProxyURL(raw)
-			if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
-				v["url"] = redacted
-			}
-		}
+		maskURLWithParser(v, "url", parseProxyURL)
 		maskHeaderMaps(v)
 	})
 }
@@ -182,6 +177,7 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
 	retained := current.Password != "" && password == current.Password
 	// URL也能自带代理认证信息；沿用旧密码时，仅改用户名不算换了凭据。
+	// 没有密码或密码为空时，宿主仍可发送用户名认证，因此比较用户名本身。
 	nextURL, err := parseProxyURL(desired.URL)
 	if err != nil {
 		return consoleError(rbac.ErrInvalid)

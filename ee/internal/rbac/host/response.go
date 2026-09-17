@@ -135,11 +135,16 @@ func maskHeaders(v any) {
 const redacted = "<redacted>"
 
 func maskURL(v object, key string) {
+	maskURLWithParser(v, key, url.Parse)
+}
+
+// maskURLWithParser 隐藏解析失败或带认证信息、查询、片段的地址；调用方只选择解析规则。
+func maskURLWithParser(v object, key string, parse func(string) (*url.URL, error)) {
 	raw, ok := v[key].(string)
 	if !ok {
 		return
 	}
-	u, e := url.Parse(raw)
+	u, e := parse(raw)
 	if e != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 		v[key] = redacted
 	}

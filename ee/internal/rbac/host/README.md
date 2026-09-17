@@ -24,7 +24,7 @@
 | [authorization.go](authorization.go) | 请求处理入口：读取权限、调用前后检查、记录失败位置 |
 | [routes.go](routes.go) / [routes.txt](routes.txt) | 登记每个方法和路径的权限，启动时检查是否漏了接口 |
 | [request.go](request.go) | 把请求分给对应检查，并把保存前的检查传给原handler |
-| [response.go](response.go) | 把返回内容分给对应处理，隐藏字段，拒绝无法识别的结构 |
+| [response.go](response.go) | 把返回内容分给对应处理，共用地址隐藏规则，拒绝无法识别的结构 |
 | [providers.go](providers.go) | 隐藏厂商凭据，更新时保留原值；检查厂商和密钥配置的凭据目标变化 |
 | [logs.go](logs.go) | 分开控制日志概要、正文、敏感查询和导出 |
 | [webhooks.go](webhooks.go) | 控制向外部地址发送事件通知；包含日志正文时额外检查权限 |

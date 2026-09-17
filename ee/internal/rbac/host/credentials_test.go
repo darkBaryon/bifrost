@@ -202,26 +202,32 @@ func TestProxyCredentialDestination(t *testing.T) {
 		}
 	})
 	t.Run("proxy address forms", func(t *testing.T) {
-		for _, raw := range []string{"fixture:synthetic@proxy.invalid:8080", "http://fixture:synthetic@proxy.invalid:8080", "https://fixture:synthetic@proxy.invalid:8080"} {
-			store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: raw}}
-			a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
-			next := *store.proxy
-			next.SkipTLSVerify = true
-			var denial *handlers.ConsolePolicyError
-			if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
-				t.Fatal("retained URL authentication", err)
-			}
-			if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
-				t.Fatal(err)
-			}
-			next.URL = "other:synthetic@new.invalid:8080"
-			if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
-				t.Fatal("same password with new username", err)
-			}
-			next.URL = "fixture:new-fixture@new.invalid:8080"
-			if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); err != nil {
-				t.Fatal("new password", err)
-			}
+		for _, tc := range []struct{ name, raw string }{
+			{"without scheme", "fixture:synthetic@proxy.invalid:8080"},
+			{"http", "http://fixture:synthetic@proxy.invalid:8080"},
+			{"https", "https://fixture:synthetic@proxy.invalid:8080"},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: tc.raw}}
+				a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
+				next := *store.proxy
+				next.SkipTLSVerify = true
+				var denial *handlers.ConsolePolicyError
+				if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
+					t.Fatal("retained URL authentication", err)
+				}
+				if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
+					t.Fatal(err)
+				}
+				next.URL = "other:synthetic@new.invalid:8080"
+				if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
+					t.Fatal("same password with new username", err)
+				}
+				next.URL = "fixture:new-fixture@new.invalid:8080"
+				if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); err != nil {
+					t.Fatal("new password", err)
+				}
+			})
 		}
 	})
 	t.Run("unreadable saved proxy", func(t *testing.T) {
@@ -237,7 +243,6 @@ func TestProxyCredentialDestination(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-
 }
 
 func TestWebhookCredentialDestination(t *testing.T) {
