@@ -116,10 +116,8 @@ func providerDestination(current, desired *configstore.ProviderConfig, access rb
 	if err != nil {
 		return rbac.ErrInvalid
 	}
-	// 环境代理可能携带部署凭据；两边仍使用它时，连接信任变化也要授权。
-	ambient := current.ProxyConfig != nil && desired.ProxyConfig != nil && current.ProxyConfig.Type == schemas.EnvProxy && desired.ProxyConfig.Type == schemas.EnvProxy
 	// 无法识别旧配置时保守判权，有权限的调用方仍可修复配置。
-	retained = oldErr != nil || ambient || retainedValues(oldCredentials, nextCredentials)
+	retained = oldErr != nil || retainedValues(oldCredentials, nextCredentials)
 	return credentialDestination(access, retained, proxyTarget(current.ProxyConfig), proxyTarget(desired.ProxyConfig))
 }
 
@@ -133,27 +131,32 @@ func proxyTarget(p *schemas.ProxyConfig) any {
 	}{p.Type, schemas.SecretVarAsString(p.URL), schemas.SecretVarAsString(p.CACertPEM)}
 }
 
-// proxyCredentials 按宿主覆盖顺序取厂商代理凭据：用户名和密码的实际值齐全时覆盖URL内认证。
-// URL引用可能包含认证信息，按引用本身保守比较；不在授权时请求外部密钥服务。
+// proxyCredentials 列出厂商代理仍保存的凭据，包含独立字段和URL内认证。
+// 被独立字段覆盖或暂时停用的URL认证仍保留，避免先换目标、再撤去覆盖值重新启用旧凭据。
+// URL引用可能包含认证信息，按引用本身保守比较；授权时不请求外部密钥服务。
 func proxyCredentials(p *schemas.ProxyConfig) ([]string, error) {
-	if p == nil || p.Type == schemas.EnvProxy {
+	if p == nil {
 		return nil, nil
 	}
-	username, password := schemas.SecretVarAsString(p.Username), schemas.SecretVarAsString(p.Password)
 	var credentials []string
-	if username != "" && password != "" {
+	if p.Type == schemas.EnvProxy {
+		// 环境代理可能携带部署凭据；配置中的其他旧凭据也可能在切换代理类型后启用。
+		credentials = append(credentials, "ambient:proxy")
+	}
+	if password := schemas.SecretVarAsString(p.Password); password != "" {
 		credentials = append(credentials, password)
-		if p.Username.GetValue() != "" && p.Password.GetValue() != "" {
-			return credentials, nil
-		}
-		// 未展开的独立字段不能证明运行时会覆盖URL内认证，两种来源都保留。
+	} else {
+		credentials = append(credentials, schemas.SecretVarAsString(p.Username))
 	}
 	raw := schemas.SecretVarAsString(p.URL)
 	if p.URL != nil && p.URL.IsFromSecret() {
 		return append(credentials, raw), nil
 	}
 	credential, err := proxyURLCredential(raw)
-	return append(credentials, credential), err
+	if err != nil {
+		return nil, err
+	}
+	return append(credentials, credential), nil
 }
 
 // providerKeyDestination 同时考虑该Key保留的秘密和仍会随请求发送的厂商级请求头。

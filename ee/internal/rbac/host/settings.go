@@ -162,7 +162,7 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 		password = current.Password
 	}
 	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
-	retained := current.Password != "" && password == current.Password
+	retained := retainedValues([]string{current.Password}, []string{password})
 	// URL内认证与独立Password都可能继续使用，分别检查是否保留。
 	nextCredential, err := proxyURLCredential(desired.URL)
 	if err != nil {
@@ -170,7 +170,7 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 	}
 	oldCredential, err := proxyURLCredential(current.URL)
 	// 旧地址无法识别时保守要求权限，仍允许有权限的人修正坏配置。
-	retained = retained || err != nil || oldCredential != "" && oldCredential == nextCredential
+	retained = retained || err != nil || retainedValues([]string{oldCredential}, []string{nextCredential})
 
 	target := func(p *tables.GlobalProxyConfig) any {
 		return struct {

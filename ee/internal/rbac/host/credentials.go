@@ -59,7 +59,7 @@ func parseProxyURL(raw string) (*url.URL, error) {
 }
 
 // proxyURLCredential 取代理地址实际携带的认证值；没有认证时返回空字符串。
-// 旧密码非空时比较密码，改用户名不算换凭据；空密码时宿主仍发送用户名认证，改为比较用户名。
+// 有非空密码时返回密码，只改用户名不会换掉此值；否则返回用户名，宿主仍会发送只含用户名的认证。
 func proxyURLCredential(raw string) (string, error) {
 	u, err := parseProxyURL(raw)
 	if err != nil {
