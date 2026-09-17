@@ -4,7 +4,6 @@ package host
 import (
 	"context"
 	"errors"
-	"net/url"
 	"reflect"
 	"strings"
 
@@ -137,18 +136,6 @@ func projectSettings(value any) {
 	})
 }
 
-// parseProxyURL 按宿主httpproxy的规则解析代理地址，兼容省略http://的写法。
-// 上游解析函数未导出；读取时隐藏认证信息、更新时比较旧凭据共用这里，不改写保存的地址。
-func parseProxyURL(raw string) (*url.URL, error) {
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		if fallback, fallbackErr := url.Parse("http://" + raw); fallbackErr == nil {
-			return fallback, nil
-		}
-	}
-	return u, err
-}
-
 // proxyUpdate 恢复隐藏的代理地址，并检查旧凭据是否改用了新地址或TLS信任设置。
 func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyConfig, access rbac.Access) error {
 	if desired == nil {
@@ -176,25 +163,15 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 	}
 	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
 	retained := current.Password != "" && password == current.Password
-	// URL也能自带代理认证信息；沿用旧密码时，仅改用户名不算换了凭据。
-	// 没有密码或密码为空时，宿主仍可发送用户名认证，因此比较用户名本身。
-	nextURL, err := parseProxyURL(desired.URL)
+	// URL内认证与独立Password都可能继续使用，分别检查是否保留。
+	nextCredential, err := proxyURLCredential(desired.URL)
 	if err != nil {
 		return consoleError(rbac.ErrInvalid)
 	}
-	oldURL, err := parseProxyURL(current.URL)
-	if err != nil {
-		// 旧地址无法识别时保守要求权限，仍允许有权限的人修正坏配置。
-		retained = true
-	} else if oldURL.User != nil && nextURL.User != nil {
-		oldPassword, hasPassword := oldURL.User.Password()
-		nextPassword, _ := nextURL.User.Password()
-		if hasPassword && oldPassword != "" {
-			retained = retained || oldPassword == nextPassword
-		} else {
-			retained = retained || oldURL.User.Username() == nextURL.User.Username()
-		}
-	}
+	oldCredential, err := proxyURLCredential(current.URL)
+	// 旧地址无法识别时保守要求权限，仍允许有权限的人修正坏配置。
+	retained = retained || err != nil || oldCredential != "" && oldCredential == nextCredential
+
 	target := func(p *tables.GlobalProxyConfig) any {
 		return struct {
 			Type, URL     string

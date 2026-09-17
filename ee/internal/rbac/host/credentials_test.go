@@ -76,6 +76,67 @@ func TestProviderCredentialDestination(t *testing.T) {
 	}
 }
 
+// TestProviderProxyCredentialDestination 单独验证厂商没有Key和请求头时，代理认证仍受保护。
+func TestProviderProxyCredentialDestination(t *testing.T) {
+	t.Setenv("RBAC_TEST_PROXY_USERNAME", "")
+	t.Setenv("RBAC_TEST_PROXY_PASSWORD", "")
+	for _, tc := range []struct {
+		name          string
+		before, after *schemas.ProxyConfig
+		denied        bool
+	}{
+		{"URL authentication", &schemas.ProxyConfig{URL: schemas.NewSecretVar("fixture:synthetic@old.invalid:8080")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("other:synthetic@new.invalid:8080")}, true},
+		{"new password", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:new-fixture@new.invalid")}, false},
+		{"explicit override", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@new.invalid"), Username: schemas.NewSecretVar("fixture"), Password: schemas.NewSecretVar("new-fixture")}, false},
+		{"partial override", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@new.invalid"), Username: schemas.NewSecretVar("other")}, true},
+		{"unresolved override", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@new.invalid"), Username: schemas.NewSecretVar("env.RBAC_TEST_PROXY_USERNAME"), Password: schemas.NewSecretVar("env.RBAC_TEST_PROXY_PASSWORD")}, true},
+		{"proxy type", &schemas.ProxyConfig{Type: schemas.HTTPProxy, URL: schemas.NewSecretVar("http://fixture:synthetic@proxy.invalid")}, &schemas.ProxyConfig{Type: schemas.Socks5Proxy, URL: schemas.NewSecretVar("http://fixture:synthetic@proxy.invalid")}, true},
+		{"no authentication", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://new.invalid")}, false},
+		{"invalid old URL", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:%zz@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://new.invalid")}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.before.Type == "" {
+				tc.before.Type = schemas.HTTPProxy
+			}
+			if tc.after.Type == "" {
+				tc.after.Type = schemas.HTTPProxy
+			}
+			before, after := &configstore.ProviderConfig{ProxyConfig: tc.before}, &configstore.ProviderConfig{ProxyConfig: tc.after}
+			err := providerDestination(before, after, rbac.Access{})
+			if errors.Is(err, rbac.ErrForbidden) != tc.denied || err != nil && !tc.denied {
+				t.Fatal("unexpected proxy authorization", err)
+			}
+			if err := providerDestination(before, after, credentialAccess()); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+	for _, tc := range []struct {
+		name  string
+		proxy schemas.ProxyConfig
+	}{
+		{"URL credentials", schemas.ProxyConfig{Type: schemas.HTTPProxy, URL: schemas.NewSecretVar("http://fixture:synthetic@proxy.invalid")}},
+		{"URL reference", schemas.ProxyConfig{Type: schemas.HTTPProxy, URL: schemas.NewSecretVar("env.RBAC_TEST_PROXY")}},
+		{"password reference", schemas.ProxyConfig{Type: schemas.HTTPProxy, URL: schemas.NewSecretVar("http://proxy.invalid"), Username: schemas.NewSecretVar("fixture"), Password: schemas.NewSecretVar("env.RBAC_TEST_PROXY_PASSWORD")}},
+		{"environment proxy", schemas.ProxyConfig{Type: schemas.EnvProxy}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := &configstore.ProviderConfig{ProxyConfig: &tc.proxy}
+			after := cloneCredentialConfig(t, *before)
+			after.ProxyConfig.CACertPEM = schemas.NewSecretVar("fixture-ca")
+			if err := providerDestination(before, &after, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
+				t.Fatal(err)
+			}
+			if err := providerDestination(before, &after, credentialAccess()); err != nil {
+				t.Fatal(err)
+			}
+			if err := providerDestination(before, before, rbac.Access{}); err != nil {
+				t.Fatal("unchanged proxy", err)
+			}
+		})
+	}
+}
+
 func TestProviderKeyCredentialDestination(t *testing.T) {
 	old := schemas.Key{Value: *schemas.NewSecretVar("env.RBAC_TEST_CREDENTIAL"), AzureKeyConfig: &schemas.AzureKeyConfig{Endpoint: *schemas.NewSecretVar("https://old.invalid")}}
 	next := cloneCredentialConfig(t, old)

@@ -25,12 +25,12 @@
 | [routes.go](routes.go) / [routes.txt](routes.txt) | 登记每个方法和路径的权限，启动时检查是否漏了接口 |
 | [request.go](request.go) | 把请求分给对应检查，并把保存前的检查传给原handler |
 | [response.go](response.go) | 把返回内容分给对应处理，共用地址隐藏规则，拒绝无法识别的结构 |
-| [providers.go](providers.go) | 隐藏厂商凭据，更新时保留原值；检查厂商和密钥配置的凭据目标变化 |
+| [providers.go](providers.go) | 隐藏厂商凭据，更新时保留原值；检查厂商、密钥和厂商代理的凭据目标变化 |
 | [logs.go](logs.go) | 分开控制日志概要、正文、敏感查询和导出 |
 | [webhooks.go](webhooks.go) | 控制向外部地址发送事件通知；包含日志正文时额外检查权限 |
 | [plugins.go](plugins.go) | 检查插件操作影响哪些功能，更新时合并旧配置、恢复隐藏字段并检查凭据目标 |
 | [settings.go](settings.go) | 比较设置真正改了什么，再检查对应功能的权限；按宿主规则解析代理地址并隐藏认证信息 |
-| [credentials.go](credentials.go) | 比较旧凭据和新目标，统一检查敏感权限；含MCP的TLS/OAuth边界 |
+| [credentials.go](credentials.go) | 比较旧凭据和新目标，统一检查敏感权限；共用代理地址及认证解析，包含MCP的TLS/OAuth边界 |
 | [plugincredentials.go](plugincredentials.go) | 处理内置上报插件的地址与凭据组合，兼容旧配置格式 |
 | [notifications.go](notifications.go) | 按角色筛选通知，长连接每条消息重新检查权限 |
 

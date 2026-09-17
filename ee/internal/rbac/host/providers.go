@@ -111,7 +111,16 @@ func providerDestination(current, desired *configstore.ProviderConfig, access rb
 	if err := credentialDestination(access, retained, target(current, oldNetwork), target(desired, nextNetwork)); err != nil {
 		return err
 	}
-	return credentialDestination(access, retainedValues(proxyCredentials(current.ProxyConfig), proxyCredentials(desired.ProxyConfig)), proxyTarget(current.ProxyConfig), proxyTarget(desired.ProxyConfig))
+	oldCredentials, oldErr := proxyCredentials(current.ProxyConfig)
+	nextCredentials, err := proxyCredentials(desired.ProxyConfig)
+	if err != nil {
+		return rbac.ErrInvalid
+	}
+	// 环境代理可能携带部署凭据；两边仍使用它时，连接信任变化也要授权。
+	ambient := current.ProxyConfig != nil && desired.ProxyConfig != nil && current.ProxyConfig.Type == schemas.EnvProxy && desired.ProxyConfig.Type == schemas.EnvProxy
+	// 无法识别旧配置时保守判权，有权限的调用方仍可修复配置。
+	retained = oldErr != nil || ambient || retainedValues(oldCredentials, nextCredentials)
+	return credentialDestination(access, retained, proxyTarget(current.ProxyConfig), proxyTarget(desired.ProxyConfig))
 }
 
 func proxyTarget(p *schemas.ProxyConfig) any {
@@ -124,11 +133,27 @@ func proxyTarget(p *schemas.ProxyConfig) any {
 	}{p.Type, schemas.SecretVarAsString(p.URL), schemas.SecretVarAsString(p.CACertPEM)}
 }
 
-func proxyCredentials(p *schemas.ProxyConfig) []string {
-	if p == nil {
-		return nil
+// proxyCredentials 按宿主覆盖顺序取厂商代理凭据：用户名和密码的实际值齐全时覆盖URL内认证。
+// URL引用可能包含认证信息，按引用本身保守比较；不在授权时请求外部密钥服务。
+func proxyCredentials(p *schemas.ProxyConfig) ([]string, error) {
+	if p == nil || p.Type == schemas.EnvProxy {
+		return nil, nil
 	}
-	return []string{schemas.SecretVarAsString(p.Username), schemas.SecretVarAsString(p.Password)}
+	username, password := schemas.SecretVarAsString(p.Username), schemas.SecretVarAsString(p.Password)
+	var credentials []string
+	if username != "" && password != "" {
+		credentials = append(credentials, password)
+		if p.Username.GetValue() != "" && p.Password.GetValue() != "" {
+			return credentials, nil
+		}
+		// 未展开的独立字段不能证明运行时会覆盖URL内认证，两种来源都保留。
+	}
+	raw := schemas.SecretVarAsString(p.URL)
+	if p.URL != nil && p.URL.IsFromSecret() {
+		return append(credentials, raw), nil
+	}
+	credential, err := proxyURLCredential(raw)
+	return append(credentials, credential), err
 }
 
 // providerKeyDestination 同时考虑该Key保留的秘密和仍会随请求发送的厂商级请求头。

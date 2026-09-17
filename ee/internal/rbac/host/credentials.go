@@ -2,6 +2,7 @@
 package host
 
 import (
+	"net/url"
 	"reflect"
 	"slices"
 
@@ -43,6 +44,34 @@ func secretHeaderValues(headers map[string]schemas.SecretVar) []string {
 		values = append(values, schemas.SecretVarAsString(&value))
 	}
 	return values
+}
+
+// parseProxyURL 按宿主httpproxy的规则解析代理地址，兼容省略http://的写法。
+// 上游解析函数未导出；读取时隐藏认证信息、更新时比较旧凭据共用这里，不改写保存的地址。
+func parseProxyURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		if fallback, fallbackErr := url.Parse("http://" + raw); fallbackErr == nil {
+			return fallback, nil
+		}
+	}
+	return u, err
+}
+
+// proxyURLCredential 取代理地址实际携带的认证值；没有认证时返回空字符串。
+// 旧密码非空时比较密码，改用户名不算换凭据；空密码时宿主仍发送用户名认证，改为比较用户名。
+func proxyURLCredential(raw string) (string, error) {
+	u, err := parseProxyURL(raw)
+	if err != nil {
+		return "", err
+	}
+	if u.User == nil {
+		return "", nil
+	}
+	if password, ok := u.User.Password(); ok && password != "" {
+		return password, nil
+	}
+	return u.User.Username(), nil
 }
 
 // mcpDestination 检查MCP可修改的TLS及OAuth目标。连接URL本身由宿主固定，不能通过更新接口修改。
