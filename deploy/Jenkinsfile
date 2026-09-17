@@ -1,6 +1,6 @@
 // EE 测试环境流水线：builder 编译前后端，NAS 缓存依赖，Dockerfile 只封装产物。
 // 参数由 Jenkins 任务维护：branch 必填，majorver 默认 0.1，deploy 默认关闭。
-// 首次先准备 K8s 资源；任务须禁用并发，且该 Deployment 只使用一个发布入口。
+// 打包使用独立 Pod 工作区，可并行；开启 deploy 的发布任务须串行，避免覆盖部署版本。
 def agentLabel = "ai-gateway-${UUID.randomUUID().toString()}"
 
 podTemplate(label: agentLabel, yaml: '''
@@ -34,7 +34,7 @@ spec:
         - name: GOCACHE
           value: /tmp/go-build
         - name: npm_config_cache
-          value: /cache/golib/ai-gateway-npm
+          value: /cache/npmlib/ai-gateway
       resources:
         requests:
           cpu: 250m
@@ -45,6 +45,8 @@ spec:
       volumeMounts:
         - name: golib
           mountPath: /cache/golib
+        - name: npmlib
+          mountPath: /cache/npmlib
     - name: docker
       image: docker:18.06.3-ce
       imagePullPolicy: IfNotPresent
@@ -64,6 +66,10 @@ spec:
         - name: kubeconf
           mountPath: /root/.kube
   volumes:
+    - name: npmlib
+      nfs:
+        server: 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com
+        path: /npmlib
     - name: golib
       nfs:
         server: 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com
@@ -129,7 +135,14 @@ EOF
                         checkout([
                             $class: 'GitSCM',
                             branches: [[name: branchSpec]],
-                            userRemoteConfigs: [[url: repositoryUrl]]
+                            userRemoteConfigs: [[url: repositoryUrl]],
+                            extensions: [[
+                                $class: 'CloneOption',
+                                shallow: true,
+                                depth: 1,
+                                noTags: true,
+                                timeout: 20
+                            ]]
                         ])
                         env.GIT_COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
                         sh 'git log -1 --format="%h %s"'

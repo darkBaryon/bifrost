@@ -4,7 +4,7 @@
 
 ## 首次准备
 
-1. 使用本目录完整 Jenkinsfile 替换 Jenkins 任务的 Pipeline Script；如果采用 SCM 加载，脚本路径为 deploy/Jenkinsfile。保留任务现有 branch、majorver、deploy 参数，并禁用并发构建。deploy 默认不启用，只构建并推送。
+1. 使用本目录完整 Jenkinsfile 替换 Jenkins 任务的 Pipeline Script；如果采用 SCM 加载，脚本路径为 deploy/Jenkinsfile。保留任务现有 branch、majorver、deploy 参数，纯打包任务可启用并发（deploy=false）；开启 deploy 的发布任务须禁用并发，并保持唯一发布入口。deploy 默认不启用，只构建并推送。
 2. 同时提交根 Dockerfile、.dockerignore、.gitignore；不能只更新其中一侧。Dockerfile 不再接受纯源码直接编译，必须先生成 .jenkins-artifacts。
 3. builder 镜像是私有镜像，须先在 node2 预拉取，或为 Pod 配置 develop 命名空间中有效的 imagePullSecrets。容器内的 /root/.docker 配置不用于 kubelet 拉取 Pod 镜像。
 4. node2 应已有 docker:18.06.3-ce、roffe/kubectl:latest、jenkins/inbound-agent:4.3-4；所有容器使用 IfNotPresent。builder 必须是 AMD64 镜像，保留其版本标签不覆盖。
@@ -20,28 +20,28 @@ sudo docker image inspect registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway:
 
 ## NAS 目录及权限
 
-NAS 挂载源为 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com:/golib。builder 以 1000:1000 运行，与 jnlp 的工作区用户对齐。
+NAS 服务器为 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com，Go 与 npm 分别挂载 /golib 和 /npmlib。builder 以 1000:1000 运行，与 jnlp 的工作区用户对齐。
 
 | 缓存 | 容器路径 | NAS 路径 |
 |---|---|---|
 | Go 模块下载 | /cache/golib/ai-gateway | /golib/ai-gateway |
-| npm 下载包 | /cache/golib/ai-gateway-npm | /golib/ai-gateway-npm |
+| npm 下载包 | /cache/npmlib/ai-gateway | /npmlib/ai-gateway |
 | Go 编译缓存 | /tmp/go-build | 不保存到 NAS，随 Pod 删除 |
 
 在已确认 /mnt 挂载该 NAS 根目录的 node1 上，仅准备这两个专用目录：
 
 ```bash
 findmnt -T /mnt
-sudo mkdir -p /mnt/golib/ai-gateway /mnt/golib/ai-gateway-npm
-sudo chown 1000:1000 /mnt/golib/ai-gateway /mnt/golib/ai-gateway-npm
-sudo chmod 0770 /mnt/golib/ai-gateway /mnt/golib/ai-gateway-npm
+sudo mkdir -p /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
+sudo chown 1000:1000 /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
+sudo chmod 0770 /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
 ```
 
-不要递归更改已有 /golib 的权限。若已有专用目录内部文件属于其他用户，需单独确认迁移权限；流水线在编译前进行实际写入探测。npm 使用 --prefer-offline，命中缓存仍重新安装 node_modules，缺少的包仍需联网。Go 也会下载新增依赖，不保证完全离线。缓存仅用于同一可信任务，禁止构建期间清空缓存。
+首次运行前必须先创建 /npmlib，否则 Pod 会挂载失败。旧 /golib/ai-gateway-npm 缓存不再使用，本次不迁移或删除，npm 会在新目录重新填充缓存。不要递归更改已有 /golib 或 /npmlib 的权限。若已有专用目录内部文件属于其他用户，需单独确认迁移权限；流水线在编译前进行实际写入探测。npm 使用 --prefer-offline，命中缓存仍重新安装 node_modules，缺少的包仍需联网。Go 也会下载新增依赖，不保证完全离线。下载缓存可由同一可信任务的并行构建复用，缓存探测文件按构建 UUID 区分；禁止构建期间清空缓存。源码、node_modules 和 Go 编译缓存按 Pod 隔离。不同任务若推送同一镜像仓库，应使用不同 majorver 前缀，避免 BUILD_NUMBER 相同造成标签覆盖。
 
 ## 构建及产物
 
-顺序为 Checkout → 编译前后端 → Docker build → Docker push → 清理本次镜像 → 可选 Deploy。所有业务源码操作都在共享工作区 ai-gateway 子目录执行。
+顺序为 Checkout → 编译前后端 → Docker build → Docker push → 清理本次镜像 → 可选 Deploy。每次构建使用独立 Pod 的本地工作区，在 ai-gateway 子目录浅克隆：depth=1、noTags=true、超时 20 分钟。同一次构建的容器共享该工作区，不同构建之间隔离；源码和 .git 不挂载 NAS，也不需要创建 /jenkins-repos 目录。浅克隆减少提交历史，仍需下载当前版本源码。
 
 编译入口仍为 make -C ee build VERSION="$IMAGE_TAG"，前端嵌入 Go 二进制。验证产物存在后复制到 .jenkins-artifacts/main 和 .jenkins-artifacts/docker-entrypoint.sh。Docker 构建上下文按 .dockerignore 白名单只包含这两个产物及 Dockerfile。NAS 缓存、源码与凭据不进入镜像。
 
@@ -56,3 +56,5 @@ sudo chmod 0770 /mnt/golib/ai-gateway /mnt/golib/ai-gateway-npm
 上述行为测试使用临时命令替身，不等于真实前后端编译。真实 Jenkins 的 Groovy/CPS、NAS 权限和完整前后端编译需以首次 Jenkins 运行验收；本次未运行 Jenkins、未重新构建业务镜像、未部署集群。修改未提交 Git，无数据库变更。
 
 回滚时同时恢复旧流水线、Dockerfile 和 .dockerignore，即可回到 Docker 内编译。NAS 缓存保留，不涉及数据库变更。
+
+本次调整：移除固定 NAS 源码缓存方案，采用独立 Pod 工作区浅克隆；未修改 Jenkins 任务实际的并发开关，NAS 依赖缓存保留。
