@@ -3,11 +3,11 @@ package host
 
 import (
 	"encoding/json"
-	"github.com/tidwall/gjson"
 	"strings"
 	"testing"
 
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
+	"github.com/tidwall/gjson"
 )
 
 func TestSensitiveProjectionFixtures(t *testing.T) {
@@ -174,5 +174,33 @@ func TestWebhookSyntheticFailureDoesNotRevealURL(t *testing.T) {
 		if strings.Contains(string(c.Response.Body()), "LEAK") {
 			t.Fatal("synthetic test exposed URL credential")
 		}
+	}
+}
+
+// TestProxySettingsProjection 覆盖宿主接受的代理地址形式，认证信息不出现在设置返回中。
+func TestProxySettingsProjection(t *testing.T) {
+	for _, tc := range []struct {
+		name, raw string
+		hidden    bool
+	}{
+		{"authority", "proxy.invalid:8080", false},
+		{"http", "http://proxy.invalid:8080", false},
+		{"authentication without scheme", "fixture:synthetic@proxy.invalid:8080", true},
+		{"authentication", "https://fixture:synthetic@proxy.invalid:8080", true},
+		{"invalid authentication", "http://fixture:%zz@proxy.invalid", true},
+		{"query", "proxy.invalid:8080?token=synthetic", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, key := range []string{"proxy_config", "proxy"} {
+				row := object{"url": tc.raw}
+				projectSettings(object{"restart_required": object{key: row}})
+				if (row["url"] == redacted) != tc.hidden {
+					t.Fatal("unexpected proxy visibility")
+				}
+				if !tc.hidden && row["url"] != tc.raw {
+					t.Fatal("ordinary proxy address changed")
+				}
+			}
+		})
 	}
 }

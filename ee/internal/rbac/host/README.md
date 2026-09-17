@@ -29,7 +29,7 @@
 | [logs.go](logs.go) | 分开控制日志概要、正文、敏感查询和导出 |
 | [webhooks.go](webhooks.go) | 控制向外部地址发送事件通知；包含日志正文时额外检查权限 |
 | [plugins.go](plugins.go) | 检查插件操作影响哪些功能，更新时合并旧配置、恢复隐藏字段并检查凭据目标 |
-| [settings.go](settings.go) | 比较设置真正改了什么，再检查对应功能的权限 |
+| [settings.go](settings.go) | 比较设置真正改了什么，再检查对应功能的权限；按宿主规则解析代理地址并隐藏认证信息 |
 | [credentials.go](credentials.go) | 比较旧凭据和新目标，统一检查敏感权限；含MCP的TLS/OAuth边界 |
 | [plugincredentials.go](plugincredentials.go) | 处理内置上报插件的地址与凭据组合，兼容旧配置格式 |
 | [notifications.go](notifications.go) | 按角色筛选通知，长连接每条消息重新检查权限 |

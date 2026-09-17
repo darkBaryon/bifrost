@@ -129,11 +129,29 @@ var clientPermissions = map[string][]rbac.Permission{
 // projectSettings 隐藏设置中的带凭据地址和请求头。
 func projectSettings(value any) {
 	objects(value, []string{"client_config", "framework_config", "proxy_config", "restart_required", "config", "client", "framework", "proxy"}, func(v object) {
-		for _, key := range []string{"pricing_url", "model_parameters_url", "mcp_library_url", "url"} {
+		for _, key := range []string{"pricing_url", "model_parameters_url", "mcp_library_url"} {
 			maskURL(v, key)
+		}
+		if raw, ok := v["url"].(string); ok {
+			u, err := parseProxyURL(raw)
+			if err != nil || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+				v["url"] = redacted
+			}
 		}
 		maskHeaderMaps(v)
 	})
+}
+
+// parseProxyURL 按宿主httpproxy的规则解析代理地址，兼容省略http://的写法。
+// 上游解析函数未导出；读取时隐藏认证信息、更新时比较旧凭据共用这里，不改写保存的地址。
+func parseProxyURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		if fallback, fallbackErr := url.Parse("http://" + raw); fallbackErr == nil {
+			return fallback, nil
+		}
+	}
+	return u, err
 }
 
 // proxyUpdate 恢复隐藏的代理地址，并检查旧凭据是否改用了新地址或TLS信任设置。
@@ -163,10 +181,22 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 	}
 	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
 	retained := current.Password != "" && password == current.Password
-	// URL也能自带代理认证信息；独立Password为空不代表没有凭据。
-	if oldURL, err := url.Parse(current.URL); err == nil && oldURL.User != nil {
-		if nextURL, err := url.Parse(desired.URL); err == nil && nextURL.User != nil {
-			retained = retained || oldURL.User.String() == nextURL.User.String()
+	// URL也能自带代理认证信息；沿用旧密码时，仅改用户名不算换了凭据。
+	nextURL, err := parseProxyURL(desired.URL)
+	if err != nil {
+		return consoleError(rbac.ErrInvalid)
+	}
+	oldURL, err := parseProxyURL(current.URL)
+	if err != nil {
+		// 旧地址无法识别时保守要求权限，仍允许有权限的人修正坏配置。
+		retained = true
+	} else if oldURL.User != nil && nextURL.User != nil {
+		oldPassword, hasPassword := oldURL.User.Password()
+		nextPassword, _ := nextURL.User.Password()
+		if hasPassword && oldPassword != "" {
+			retained = retained || oldPassword == nextPassword
+		} else {
+			retained = retained || oldURL.User.Username() == nextURL.User.Username()
 		}
 	}
 	target := func(p *tables.GlobalProxyConfig) any {
