@@ -4,6 +4,12 @@
 
 ## 本仓定位（先读）
 
+### 分支约定（用户明确指定）
+
+- 用户口头说的 `dev` 均指自有集成分支 `develop`；执行 Git 命令或填写合并目标时必须使用完整名称 `develop`。
+- 仓库中实际名为 `dev` 的分支及 `upstream/dev` 属于上游分支，不是自有开发目标；日常功能开发不得修改、合入或推送上游分支。
+- 自有功能合入目标为 `origin/develop`，不能因为简称 `dev` 而误操作同名上游分支。
+
 本仓是 `darkBaryon/bifrost`，基于上游 `maximhq/bifrost` 开发自有 EE 应用。项目总入口是 [README.md](README.md)。本文件后续保留了大量上游说明；理解本仓任务时，先识别以下自有目录：
 
 - [ee/](ee/README.md)：自有应用代码。独立 Go 模块与可执行入口，在同一进程中内嵌完整的 Bifrost HTTP 应用，使用共享 Server、Router 和嵌套的 Handler 链。

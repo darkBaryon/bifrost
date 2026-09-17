@@ -6,16 +6,20 @@
   - name: ee-build
     run: cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http
   - name: guardrails-format
-    run: gofmt -l ee/internal/guardrails
+    run: gofmt -l ee/internal/guardrails ee/internal/app/guardrails.go ee/internal/app/guardrails_test.go
     expect_empty: true
   - name: diff-check
     run: git diff --check
   - name: workbench-views
     run: python3 workbench/tools/build_views.py --check
+  - name: guardrails-http
+    run: python3 ee/scripts/guardrails-smoke.py
 必存产物:
   - ee/internal/guardrails/README.md
-  - ee/internal/guardrails/engine.go
+  - ee/internal/guardrails/checker.go
   - ee/internal/guardrails/plugin/plugin.go
+  - ee/internal/app/guardrails.go
+  - ee/internal/guardrails/detectors/fake/detector.go
 必含符号:
   - {grep: 'type Detector interface', in: ee/internal/guardrails}
 收敛评审:
