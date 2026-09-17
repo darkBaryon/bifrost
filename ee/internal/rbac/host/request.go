@@ -4,7 +4,6 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"slices"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/valyala/fasthttp"
 )

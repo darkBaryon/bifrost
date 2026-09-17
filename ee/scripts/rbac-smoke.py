@@ -26,7 +26,7 @@ def chief_has_no_permission_rows(node):
         with sqlite3.connect(store['config']['path']) as db:
             count = db.execute(query).fetchone()[0]
     else:
-        count = int(psql(os.environ['BIFROST_TEST_POSTGRES_DSN'] + ' dbname=' + store['config']['db_name'], query))
+        count = int(psql(os.environ['RBAC_TEST_POSTGRES_DSN'] + ' dbname=' + store['config']['db_name'], query))
     assert count == 0, 'chief derived permission rows persisted'
 
 
@@ -102,6 +102,7 @@ def conditional_profiles(binary, root):
     for enabled in (False, True):
         directory = root / ('profile-on' if enabled else 'profile-off')
         config = {'providers': {}, 'client': {'enable_logging': enabled, 'log_retention_days': 7},
+                  'plugins': [{'name': 'telemetry', 'enabled': True, 'config': {'metrics_enabled': enabled}}],
                   'config_store': {'enabled': True, 'type': 'sqlite', 'config': {'path': str(directory/'config.db')}}}
         node = Node(binary, directory, config, secrets.token_urlsafe(32))
         original_path = os.environ.get('PATH', '')
@@ -113,6 +114,9 @@ def conditional_profiles(binary, root):
             node.expect(401 if enabled else 404, '/api/logs', method='GET', anonymous=True)
             node.expect(200 if enabled else 404, '/api/skills/serve/codex/.agents/plugins/marketplace.json', method='GET', anonymous=True)
             node.expect(404, '/api/dev/pprof', method='GET', anonymous=True)
+            node.expect(201, '/api/identity/initialize', {'setup_token': node.setup, 'username': 'admin', 'password': 'Admin-password-1'})
+            admin = node.login('admin', 'Admin-password-1')
+            node.expect(200 if enabled else 404, '/metrics', method='GET', token=admin)
             print(f'PASS: actual startup profile logging={enabled}, git={enabled}; absent routes remain 404')
         finally:
             os.environ['PATH'] = original_path
@@ -197,9 +201,9 @@ def main():
     nodes, control, database = [], None, None
     try:
         if args.database == 'postgres':
-            control = os.environ.get('BIFROST_TEST_POSTGRES_DSN')
+            control = os.environ.get('RBAC_TEST_POSTGRES_DSN')
             if not control:
-                raise RuntimeError('BIFROST_TEST_POSTGRES_DSN is required; PostgreSQL validation cannot be skipped')
+                raise RuntimeError('RBAC_TEST_POSTGRES_DSN is required; PostgreSQL validation cannot be skipped')
             fields = dict(part.split('=', 1) for part in shlex.split(control))
             database = 'rbac_smoke_' + uuid.uuid4().hex
             psql(control, 'CREATE DATABASE ' + database + " TEMPLATE template0 ENCODING 'UTF8'")

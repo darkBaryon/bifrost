@@ -55,6 +55,7 @@ func PermissionError(err error) error {
 	return rbac.ErrUnavailable
 }
 
+// Authorize 把身份操作对应到角色权限，并重新核实账号和会话。
 func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Principal, action auth.AccountAction, _ string) error {
 	if p == nil || p.service == nil {
 		return auth.ErrUnavailable
@@ -73,6 +74,7 @@ func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Princip
 	return IdentityError(p.service.Authorize(ctx, Subject(actor), permission))
 }
 
+// BeforeStatusChange 停用前保护最后一个启用的主管理员；启用不需要额外保护，调用方已检查ChangeAccountStatus权限。
 func (p *Policy) BeforeStatusChange(ctx context.Context, _ auth.State, actor auth.Principal, target auth.Account, next auth.AccountStatus) error {
 	if next != auth.StatusDisabled {
 		return nil
@@ -83,6 +85,7 @@ func (p *Policy) BeforeStatusChange(ctx context.Context, _ auth.State, actor aut
 	return IdentityError(p.service.BeforeDisable(ctx, Subject(actor), target.ID))
 }
 
+// AfterInitialize 在初始化账号的同一事务里补上主管理员角色。
 func (p *Policy) AfterInitialize(ctx context.Context, state auth.State) error {
 	if p == nil || p.service == nil {
 		return auth.ErrUnavailable
@@ -90,6 +93,7 @@ func (p *Policy) AfterInitialize(ctx context.Context, state auth.State) error {
 	return IdentityError(p.service.BindInitialChief(ctx, state.ChiefAccountID))
 }
 
+// AfterRecover 在恢复账号的同一事务里补回主管理员角色，并保留其他角色。
 func (p *Policy) AfterRecover(ctx context.Context, state auth.State) error {
 	if p == nil || p.service == nil {
 		return auth.ErrUnavailable

@@ -18,7 +18,7 @@ def exercise_sensitive(node, admin, member, member_id, psql):
         if store['type'] == 'sqlite':
             with sqlite3.connect(store['config']['path']) as db:
                 return db.execute(query).fetchall()
-        return psql(os.environ['BIFROST_TEST_POSTGRES_DSN'] + ' dbname=' + store['config']['db_name'], query)
+        return psql(os.environ['RBAC_TEST_POSTGRES_DSN'] + ' dbname=' + store['config']['db_name'], query)
 
     # 原生插件操作被拒绝时，不得进入宿主提前建表分支。
     grant('Plugins.View', 'Plugins.Manage')
@@ -51,6 +51,14 @@ def exercise_sensitive(node, admin, member, member_id, psql):
     unchanged = {'client_config': current['client_config'], 'framework_config': current['framework_config']}
     node.expect(200, '/api/config', unchanged, method='PUT', token=member)
 
+    grant()
+    node.expect(403, '/metrics', method='GET', token=member)
+    grant('Logs.View')
+    metrics, headers = node.expect(200, '/metrics', method='GET', token=member)
+    assert headers.get_content_type() == 'text/plain' and isinstance(metrics, bytes)
+    assert b'# HELP ' in metrics and b'# TYPE ' in metrics, 'Prometheus output was lost'
+    grant()
+    node.expect(403, '/metrics', method='GET', token=member)
     grant('Logs.View')
     for path in ('/api/logs?content_search=protected', '/api/logs?metadata_secret=protected', '/api/logs/dashboard?all=true', '/api/logs/rankings?all=true'):
         node.expect(403, path, method='GET', token=member)

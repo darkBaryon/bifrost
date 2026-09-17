@@ -149,14 +149,9 @@ func validateNotificationInput(input *schemas.NotificationInput) error {
 	return nil
 }
 
-// create is the admin half of the API. list is safe for any authenticated user
-// because it only ever returns rows the caller's role is already entitled to
-// see, but publishing is the opposite: a single POST reaches every dashboard
-// user on the deployment. RBAC in this transport is enterprise-only and
-// path-based, so the floor is enforced here instead - only the local admin (and
-// therefore also an auth-disabled deployment, where the middleware marks every
-// request local admin) may publish. In-process producers call Publish directly
-// and are intentionally not subject to this check.
+// create publishes through the injected console policy when present. Without a
+// policy, only the local admin may publish (including auth-disabled deployments).
+// This restriction applies to the HTTP endpoint; in-process producers use Publish.
 func (s *NotificationService) create(ctx *fasthttp.RequestCtx) {
 	policy, present, ok := consolePolicy[ConsoleNotificationPolicy](ctx, ConsoleNotificationPolicyContextKey)
 	if !ok {
@@ -201,10 +196,6 @@ type notificationListResponse struct {
 func (s *NotificationService) list(ctx *fasthttp.RequestCtx) {
 	policy, present, ok := consolePolicy[ConsoleNotificationPolicy](ctx, ConsoleNotificationPolicyContextKey)
 	if !ok {
-		return
-	}
-	if present && policy == nil {
-		sendConsolePolicyError(ctx, nil)
 		return
 	}
 	if s.store == nil {

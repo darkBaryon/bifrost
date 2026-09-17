@@ -50,10 +50,8 @@ func (a *Adapter) Prepare(ctx context.Context, c *fasthttp.RequestCtx, p identit
 	if e != nil {
 		return nil, policy.IdentityError(e)
 	}
-	for _, permission := range entry.Permissions {
-		if !access.Allows(permission) {
-			return nil, identity.ErrForbidden
-		}
+	if e := requirePermissions(access, entry.Permissions...); e != nil {
+		return nil, policy.IdentityError(e)
 	}
 	request := requestAccess{Subject: subject, Access: access, Route: entry}
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {

@@ -44,14 +44,8 @@ func visible(access rbac.Access, n *schemas.Notification) bool {
 
 func (p notificationPolicy) CanView(n *schemas.Notification) bool { return visible(p.access, n) }
 
-// AuthorizePublish 检查通知接收范围是否合法，再检查发布权限和角色是否存在。
+// AuthorizePublish 检查发布权限和角色是否存在；通知格式已由原handler校验并规范化。
 func (p notificationPolicy) AuthorizePublish(ctx context.Context, input schemas.NotificationInput) error {
-	if (input.Audience == schemas.NotificationAudienceAll && len(input.RoleIDs) > 0) || (input.Audience == schemas.NotificationAudienceRoles && len(input.RoleIDs) == 0) {
-		return consoleError(rbac.ErrInvalid)
-	}
-	if input.Audience != schemas.NotificationAudienceAll && input.Audience != schemas.NotificationAudienceRoles {
-		return consoleError(rbac.ErrInvalid)
-	}
 	ids := []rbac.RoleID{}
 	for _, id := range input.RoleIDs {
 		ids = append(ids, rbac.RoleID(id))

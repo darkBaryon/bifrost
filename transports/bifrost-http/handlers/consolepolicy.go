@@ -4,11 +4,12 @@ package handlers
 import (
 	"context"
 	"errors"
+	"reflect"
+
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/valyala/fasthttp"
-	"reflect"
 )
 
 type consolePolicyKey string
@@ -24,6 +25,7 @@ const (
 
 // ConsoleNotificationPolicy 控制发布及当前请求快照中的多角色可见性。
 type ConsoleNotificationPolicy interface {
+	// AuthorizePublish receives input already validated and normalized by the notification handler.
 	AuthorizePublish(context.Context, schemas.NotificationInput) error
 	CanView(*schemas.Notification) bool
 }
@@ -60,26 +62,25 @@ type ConsoleWebhookPolicy func(context.Context, ConsoleWebhookOperation, *tables
 
 // ConsolePolicyError 是策略允许公开的固定错误类别，底层错误不得透传。
 type ConsolePolicyError struct {
-	Status        int
-	Code, Message string
+	Status int
 }
 
 func (e *ConsolePolicyError) Error() string { return "console policy rejected operation" }
 func sendConsolePolicyError(ctx *fasthttp.RequestCtx, e error) {
-	status, code := 503, "unavailable"
+	status, code := fasthttp.StatusServiceUnavailable, "unavailable"
 	var safe *ConsolePolicyError
 	if errors.As(e, &safe) && safe != nil {
 		switch safe.Status {
-		case 400:
-			status, code = 400, "invalid_input"
-		case 401:
-			status, code = 401, "unauthorized"
-		case 403:
-			status, code = 403, "forbidden"
-		case 404:
-			status, code = 404, "not_found"
-		case 409:
-			status, code = 409, "conflict"
+		case fasthttp.StatusBadRequest:
+			status, code = fasthttp.StatusBadRequest, "invalid_input"
+		case fasthttp.StatusUnauthorized:
+			status, code = fasthttp.StatusUnauthorized, "unauthorized"
+		case fasthttp.StatusForbidden:
+			status, code = fasthttp.StatusForbidden, "forbidden"
+		case fasthttp.StatusNotFound:
+			status, code = fasthttp.StatusNotFound, "not_found"
+		case fasthttp.StatusConflict:
+			status, code = fasthttp.StatusConflict, "conflict"
 		}
 	}
 	SendJSONWithStatus(ctx, map[string]any{"error": map[string]string{"code": code, "message": code}}, status)

@@ -4,11 +4,11 @@ package host
 import (
 	"encoding/json"
 	"errors"
-	"github.com/maximhq/bifrost/framework/configstore"
 	"reflect"
 
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/plugins/compat"
 	"github.com/maximhq/bifrost/plugins/governance"
 	"github.com/maximhq/bifrost/plugins/logging"

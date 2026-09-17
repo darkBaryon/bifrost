@@ -72,7 +72,7 @@ func WithAdditionalRoutes(routes AdditionalRoutes) AuthOption {
 }
 
 // WithRecoveryAnchor 传入一个查询函数，用来查系统初始化时指定的管理员。
-// 这个账号用于离线恢复，也用于限制尚未接入角色权限的Bifrost管理接口；查询不返回密码。
+// 供/api/config返回兼容认证信息；查询不返回密码，也不参与管理接口授权。
 func WithRecoveryAnchor(lookup func(context.Context) (identity.Account, error)) AuthOption {
 	return func(a *AuthAdapter) { a.anchor = lookup }
 }
@@ -250,28 +250,8 @@ func (a *AuthAdapter) authorizeTemporary(c *fasthttp.RequestCtx) error {
 	return nil
 }
 
-// requireHostAdministrator 检查操作者是否为系统初始化时指定的管理员；调用前必须已验证登录。
-// 尚未接入角色权限的Bifrost管理接口仍只允许这个账号访问，Users.Manage只允许管理账号和角色。
-// 未传入管理员查询函数时，沿用身份模块的管理员检查。
-func (a *AuthAdapter) requireHostAdministrator(ctx context.Context, p identity.Principal) error {
-	if a.anchor == nil {
-		return a.service.RequireAccountManager(ctx, p)
-	}
-	if p.MustChangePassword {
-		return identity.ErrForbidden
-	}
-	account, err := a.anchor(ctx)
-	if err != nil {
-		return identity.SafeError(err)
-	}
-	if p.AccountID != account.ID {
-		return identity.ErrForbidden
-	}
-	return nil
-}
-
 // APIMiddleware 在Bifrost处理管理请求前检查登录；身份和角色接口交给各自模块检查，公开接口直接放行。
-// 已接入的管理接口使用角色权限，其余仍要求系统初始化时指定的管理员；原有临时令牌入口按原规则验证。
+// 注入角色组件时按接口权限检查；未注入时沿用身份模块的管理员策略。原有临时令牌入口保持原规则。
 // WebSocket连接会再次检查登录，配置接口还会限制旧认证字段的读写。
 func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -319,7 +299,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 						err = identity.ErrUnavailable
 					}
 				} else {
-					err = a.requireHostAdministrator(ctx, p)
+					err = a.service.RequireAccountManager(ctx, p)
 				}
 			}
 			if err != nil {
@@ -348,7 +328,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 					if err != nil {
 						return err
 					}
-					return a.requireHostAdministrator(ctx, p)
+					return a.service.RequireAccountManager(ctx, p)
 				})
 			}
 			if path == "/api/config" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) {

@@ -120,18 +120,5 @@ func ownsPath(path string) bool {
 	return false
 }
 
-// GuardMethods 让角色接口的错误请求方法返回405，避免落到宿主的前端页面兜底路由。
-func GuardMethods(next fasthttp.RequestHandler) fasthttp.RequestHandler {
-	return func(c *fasthttp.RequestCtx) {
-		if !c.IsPost() && ownsPath(string(c.Path())) {
-			c.Response.Header.Set("Cache-Control", "no-store")
-			c.Response.Header.Set("Allow", fasthttp.MethodPost)
-			Error(c, FromStatus(fasthttp.StatusMethodNotAllowed))
-			return
-		}
-		next(c)
-	}
-}
-
 // OwnsRoute 供Bifrost识别本包的接口；匹配后交给本包检查登录，再由rbac服务检查操作权限。
 func (h *Handler) OwnsRoute(method, path string) bool { return OwnsRoute(method, path) }

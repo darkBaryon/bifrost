@@ -515,7 +515,7 @@ GET /api/mcp-logs/histogram/top-tools
 GET /api/mcp-logs/stats
 GET /api/mcp-logs/{id}
 
-@ managed Logs.View none ordinary
+@ managed Logs.View none protocol-scoped
 GET /metrics
 
 @ managed MCPGateway.Manage none mcp-safe

@@ -140,3 +140,41 @@ func TestKnownProtocolAndSelfManagedRoutesRemainOwned(t *testing.T) {
 	}
 	t.Logf("verified %d non-managed route registrations retain their owning handlers; provider execution is outside this test", count)
 }
+
+// /metrics使用Prometheus文本协议；仍要检查权限，但不能把响应当成JSON。
+func TestMetricsAuthorizationPreservesText(t *testing.T) {
+	repository := &routeRepository{codes: []rbac.Permission{rbac.LogsView}}
+	adapter := NewAdapter(rbac.New(repository), nil, nil)
+	routes := router.New()
+	const body = "# HELP rbac_probe test metric\n# TYPE rbac_probe gauge\nrbac_probe 1\n"
+	calls := 0
+	routes.GET("/metrics", func(c *fasthttp.RequestCtx) {
+		wrap, err := adapter.Prepare(context.Background(), c, identity.Principal{AccountID: "member"})
+		if err != nil {
+			if !errors.Is(err, identity.ErrForbidden) {
+				t.Fatal(err)
+			}
+			c.SetStatusCode(403)
+			return
+		}
+		wrap(func(c *fasthttp.RequestCtx) {
+			calls++
+			c.Response.Header.SetContentType("text/plain; version=0.0.4; charset=utf-8")
+			c.Response.SetBodyString(body)
+		})(c)
+	})
+	if err := adapter.VerifyRoutes(routes); err != nil {
+		t.Fatal(err)
+	}
+	c := requestCtx("GET", "/metrics", "")
+	routes.Handler(c)
+	if c.Response.StatusCode() != 200 || string(c.Response.Body()) != body || string(c.Response.Header.ContentType()) != "text/plain; version=0.0.4; charset=utf-8" {
+		t.Fatalf("metrics response changed: %s", c.Response.String())
+	}
+	repository.codes = nil
+	c = requestCtx("GET", "/metrics", "")
+	routes.Handler(c)
+	if c.Response.StatusCode() != 403 || calls != 1 {
+		t.Fatalf("revoked metrics reached handler: status=%d calls=%d", c.Response.StatusCode(), calls)
+	}
+}

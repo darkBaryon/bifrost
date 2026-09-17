@@ -101,6 +101,9 @@ var tokenLength = base64.RawURLEncoding.EncodedLen(tokenBytes)
 // usernamePattern 只约束新建账号；迁移的旧用户名原样保留并允许登录。
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{2,63}$`)
 
+// ValidAccountID 检查账号编号是否符合身份模块使用的UUID格式。
+func ValidAccountID(id string) bool { return uuidPattern.MatchString(id) }
+
 // uuidPattern 校验调用方提供的账号 ID 与 operation_id。
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 

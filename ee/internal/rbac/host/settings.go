@@ -103,8 +103,8 @@ var clientPermissions = map[string][]rbac.Permission{
 	"log_retention_days":                         {rbac.LogsManage},
 	"enforce_auth_on_inference":                  {rbac.GovernanceManage},
 	"dual_credential_conflict_behavior":          {rbac.GovernanceManage},
-	"enforce_governance_header":                  {rbac.GovernanceManage},
-	"enforce_scim_auth":                          {rbac.GovernanceManage},
+	"enforce_governance_header":                  {}, // 上游按 enforce_auth_on_inference 派生，不直接采用此字段。
+	"enforce_scim_auth":                          {}, // 上游按 enforce_auth_on_inference 派生，不直接采用此字段。
 	"allowed_origins":                            {},
 	"allowed_headers":                            {},
 	"max_request_body_size_mb":                   {},

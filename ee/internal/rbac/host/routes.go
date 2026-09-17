@@ -231,12 +231,17 @@ func (a *Adapter) RootGuard(next fasthttp.RequestHandler) fasthttp.RequestHandle
 		}
 		entry, ok := a.match(method, p)
 		if apiPath(p) && (!ok || entry.Kind == kindStatic) {
+			var allowed []string
 			for _, m := range routeMethods {
 				if e, found := a.match(m, p); found && e.Kind != kindStatic {
-					c.Response.Header.Set("Allow", m)
-					rbachttp.Error(c, rbachttp.FromStatus(fasthttp.StatusMethodNotAllowed))
-					return
+					allowed = append(allowed, m)
 				}
+			}
+			if len(allowed) > 0 {
+				c.Response.Header.Set("Allow", strings.Join(allowed, ", "))
+				c.Response.Header.Set("Cache-Control", "no-store")
+				rbachttp.Error(c, rbachttp.FromStatus(fasthttp.StatusMethodNotAllowed))
+				return
 			}
 			rbachttp.Error(c, rbac.ErrNotFound)
 			return

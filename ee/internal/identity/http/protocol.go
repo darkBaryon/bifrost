@@ -21,10 +21,11 @@ import (
 const CookieName = "ee_session"
 
 const (
-	legacyCookieName   = "token"  // 旧共享管理员 Cookie，只清除，绝不读取
-	deleteCookieMaxAge = -1       // fasthttp 用负数表示立即删除 Cookie
-	maxBodyBytes       = 16 << 10 // 身份请求的字节上限，配置接口另用宿主限制
-	maxJSONDepth       = 64       // 对象与数组的嵌套深度上限
+	legacyCookieName   = "token" // 旧共享管理员 Cookie，只清除，绝不读取
+	deleteCookieMaxAge = -1      // fasthttp 用负数表示立即删除 Cookie
+	// MaxBodyBytes 是身份和角色接口的正文上限；宿主配置接口另有自己的限制。
+	MaxBodyBytes = 16 << 10
+	maxJSONDepth = 64 // 对象与数组的嵌套深度上限
 )
 
 // ValidateOrigin 解析部署的外部 origin：不含路径、查询、片段与凭据；必须是 https，只有回环地址允许 http。
@@ -192,7 +193,7 @@ func ValidateJSONObject(body []byte) error {
 // decode 限制正文大小、要求 JSON 媒体类型并拒绝未知字段；allowEmpty 只对已声明的旧会话接口把空正文视为 {}。
 func decode(c *fasthttp.RequestCtx, v any, allowEmpty bool) error {
 	body := c.PostBody()
-	if len(body) > maxBodyBytes || !utf8.Valid(body) {
+	if len(body) > MaxBodyBytes || !utf8.Valid(body) {
 		return identity.ErrInvalid
 	}
 	media, _, err := mime.ParseMediaType(string(c.Request.Header.ContentType()))

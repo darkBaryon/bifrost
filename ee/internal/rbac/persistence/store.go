@@ -6,10 +6,9 @@ import (
 	"errors"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	authstore "github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/mattn/go-sqlite3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -63,9 +62,6 @@ func scopedError(e error) error {
 	return e
 }
 
-// PostgreSQL unique_violation；与 identity/persistence/store.go 同源，保持身份导出面不变。
-const pgUniqueViolation = "23505"
-
 func translate(e error) error {
 	if e == nil {
 		return nil
@@ -81,9 +77,7 @@ func translate(e error) error {
 	if errors.As(e, &auth) {
 		return policy.PermissionError(auth)
 	}
-	var pg *pgconn.PgError
-	var lite sqlite3.Error
-	if (errors.As(e, &pg) && pg.Code == pgUniqueViolation) || (errors.As(e, &lite) && (lite.ExtendedCode == sqlite3.ErrConstraintUnique || lite.ExtendedCode == sqlite3.ErrConstraintPrimaryKey)) {
+	if authstore.IsUniqueConflict(e) {
 		return rbac.ErrConflict
 	}
 	return e

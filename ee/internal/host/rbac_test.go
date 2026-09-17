@@ -1,8 +1,7 @@
-// 本文件验证：查询初始化管理员失败时，请求返回503，不能改用临时令牌继续访问。
+// 本文件验证：角色权限存储失败时返回503，不能改用临时令牌继续访问。
 package host
 
 import (
-	"context"
 	"testing"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
@@ -11,11 +10,9 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-func TestAnchorFailureDoesNotFallBackToTemporaryToken(t *testing.T) {
+func TestPermissionStorageFailureDoesNotFallBackToTemporaryToken(t *testing.T) {
 	original, admin, svc := testAdapter(t)
-	adapter := NewAuthAdapter(nil, svc.Session, original.http, WithRecoveryAnchor(func(context.Context) (identity.Account, error) {
-		return identity.Account{}, identity.ErrUnavailable
-	}))
+	adapter := NewAuthAdapter(nil, svc.Session, original.http, WithConsoleAccess(failingConsoleAccess{err: identity.ErrUnavailable}))
 	routes := router.New()
 	called := false
 	routes.GET("/api/oauth/per-user/flows/example", adapter.APIMiddleware()(func(c *fasthttp.RequestCtx) {

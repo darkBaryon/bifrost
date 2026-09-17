@@ -44,14 +44,18 @@ const pgUniqueViolation = "23505"
 
 // conflict 把两种驱动的唯一键冲突转换为 ErrConflict，其他错误原样返回。
 func conflict(err error) error {
-	var pg *pgconn.PgError
-	var lite sqlite3.Error
-	switch {
-	case errors.As(err, &pg) && pg.Code == pgUniqueViolation,
-		errors.As(err, &lite) && (lite.ExtendedCode == sqlite3.ErrConstraintUnique || lite.ExtendedCode == sqlite3.ErrConstraintPrimaryKey):
+	if IsUniqueConflict(err) {
 		return identity.ErrConflict
 	}
 	return err
+}
+
+// IsUniqueConflict 识别PostgreSQL和SQLite的唯一键或主键冲突；其他错误返回false。
+func IsUniqueConflict(err error) bool {
+	var pg *pgconn.PgError
+	var lite sqlite3.Error
+	return (errors.As(err, &pg) && pg.Code == pgUniqueViolation) ||
+		(errors.As(err, &lite) && (lite.ExtendedCode == sqlite3.ErrConstraintUnique || lite.ExtendedCode == sqlite3.ErrConstraintPrimaryKey))
 }
 
 func (s *Store) State(ctx context.Context) (identity.State, error) {

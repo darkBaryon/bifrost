@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"mime"
-	"regexp"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
+	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	authhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	"github.com/valyala/fasthttp"
@@ -19,10 +19,7 @@ import (
 // —— 请求校验与字段解析 ——
 
 // maxBodyBytes 将请求正文限制为16 KiB，与身份接口使用相同的上限。
-const maxBodyBytes = 16 << 10
-
-// 账号编号沿用身份模块的UUID格式，例如123e4567-e89b-12d3-a456-426614174000。
-var accountPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
+const maxBodyBytes = authhttp.MaxBodyBytes
 
 // decode 只接受一个JSON对象；allowed列出允许的字段，required列出必须传的字段。
 // 重复字段、未知字段、null、错误的内容类型、无效UTF-8或超大正文都会被拒绝。
@@ -82,7 +79,7 @@ func roleID(raw json.RawMessage) (rbac.RoleID, error) {
 // accountID 检查账号编号的UUID格式，统一转为小写后交给业务服务。
 func accountID(fields map[string]json.RawMessage) (string, error) {
 	id, e := textField(fields, "account_id")
-	if e != nil || !accountPattern.MatchString(id) {
+	if e != nil || !identity.ValidAccountID(id) {
 		return "", rbac.ErrInvalid
 	}
 	return strings.ToLower(id), nil

@@ -4,13 +4,13 @@ package host
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/maximhq/bifrost/core/schemas"
-	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/fasthttp/router"
+	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/valyala/fasthttp"
 )
 
@@ -106,7 +106,7 @@ func TestOptionalHandlerRegistrationProfiles(t *testing.T) {
 	}
 }
 
-// 摘要来自固定完整候选b38493b07，按完整范围独立计算；防止整理格式时遗漏或改错规则。
+// 除/metrics的文本格式修复外，规则应与固定完整候选b38493b07一致；防止整理时遗漏或改错。
 func TestRouteSourceDigest(t *testing.T) {
 	var rows []string
 	for _, r := range manifest() {
@@ -114,7 +114,15 @@ func TestRouteSourceDigest(t *testing.T) {
 		for _, p := range r.Permissions {
 			codes = append(codes, string(p))
 		}
-		rows = append(rows, fmt.Sprintf("%s %s|%s|%s|%s|%s", r.Method, r.Pattern, r.Kind, strings.Join(codes, ","), r.Guard, r.Projection))
+		sourceProjection := r.Projection
+		if r.Method == "GET" && r.Pattern == "/metrics" {
+			if r.Projection != projectionProtocolScoped {
+				t.Fatal("metrics must preserve its Prometheus response format")
+			}
+			// 原候选误把Prometheus文本按JSON处理。只在来源比对时还原这一处已确认修复。
+			sourceProjection = projectionOrdinary
+		}
+		rows = append(rows, fmt.Sprintf("%s %s|%s|%s|%s|%s", r.Method, r.Pattern, r.Kind, strings.Join(codes, ","), r.Guard, sourceProjection))
 	}
 	sort.Strings(rows)
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(rows, "\n")+"\n")))
@@ -149,6 +157,24 @@ func TestAllPhasesUseRoleAuthorization(t *testing.T) {
 	for _, p := range paths {
 		if entry, ok := adapter.match("GET", p); !ok || entry.Kind != kindManaged {
 			t.Fatalf("wrong phase: %s", p)
+		}
+	}
+}
+
+func TestRootGuardListsAllAllowedMethods(t *testing.T) {
+	routes := router.New()
+	routes.GET("/api/providers", func(*fasthttp.RequestCtx) {})
+	routes.POST("/api/providers", func(*fasthttp.RequestCtx) {})
+	routes.POST("/api/roles/list", func(*fasthttp.RequestCtx) {})
+	adapter := NewAdapter(nil, nil, nil)
+	if err := adapter.VerifyRoutes(routes); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct{ method, path, allow string }{{"DELETE", "/api/providers", "GET, POST"}, {"GET", "/api/roles/list", "POST"}} {
+		c := requestCtx(tt.method, tt.path, "")
+		adapter.RootGuard(routes.Handler)(c)
+		if c.Response.StatusCode() != 405 || string(c.Response.Header.Peek("Allow")) != tt.allow || string(c.Response.Header.Peek("Cache-Control")) != "no-store" {
+			t.Fatal(c.Response.String())
 		}
 	}
 }

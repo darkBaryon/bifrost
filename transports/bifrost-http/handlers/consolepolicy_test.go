@@ -4,13 +4,14 @@ package handlers
 import (
 	"context"
 	"errors"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/fasthttp/websocket"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/valyala/fasthttp"
-	"strings"
-	"testing"
-	"time"
 )
 
 type testConsoleNotificationPolicy struct {
@@ -24,16 +25,16 @@ func (p *testConsoleNotificationPolicy) AuthorizePublish(context.Context, schema
 }
 func (p *testConsoleNotificationPolicy) CanView(*schemas.Notification) bool { return true }
 func TestConsolePolicyErrorIsSafe(t *testing.T) {
-	for _, e := range []error{errors.New("secret-driver-error"), &ConsolePolicyError{Status: 299, Message: "secret"}, (*ConsolePolicyError)(nil)} {
+	for _, e := range []error{errors.New("secret-driver-error"), &ConsolePolicyError{Status: 299}, (*ConsolePolicyError)(nil)} {
 		c := &fasthttp.RequestCtx{}
 		sendConsolePolicyError(c, e)
-		if c.Response.StatusCode() != 503 {
+		if c.Response.StatusCode() != fasthttp.StatusServiceUnavailable {
 			t.Fatal(c.Response.StatusCode())
 		}
 	}
-	for _, status := range []int{400, 401, 403, 404, 409, 503} {
+	for _, status := range []int{fasthttp.StatusBadRequest, fasthttp.StatusUnauthorized, fasthttp.StatusForbidden, fasthttp.StatusNotFound, fasthttp.StatusConflict, fasthttp.StatusServiceUnavailable} {
 		c := &fasthttp.RequestCtx{}
-		sendConsolePolicyError(c, &ConsolePolicyError{Status: status, Message: "secret"})
+		sendConsolePolicyError(c, &ConsolePolicyError{Status: status})
 		if c.Response.StatusCode() != status {
 			t.Fatal(status)
 		}
@@ -44,10 +45,10 @@ func TestConsolePolicyNotificationRejectsBeforeStore(t *testing.T) {
 	service := &NotificationService{store: store, now: func() time.Time { return time.Now().UTC() }}
 	c := &fasthttp.RequestCtx{}
 	c.Request.SetBodyString(`{"title":"title","message":"message","severity":"info","audience":"all"}`)
-	policy := &testConsoleNotificationPolicy{err: &ConsolePolicyError{Status: 403}}
+	policy := &testConsoleNotificationPolicy{err: &ConsolePolicyError{Status: fasthttp.StatusForbidden}}
 	c.SetUserValue(ConsoleNotificationPolicyContextKey, policy)
 	service.create(c)
-	if policy.calls != 1 || len(store.created) != 0 || c.Response.StatusCode() != 403 {
+	if policy.calls != 1 || len(store.created) != 0 || c.Response.StatusCode() != fasthttp.StatusForbidden {
 		t.Fatalf("calls=%d rows=%d status=%d", policy.calls, len(store.created), c.Response.StatusCode())
 	}
 	policy.err = nil
@@ -62,7 +63,7 @@ func TestConsolePolicyWrongTypeDoesNotFallback(t *testing.T) {
 		c.SetUserValue(ConsoleNotificationPolicyContextKey, raw)
 		c.SetUserValue(schemas.IsLocalAdminContextKey, true)
 		(&NotificationService{}).list(c)
-		if c.Response.StatusCode() != 503 {
+		if c.Response.StatusCode() != fasthttp.StatusServiceUnavailable {
 			t.Fatal("invalid policy fell back", c.Response.StatusCode())
 		}
 	}
@@ -121,7 +122,7 @@ func TestProviderPolicyOptionalAndInvalid(t *testing.T) {
 			if present != tt.present || ok != tt.valid {
 				t.Fatalf("present=%v valid=%v", present, ok)
 			}
-			if !ok && c.Response.StatusCode() != 503 {
+			if !ok && c.Response.StatusCode() != fasthttp.StatusServiceUnavailable {
 				t.Fatal("invalid policy did not fail closed")
 			}
 		})
@@ -133,7 +134,7 @@ func TestProviderPolicyErrorsHideInternalText(t *testing.T) {
 		err    error
 		status int
 	}{
-		{errors.New("private-credential"), 503}, {&ConsolePolicyError{Status: 400, Message: "private-credential"}, 400},
+		{errors.New("private-credential"), fasthttp.StatusServiceUnavailable}, {&ConsolePolicyError{Status: fasthttp.StatusBadRequest}, fasthttp.StatusBadRequest},
 	} {
 		c := &fasthttp.RequestCtx{}
 		sendConsolePolicyError(c, tt.err)

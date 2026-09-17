@@ -28,15 +28,20 @@ type AccountPolicy interface {
 
 // Queries 是不含凭据、只在当前事务内有效的身份读取范围。
 type Queries interface {
+	// State 返回当前事务读取的初始化状态和固定恢复账号。
 	State() State
+	// Revalidate 重新核实账号、会话及版本；不存在或失效返回ErrUnauthorized。
 	Revalidate(Principal) (Principal, error)
+	// LookupAccount 返回不含凭据的账号；不存在返回ErrNotFound。
 	LookupAccount(string) (Account, error)
+	// CountActiveAccounts 统计这些编号中启用的账号，重复编号只计一次。
 	CountActiveAccounts([]string) (int, error)
 }
 
 // ChiefPolicy 保留独立认证模块的恢复锚点管理语义。
 type ChiefPolicy struct{}
 
+// Authorize 未注入角色策略时，仅允许初始化管理员执行已知管理操作。
 func (ChiefPolicy) Authorize(_ context.Context, state State, p Principal, action AccountAction, _ string) error {
 	switch action {
 	case ReadAccounts, CreateAccounts, ChangeAccountStatus, ResetAccountPassword, ReadAllPasswordEvents, OpenConsoleStream:
@@ -54,11 +59,16 @@ func requireChief(state State, p Principal) error {
 	return nil
 }
 
+// BeforeStatusChange 默认策略没有额外的角色保护；账号自身的启停限制仍由身份服务检查。
 func (ChiefPolicy) BeforeStatusChange(context.Context, State, Principal, Account, AccountStatus) error {
 	return nil
 }
+
+// AfterInitialize 默认策略没有需要补写的角色数据。
 func (ChiefPolicy) AfterInitialize(context.Context, State) error { return nil }
-func (ChiefPolicy) AfterRecover(context.Context, State) error    { return nil }
+
+// AfterRecover 默认策略没有需要恢复的角色关系。
+func (ChiefPolicy) AfterRecover(context.Context, State) error { return nil }
 
 // RevalidateRecord 复用会话验证并核对调用方声明的三个标识。
 func RevalidateRecord(r AuthRecord, claimed Principal, at time.Time) (Principal, error) {

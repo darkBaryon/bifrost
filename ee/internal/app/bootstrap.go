@@ -10,7 +10,6 @@ import (
 	eeconfig "github.com/darkBaryon/bifrost/ee/internal/branding/persistence"
 	eehost "github.com/darkBaryon/bifrost/ee/internal/host"
 	rbachost "github.com/darkBaryon/bifrost/ee/internal/rbac/host"
-	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
@@ -44,7 +43,7 @@ func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log sche
 	if err := permissions.VerifyRoutes(s.Router); err != nil {
 		return err
 	}
-	s.Server.Handler = rbachttp.GuardMethods(permissions.RootGuard(s.Server.Handler))
+	s.Server.Handler = permissions.RootGuard(s.Server.Handler)
 	return nil
 }
 
