@@ -8,6 +8,14 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/maximhq/bifrost/core v1.8.3
 	github.com/maximhq/bifrost/framework v1.6.0
+	github.com/maximhq/bifrost/plugins/compat v0.2.0
+	github.com/maximhq/bifrost/plugins/governance v1.7.0
+	github.com/maximhq/bifrost/plugins/logging v1.7.0
+	github.com/maximhq/bifrost/plugins/maxim v1.7.0
+	github.com/maximhq/bifrost/plugins/otel v1.5.0
+	github.com/maximhq/bifrost/plugins/routing v1.0.0
+	github.com/maximhq/bifrost/plugins/semanticcache v1.6.0
+	github.com/maximhq/bifrost/plugins/telemetry v1.6.0
 	github.com/maximhq/bifrost/transports v0.0.0
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
@@ -139,17 +147,9 @@ require (
 	github.com/mark3labs/mcp-go v0.43.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/maximhq/bifrost/plugins/compat v0.2.0 // indirect
-	github.com/maximhq/bifrost/plugins/governance v1.7.0 // indirect
-	github.com/maximhq/bifrost/plugins/logging v1.7.0 // indirect
-	github.com/maximhq/bifrost/plugins/maxim v1.7.0 // indirect
 	github.com/maximhq/bifrost/plugins/mocker v1.6.0 // indirect
 	github.com/maximhq/bifrost/plugins/modelcatalogresolver v1.1.0 // indirect
-	github.com/maximhq/bifrost/plugins/otel v1.5.0 // indirect
 	github.com/maximhq/bifrost/plugins/prompts v1.1.0 // indirect
-	github.com/maximhq/bifrost/plugins/routing v1.0.0 // indirect
-	github.com/maximhq/bifrost/plugins/semanticcache v1.6.0 // indirect
-	github.com/maximhq/bifrost/plugins/telemetry v1.6.0 // indirect
 	github.com/maximhq/maxim-go v0.2.1 // indirect
 	github.com/molecule-man/go-brrr v1.0.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
