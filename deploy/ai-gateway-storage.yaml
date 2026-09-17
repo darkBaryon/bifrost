@@ -1,0 +1,56 @@
+# node1 本地 XFS 目录；10Gi 是声明容量，不是文件系统配额。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-tool
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ai-gateway-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ai-gateway-local-pv
+  labels:
+    app.kubernetes.io/name: ai-gateway
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ai-gateway-local
+  claimRef:
+    namespace: ai-tool
+    name: ai-gateway-data
+  local:
+    path: /data/ai-gateway
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - node1
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ai-gateway-data
+  namespace: ai-tool
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ai-gateway-local
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ai-gateway
+  resources:
+    requests:
+      storage: 10Gi

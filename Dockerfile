@@ -1,13 +1,6 @@
-# 使用仓库现有固定工具链；兼容 Jenkins 的传统 Docker 构建方式。
-FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/golang:1.27.0-alpine3.24-amd64 AS go-toolchain
-
-FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/node:25-alpine3.23-amd64 AS builder
-
-ENV GOPROXY=https://goproxy.cn
-COPY --from=go-toolchain /usr/local/go /usr/local/go
-ENV PATH="/usr/local/go/bin:${PATH}" CGO_ENABLED=1
+# 复用预装 Go、Node 和编译工具的 AMD64 镜像，制作方式见 deploy/Dockerfile.buildbase。
+FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway:buildbase-go1.27-node25-v1-amd64@sha256:291a045df1c1d656583d3b2717bd74a05992183d3cbdca0d56d9355025105e20 AS builder
 WORKDIR /build
-RUN apk add --no-cache bash make gcc musl-dev git ca-certificates
 
 # 先安装锁定依赖，源码变动时可复用依赖层。
 COPY ui/package.json ui/package-lock.json ./ui/

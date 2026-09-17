@@ -1,0 +1,24 @@
+# 可选：已有外部 HTTPS 反代时不需要应用本文件。
+# 替换域名和 IngressClass，在 ai-tool 中准备对应域名的 ai-gateway-tls 证书 Secret。
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-gateway
+  namespace: ai-tool
+spec:
+  ingressClassName: replace-ingress-class
+  tls:
+    - hosts:
+        - bifrost.zxiaowo.com
+      secretName: ai-gateway-tls
+  rules:
+    - host: bifrost.zxiaowo.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-gateway
+                port:
+                  number: 8080
