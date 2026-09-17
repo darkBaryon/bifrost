@@ -47,7 +47,7 @@ sudo chmod 0770 /mnt/golib/ai-gateway /mnt/golib/ai-gateway-npm
 
 镜像版本仍为 majorver.BUILD_NUMBER，默认前缀 0.1。最终镜像校验 linux/amd64；清理仅针对本次 UUID 标签，不清理基础镜像或 NAS 缓存。最终 Alpine 运行镜像仍需安装少量运行库，本次未制作独立运行基础镜像。
 
-部署目标仍为 ai-tool 命名空间中的 ai-gateway Deployment 和同名容器。deploy=true 只更新已有 Deployment，不创建资源。现有 Kubernetes 1.14.2 的业务清单兼容性问题仍需在首次部署前处理。
+部署目标仍为 ai-tool 命名空间中的 ai-gateway Deployment 和同名容器。deploy=true 只更新已有 Deployment，不创建资源。部署清单已适配 Kubernetes 1.14.2；首次创建资源和准备 Secret 见 K8s部署步骤.md。
 
 ## 验证边界
 
