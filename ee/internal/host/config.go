@@ -1,4 +1,4 @@
-// 本文件处理 /api/config 的认证投影与写入预检：GET 用只读投影替换旧认证字段，PUT 拒绝实际的认证或白名单变更。
+// 本文件处理/api/config中的旧认证字段：读取时返回管理员名字和隐藏后的密码，保存时禁止修改认证设置或免登录白名单。
 package host
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/valyala/fasthttp"
 )
 
-// serveConfig 对 GET 用只读投影替换响应中的旧认证字段，对 PUT 先预检再剔除认证字段交给宿主。
+// serveConfig 在读取配置后替换旧认证字段；保存配置前先检查这些字段有没有被修改，再移除auth_config交给Bifrost处理。
 func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p identity.Principal, next fasthttp.RequestHandler) {
 	projection, err := a.projection(ctx, p)
 	if err != nil {
@@ -42,19 +42,25 @@ func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p
 	}
 }
 
-// projection 是旧 auth_config 的只读投影：认证启用、当前调用者的登录名、脱敏密码。
-// 暂行策略下能到达这里的只有主管理员，所以登录名即主管理员名（方案 4.5 B2）；RBAC 替换 AccountPolicy 后
-// 须改为按 State.ChiefAccountID 读取，否则不同管理员会看到不同的 admin_username，PUT 同值回送也会互相 409。
+// projection 为旧auth_config字段生成只读内容：认证始终启用，返回初始化管理员的名字，密码显示为<redacted>。
+// 未传入管理员查询函数时，使用当前操作者的信息。
 func (a *AuthAdapter) projection(ctx context.Context, p identity.Principal) (map[string]any, error) {
-	account, err := a.service.Me(ctx, p)
+	var account identity.Account
+	var err error
+	if a.anchor != nil {
+		account, err = a.anchor(ctx)
+	} else {
+		account, err = a.service.Me(ctx, p)
+	}
 	if err != nil {
 		return nil, err
 	}
 	return map[string]any{"is_enabled": true, "admin_username": schemas.NewSecretVar(account.Username), "admin_password": schemas.NewSecretVar("<redacted>")}, nil
 }
 
-// checkConfig 拒绝对旧认证或免认证白名单的任何实际修改（整请求 409），同值回送则剔除 auth_config 后放行。
-// 宿主 JSON 字段不区分大小写，因此安全字段的大小写别名一律 400，保持预检与实际解析一致。
+// checkConfig 检查保存的配置：旧认证内容必须与查询结果一致，免登录白名单必须为空，否则整个请求返回409。
+// 检查通过后移除auth_config，避免Bifrost把它写回旧认证配置。
+// Bifrost解析字段时不区分大小写，所以这里拒绝Auth_Config等变体，防止检查和实际写入认成不同字段。
 func (a *AuthAdapter) checkConfig(c *fasthttp.RequestCtx, projection map[string]any) error {
 	body := c.PostBody()
 	var root map[string]json.RawMessage

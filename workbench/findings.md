@@ -157,7 +157,7 @@ convert_when: "任一功能(集群广播、日志脱敏映射、治理路由整�
 ```yaml
 id: FIND-017
 status: 观察中
-triggered_by: [账号认证]
+triggered_by: [账号认证, 角色权限后端]
 evidence: "SQLite busy/locked 整笔重试在 ee/internal/branding/persistence/migration.go 与 ee/internal/identity/persistence/diagnostics.go 各一份，参数已分别命名并互相注明；两个模块的迁移独立演进，不为 10 行驱动兼容代码建共享包；来源:收敛评审5 取舍项 B"
 convert_when: "第三个模块需要同样的 busy 重试，或两份策略出现实质分叉时，提取为 EE 内共享的小包"
 ```
@@ -167,8 +167,8 @@ convert_when: "第三个模块需要同样的 busy 重试，或两份策略出�
 ```yaml
 id: FIND-018
 status: 观察中
-triggered_by: [账号认证]
-evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账；身份模块整理 期1 的 FIND-020 清理在同一 state 写锁事务内新增一次无索引 DELETE，代码评审1 定向复核实测：稳态 SQLite 0.13ms/PG 0.35ms，1 万行积压 3.5ms/2.2ms，10 万行 303ms/25ms，100 万行 7.1s/1.55s（一次性，升级后首登），量级上不叠加"
+triggered_by: [账号认证, 角色权限后端]
+evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账；身份模块整理 期1 的 FIND-020 清理在同一 state 写锁事务内新增一次无索引 DELETE，代码评审1 定向复核实测：稳态 SQLite 0.13ms/PG 0.35ms，1 万行积压 3.5ms/2.2ms，10 万行 303ms/25ms，100 万行 7.1s/1.55s（一次性，升级后首登），量级上不叠加；角色权限后端追加LastLoginAt后，成功登录在原事务内增加一次按主键更新账号，失败密码不进入该写入；代码评审4核实无新增锁顺序或扫描，未做容量基准，仍按既定阈值观察"
 convert_when: "出现真实登录并发容量问题，或把限流桶挪出 state 锁时一并处理"
 ```
 
@@ -193,7 +193,7 @@ convert_when: "已转入 身份模块整理 期1 方案 §4.6：写入新会话/
 ```yaml
 id: FIND-021
 status: 观察中
-triggered_by: [身份模块整理]
+triggered_by: [身份模块整理, 角色权限后端]
 evidence: "ee/internal/identity/persistence/store.go 的到期清理 sweepExpired 自取 time.Now().UTC()，而同文件 ReserveLogin 与 Tx 的 RevokeSession/ConsumeTicket 均由业务层传 at；identity 侧只有 core.go now() 一个时钟。改 Tx.InsertSession/InsertTicket 签名超出方案 §6 白名单，本期不做；R5 已把时钟读取收敛到一处；来源:收敛评审1 取舍项 S1"
 convert_when: "下次需要可注入时钟（测试或时钟漂移排查），或 Tx 因其他原因要改签名时一并收口"
 ```
@@ -268,4 +268,19 @@ status: 观察中
 triggered_by: [内容安全框架]
 evidence: "收敛评审 5 S2：从 origin/develop 53d83a9ee 带入的 deploy/构建基础镜像.md:40 仍写本次修改未提交，deploy/K8s部署步骤.md:35 包含个人 kubeconfig 路径，末尾混有单次验证记录。这些文件不是本安全 Change 编写。"
 convert_when: "下次维护部署操作说明时，移除过时的提交状态，个人路径改成配置参数，分清长期操作步骤和单次验证证据"
+```
+
+## 角色权限后端（2026-09-17，收敛评审1）
+
+本条原编号 FIND-022 在合入 develop 时与国内定价条目重号，现改为 FIND-030；角色权限后端的历史评审和证据中的 FIND-022 均指本条。
+
+- FIND-017：角色存储复用 identity/persistence 的 RetrySQLiteBusy，没有再复制一份；唯一键冲突判定也复用身份存储出口。共享工具后续按触发条件收口。
+- FIND-021：角色存储的创建、修改、迁移时间及身份 Scope 也自取时钟，下次需要可注入时钟时一并处理。
+
+```yaml
+id: FIND-030
+status: 观察中
+triggered_by: [角色权限后端]
+evidence: "rbac/host/response.go 将上游错误转换成 EE 错误体；rbac/http/protocol.go 的 FromStatus 对表外状态保留原 HTTP 状态、code 取 unavailable，因而 500/422/429 不一定对应 503；尚无客户端按此 code 分支的证据。来源：期4收敛评审1，接口指南已说明现状。"
+convert_when: "前端接入角色权限或出现按 error.code 分支的调用方时，统一上游错误转换口径，并同步接口指南"
 ```

@@ -1,0 +1,749 @@
+# 每组：@ 接口归属 权限（逗号分隔，-表示无） 请求检查 响应处理
+# 组内每行列出方法和完整路径；同一路径的多个方法用逗号分隔。
+
+@ identity-service - none protocol
+POST /api/accounts/create
+POST /api/accounts/delete
+POST /api/accounts/list
+POST /api/accounts/reset-password
+POST /api/accounts/set-status
+POST /api/identity/change-password
+POST /api/identity/initialize
+POST /api/identity/login
+POST /api/identity/logout
+POST /api/identity/me
+POST /api/identity/password-events
+POST /api/identity/status
+POST /api/identity/ws-ticket
+GET /api/session/is-auth-enabled
+POST /api/session/login
+POST /api/session/logout
+POST /api/session/ws-ticket
+
+@ inference - none protocol
+POST /anthropic/v1/complete
+GET,POST /anthropic/v1/files
+DELETE,GET /anthropic/v1/files/{file_id}
+GET /anthropic/v1/files/{file_id}/content
+POST /anthropic/v1/messages
+GET,POST /anthropic/v1/messages/batches
+GET /anthropic/v1/messages/batches/{batch_id}
+POST /anthropic/v1/messages/batches/{batch_id}/cancel
+GET /anthropic/v1/messages/batches/{batch_id}/results
+POST /anthropic/v1/messages/count_tokens
+POST /anthropic/v1/messages/{path:*}
+GET /anthropic/v1/models
+DELETE,GET,HEAD,PATCH,POST,PUT /anthropic_passthrough/{path:*}
+DELETE,GET,HEAD,PATCH,POST,PUT /azure_passthrough/{path:*}
+GET /bedrock/files/{bucket}
+DELETE,GET,HEAD,PUT /bedrock/files/{bucket}/{key:*}
+POST /bedrock/model-invocation-job
+GET /bedrock/model-invocation-job/{job_arn}
+POST /bedrock/model-invocation-job/{job_arn}/stop
+GET /bedrock/model-invocation-jobs
+POST /bedrock/model/{modelId}/converse
+POST /bedrock/model/{modelId}/converse-stream
+POST /bedrock/model/{modelId}/count-tokens
+POST /bedrock/model/{modelId}/invoke
+POST /bedrock/model/{modelId}/invoke-with-response-stream
+POST /bedrock/rerank
+POST /chatgpt_passthrough/backend-api/codex/responses
+POST /cohere/v1/tokenize
+POST /cohere/v2/chat
+POST /cohere/v2/embed
+POST /cohere/v2/rerank
+POST /cursor/chat/completions
+POST /cursor/model/{modelId}/converse
+POST /cursor/model/{modelId}/converse-stream
+POST /cursor/model/{modelId}/count-tokens
+POST /cursor/model/{modelId}/invoke
+POST /cursor/model/{modelId}/invoke-with-response-stream
+GET /cursor/models
+GET /cursor/openai/models
+POST /cursor/rerank
+POST /cursor/v1/chat/completions
+POST /cursor/v1/complete
+POST /cursor/v1/messages
+POST /cursor/v1/messages/count_tokens
+POST /cursor/v1/messages/{path:*}
+GET /cursor/v1/models
+POST /cursor/v1/rank
+POST /cursor/v1/tokenize
+GET /cursor/v1beta/models
+POST /cursor/v1beta/models/{model:*}
+GET /cursor/v1beta/models/{model}
+GET /cursor/v1beta/models/{model}/operations/{operation_id:*}
+POST /cursor/v2/chat
+POST /cursor/v2/embed
+POST /cursor/v2/rerank
+POST /genai/upload/v1beta/files
+GET,POST /genai/v1/projects/{project}/locations/{location}/batchPredictionJobs
+DELETE,GET,POST /genai/v1/projects/{project}/locations/{location}/batchPredictionJobs/{batch_id}
+POST /genai/v1/rank
+GET /genai/v1beta/batches
+DELETE,GET,POST /genai/v1beta/batches/{batch_id}
+GET,POST /genai/v1beta/cachedContents
+DELETE,GET,PATCH /genai/v1beta/cachedContents/{cached_id}
+GET /genai/v1beta/files
+DELETE,GET /genai/v1beta/files/{file_id}
+GET /genai/v1beta/models
+POST /genai/v1beta/models/{model:*}
+GET /genai/v1beta/models/{model}
+GET /genai/v1beta/models/{model}/operations/{operation_id:*}
+GET,POST /genai/v1beta/projects/{project}/locations/{location}/cachedContents
+DELETE,GET,PATCH /genai/v1beta/projects/{project}/locations/{location}/cachedContents/{cached_id}
+DELETE,GET,HEAD,PATCH,POST,PUT /genai_passthrough/v1/{path:*}
+DELETE,GET,HEAD,PATCH,POST,PUT /genai_passthrough/v1beta/{path:*}
+DELETE,GET,HEAD,PATCH,POST,PUT /genai_passthrough/v1beta1/{path:*}
+DELETE,GET,HEAD,PATCH,POST,PUT /genai_passthrough/{path:*}
+POST /langchain/audio/speech
+POST /langchain/audio/transcriptions
+POST /langchain/chat/completions
+POST /langchain/completions
+POST /langchain/embeddings
+POST /langchain/images/edits
+POST /langchain/images/generations
+POST /langchain/images/variations
+POST /langchain/model/{modelId}/converse
+POST /langchain/model/{modelId}/converse-stream
+POST /langchain/model/{modelId}/count-tokens
+POST /langchain/model/{modelId}/invoke
+POST /langchain/model/{modelId}/invoke-with-response-stream
+POST /langchain/openai/deployments/{deploymentPath:*}
+POST /langchain/openai/responses
+POST /langchain/openai/responses/compact
+POST /langchain/openai/responses/input_tokens
+DELETE,GET /langchain/openai/responses/{response_id}
+POST /langchain/openai/responses/{response_id}/cancel
+GET /langchain/openai/responses/{response_id}/input_items
+GET,POST /langchain/openai/videos
+DELETE,GET /langchain/openai/videos/{video_id}
+GET /langchain/openai/videos/{video_id}/content
+POST /langchain/openai/videos/{video_id}/remix
+POST /langchain/rerank
+POST /langchain/responses
+POST /langchain/responses/compact
+POST /langchain/responses/input_tokens
+DELETE,GET /langchain/responses/{response_id}
+POST /langchain/responses/{response_id}/cancel
+GET /langchain/responses/{response_id}/input_items
+POST /langchain/v1/audio/speech
+POST /langchain/v1/audio/transcriptions
+POST /langchain/v1/chat/completions
+POST /langchain/v1/complete
+POST /langchain/v1/completions
+POST /langchain/v1/embeddings
+POST /langchain/v1/images/edits
+POST /langchain/v1/images/generations
+POST /langchain/v1/images/variations
+POST /langchain/v1/messages
+POST /langchain/v1/messages/count_tokens
+POST /langchain/v1/messages/{path:*}
+POST /langchain/v1/rank
+POST /langchain/v1/responses
+POST /langchain/v1/responses/compact
+POST /langchain/v1/responses/input_tokens
+DELETE,GET /langchain/v1/responses/{response_id}
+POST /langchain/v1/responses/{response_id}/cancel
+GET /langchain/v1/responses/{response_id}/input_items
+POST /langchain/v1/tokenize
+GET,POST /langchain/v1/videos
+POST /langchain/v1/videos/edits
+DELETE,GET /langchain/v1/videos/{video_id}
+GET /langchain/v1/videos/{video_id}/content
+POST /langchain/v1/videos/{video_id}/remix
+GET /langchain/v1beta/models
+POST /langchain/v1beta/models/{model:*}
+GET /langchain/v1beta/models/{model}
+GET /langchain/v1beta/models/{model}/operations/{operation_id:*}
+POST /langchain/v2/chat
+POST /langchain/v2/embed
+POST /langchain/v2/rerank
+GET,POST /langchain/videos
+POST /langchain/videos/edits
+DELETE,GET /langchain/videos/{video_id}
+GET /langchain/videos/{video_id}/content
+POST /langchain/videos/{video_id}/remix
+POST /litellm/audio/speech
+POST /litellm/audio/transcriptions
+POST /litellm/chat/completions
+POST /litellm/completions
+POST /litellm/embeddings
+POST /litellm/images/edits
+POST /litellm/images/generations
+POST /litellm/images/variations
+POST /litellm/model/{modelId}/converse
+POST /litellm/model/{modelId}/converse-stream
+POST /litellm/model/{modelId}/count-tokens
+POST /litellm/model/{modelId}/invoke
+POST /litellm/model/{modelId}/invoke-with-response-stream
+POST /litellm/openai/deployments/{deploymentPath:*}
+POST /litellm/openai/responses
+POST /litellm/openai/responses/compact
+POST /litellm/openai/responses/input_tokens
+DELETE,GET /litellm/openai/responses/{response_id}
+POST /litellm/openai/responses/{response_id}/cancel
+GET /litellm/openai/responses/{response_id}/input_items
+GET,POST /litellm/openai/videos
+DELETE,GET /litellm/openai/videos/{video_id}
+GET /litellm/openai/videos/{video_id}/content
+POST /litellm/openai/videos/{video_id}/remix
+POST /litellm/rerank
+POST /litellm/responses
+POST /litellm/responses/compact
+POST /litellm/responses/input_tokens
+DELETE,GET /litellm/responses/{response_id}
+POST /litellm/responses/{response_id}/cancel
+GET /litellm/responses/{response_id}/input_items
+POST /litellm/v1/audio/speech
+POST /litellm/v1/audio/transcriptions
+POST /litellm/v1/chat/completions
+POST /litellm/v1/complete
+POST /litellm/v1/completions
+POST /litellm/v1/embeddings
+POST /litellm/v1/images/edits
+POST /litellm/v1/images/generations
+POST /litellm/v1/images/variations
+POST /litellm/v1/messages
+POST /litellm/v1/messages/{path:*}
+POST /litellm/v1/rank
+POST /litellm/v1/responses
+POST /litellm/v1/responses/compact
+POST /litellm/v1/responses/input_tokens
+DELETE,GET /litellm/v1/responses/{response_id}
+POST /litellm/v1/responses/{response_id}/cancel
+GET /litellm/v1/responses/{response_id}/input_items
+POST /litellm/v1/tokenize
+GET,POST /litellm/v1/videos
+POST /litellm/v1/videos/edits
+DELETE,GET /litellm/v1/videos/{video_id}
+GET /litellm/v1/videos/{video_id}/content
+POST /litellm/v1/videos/{video_id}/remix
+GET /litellm/v1beta/models
+POST /litellm/v1beta/models/{model:*}
+GET /litellm/v1beta/models/{model}
+GET /litellm/v1beta/models/{model}/operations/{operation_id:*}
+POST /litellm/v2/chat
+POST /litellm/v2/embed
+POST /litellm/v2/rerank
+GET,POST /litellm/videos
+POST /litellm/videos/edits
+DELETE,GET /litellm/videos/{video_id}
+GET /litellm/videos/{video_id}/content
+POST /litellm/videos/{video_id}/remix
+GET,POST /mcp
+POST /openai/audio/speech
+POST /openai/audio/transcriptions
+GET,POST /openai/batches
+GET /openai/batches/{batch_id}
+POST /openai/batches/{batch_id}/cancel
+POST /openai/chat/completions
+POST /openai/completions
+GET,POST /openai/containers
+DELETE,GET /openai/containers/{container_id}
+GET,POST /openai/containers/{container_id}/files
+DELETE,GET /openai/containers/{container_id}/files/{file_id}
+GET /openai/containers/{container_id}/files/{file_id}/content
+POST /openai/embeddings
+GET,POST /openai/files
+DELETE,GET /openai/files/{file_id}
+GET /openai/files/{file_id}/content
+POST /openai/images/edits
+POST /openai/images/generations
+POST /openai/images/variations
+GET /openai/models
+GET,POST /openai/openai/batches
+GET /openai/openai/batches/{batch_id}
+POST /openai/openai/batches/{batch_id}/cancel
+POST /openai/openai/deployments/{deploymentPath:*}
+GET,POST /openai/openai/files
+DELETE,GET /openai/openai/files/{file_id}
+GET /openai/openai/files/{file_id}/content
+GET /openai/openai/models
+GET,POST /openai/openai/realtime
+POST /openai/openai/realtime/calls
+GET,POST /openai/openai/responses
+POST /openai/openai/responses/compact
+POST /openai/openai/responses/input_tokens
+DELETE,GET /openai/openai/responses/{response_id}
+POST /openai/openai/responses/{response_id}/cancel
+GET /openai/openai/responses/{response_id}/input_items
+GET,POST /openai/openai/videos
+DELETE,GET /openai/openai/videos/{video_id}
+GET /openai/openai/videos/{video_id}/content
+POST /openai/openai/videos/{video_id}/remix
+GET,POST /openai/realtime
+POST /openai/realtime/calls
+GET,POST /openai/responses
+POST /openai/responses/compact
+POST /openai/responses/input_tokens
+DELETE,GET /openai/responses/{response_id}
+POST /openai/responses/{response_id}/cancel
+GET /openai/responses/{response_id}/input_items
+POST /openai/v1/audio/speech
+POST /openai/v1/audio/transcriptions
+GET,POST /openai/v1/batches
+GET /openai/v1/batches/{batch_id}
+POST /openai/v1/batches/{batch_id}/cancel
+POST /openai/v1/chat/completions
+POST /openai/v1/completions
+GET,POST /openai/v1/containers
+DELETE,GET /openai/v1/containers/{container_id}
+GET,POST /openai/v1/containers/{container_id}/files
+DELETE,GET /openai/v1/containers/{container_id}/files/{file_id}
+GET /openai/v1/containers/{container_id}/files/{file_id}/content
+POST /openai/v1/embeddings
+GET,POST /openai/v1/files
+DELETE,GET /openai/v1/files/{file_id}
+GET /openai/v1/files/{file_id}/content
+POST /openai/v1/images/edits
+POST /openai/v1/images/generations
+POST /openai/v1/images/variations
+GET /openai/v1/models
+GET,POST /openai/v1/realtime
+POST /openai/v1/realtime/calls
+POST /openai/v1/realtime/client_secrets
+POST /openai/v1/realtime/sessions
+GET,POST /openai/v1/responses
+POST /openai/v1/responses/compact
+POST /openai/v1/responses/input_tokens
+DELETE,GET /openai/v1/responses/{response_id}
+POST /openai/v1/responses/{response_id}/cancel
+GET /openai/v1/responses/{response_id}/input_items
+GET,POST /openai/v1/videos
+POST /openai/v1/videos/edits
+DELETE,GET /openai/v1/videos/{video_id}
+GET /openai/v1/videos/{video_id}/content
+POST /openai/v1/videos/{video_id}/remix
+GET,POST /openai/videos
+POST /openai/videos/edits
+DELETE,GET /openai/videos/{video_id}
+GET /openai/videos/{video_id}/content
+POST /openai/videos/{video_id}/remix
+DELETE,GET,HEAD,PATCH,POST,PUT /openai_passthrough/{path:*}
+POST /pydanticai/audio/speech
+POST /pydanticai/audio/transcriptions
+POST /pydanticai/chat/completions
+POST /pydanticai/completions
+POST /pydanticai/embeddings
+POST /pydanticai/images/edits
+POST /pydanticai/images/generations
+POST /pydanticai/images/variations
+POST /pydanticai/model/{modelId}/converse
+POST /pydanticai/model/{modelId}/converse-stream
+POST /pydanticai/model/{modelId}/count-tokens
+POST /pydanticai/model/{modelId}/invoke
+POST /pydanticai/model/{modelId}/invoke-with-response-stream
+POST /pydanticai/openai/deployments/{deploymentPath:*}
+POST /pydanticai/openai/responses
+POST /pydanticai/openai/responses/compact
+POST /pydanticai/openai/responses/input_tokens
+DELETE,GET /pydanticai/openai/responses/{response_id}
+POST /pydanticai/openai/responses/{response_id}/cancel
+GET /pydanticai/openai/responses/{response_id}/input_items
+GET,POST /pydanticai/openai/videos
+DELETE,GET /pydanticai/openai/videos/{video_id}
+GET /pydanticai/openai/videos/{video_id}/content
+POST /pydanticai/openai/videos/{video_id}/remix
+POST /pydanticai/rerank
+POST /pydanticai/responses
+POST /pydanticai/responses/compact
+POST /pydanticai/responses/input_tokens
+DELETE,GET /pydanticai/responses/{response_id}
+POST /pydanticai/responses/{response_id}/cancel
+GET /pydanticai/responses/{response_id}/input_items
+POST /pydanticai/v1/audio/speech
+POST /pydanticai/v1/audio/transcriptions
+POST /pydanticai/v1/chat/completions
+POST /pydanticai/v1/complete
+POST /pydanticai/v1/completions
+POST /pydanticai/v1/embeddings
+POST /pydanticai/v1/images/edits
+POST /pydanticai/v1/images/generations
+POST /pydanticai/v1/images/variations
+POST /pydanticai/v1/messages
+POST /pydanticai/v1/messages/{path:*}
+POST /pydanticai/v1/rank
+POST /pydanticai/v1/responses
+POST /pydanticai/v1/responses/compact
+POST /pydanticai/v1/responses/input_tokens
+DELETE,GET /pydanticai/v1/responses/{response_id}
+POST /pydanticai/v1/responses/{response_id}/cancel
+GET /pydanticai/v1/responses/{response_id}/input_items
+POST /pydanticai/v1/tokenize
+GET,POST /pydanticai/v1/videos
+POST /pydanticai/v1/videos/edits
+DELETE,GET /pydanticai/v1/videos/{video_id}
+GET /pydanticai/v1/videos/{video_id}/content
+POST /pydanticai/v1/videos/{video_id}/remix
+GET /pydanticai/v1beta/models
+POST /pydanticai/v1beta/models/{model:*}
+GET /pydanticai/v1beta/models/{model}
+GET /pydanticai/v1beta/models/{model}/operations/{operation_id:*}
+POST /pydanticai/v2/chat
+POST /pydanticai/v2/embed
+POST /pydanticai/v2/rerank
+GET,POST /pydanticai/videos
+POST /pydanticai/videos/edits
+DELETE,GET /pydanticai/videos/{video_id}
+GET /pydanticai/videos/{video_id}/content
+POST /pydanticai/videos/{video_id}/remix
+DELETE,GET,HEAD,PATCH,POST,PUT /runware_passthrough/{path:*}
+POST /v1/async/audio/speech
+GET /v1/async/audio/speech/{job_id}
+POST /v1/async/audio/transcriptions
+GET /v1/async/audio/transcriptions/{job_id}
+POST /v1/async/chat/completions
+GET /v1/async/chat/completions/{job_id}
+POST /v1/async/completions
+GET /v1/async/completions/{job_id}
+POST /v1/async/embeddings
+GET /v1/async/embeddings/{job_id}
+POST /v1/async/images/edits
+GET /v1/async/images/edits/{job_id}
+POST /v1/async/images/generations
+GET /v1/async/images/generations/{job_id}
+POST /v1/async/images/variations
+GET /v1/async/images/variations/{job_id}
+POST /v1/async/ocr
+GET /v1/async/ocr/{job_id}
+POST /v1/async/rerank
+GET /v1/async/rerank/{job_id}
+POST /v1/async/responses
+GET /v1/async/responses/{job_id}
+POST /v1/audio/speech
+POST /v1/audio/transcriptions
+GET,POST /v1/batches
+GET /v1/batches/{batch_id}
+POST /v1/batches/{batch_id}/cancel
+GET /v1/batches/{batch_id}/results
+POST /v1/chat/completions
+POST /v1/completions
+GET,POST /v1/containers
+DELETE,GET /v1/containers/{container_id}
+GET,POST /v1/containers/{container_id}/files
+DELETE,GET /v1/containers/{container_id}/files/{file_id}
+GET /v1/containers/{container_id}/files/{file_id}/content
+POST /v1/embeddings
+GET,POST /v1/files
+DELETE,GET /v1/files/{file_id}
+GET /v1/files/{file_id}/content
+POST /v1/images/edits
+POST /v1/images/generations
+POST /v1/images/variations
+POST /v1/mcp/tool/execute
+GET /v1/models
+POST /v1/ocr
+GET,POST /v1/realtime
+POST /v1/realtime/calls
+POST /v1/realtime/client_secrets
+POST /v1/realtime/sessions
+POST /v1/rerank
+GET,POST /v1/responses
+POST /v1/responses/compact
+POST /v1/responses/input_tokens
+DELETE,GET /v1/responses/{response_id}
+POST /v1/responses/{response_id}/cancel
+GET /v1/responses/{response_id}/input_items
+GET,POST /v1/videos
+POST /v1/videos/edits
+DELETE,GET /v1/videos/{video_id}
+GET /v1/videos/{video_id}/content
+POST /v1/videos/{video_id}/remix
+
+@ managed Governance.Manage none governance-nested-vk
+POST /api/governance/customers
+DELETE,PUT /api/governance/customers/{customer_id}
+POST /api/governance/model-configs
+DELETE,PUT /api/governance/model-configs/{mc_id}
+POST /api/governance/pricing-overrides
+DELETE,PUT /api/governance/pricing-overrides/{id}
+DELETE,PUT /api/governance/providers/{provider_name}
+POST /api/governance/teams
+DELETE,PUT /api/governance/teams/{team_id}
+
+@ managed Governance.View none governance-nested-vk
+GET /api/governance/budgets
+GET /api/governance/customers
+GET /api/governance/customers/{customer_id}
+GET /api/governance/model-configs
+GET /api/governance/model-configs/{mc_id}
+GET /api/governance/pricing-overrides
+GET /api/governance/providers
+GET /api/governance/rate-limits
+GET /api/governance/teams
+GET /api/governance/teams/{team_id}
+
+@ managed Logs.Manage none logs-content
+DELETE /api/logs
+POST /api/logs/recalculate-cost
+POST /api/logs/recalculate-cost/cancel
+POST /api/logs/user-agent-mappings
+DELETE,PUT /api/logs/user-agent-mappings/{id}
+DELETE /api/mcp-logs
+
+@ managed Logs.View logs-query logs-content
+GET /api/logs
+GET /api/logs/dashboard
+GET /api/logs/dropped
+GET /api/logs/filterdata
+GET /api/logs/histogram
+GET /api/logs/histogram/cost
+GET /api/logs/histogram/cost/by-dimension
+GET /api/logs/histogram/cost/by-provider
+GET /api/logs/histogram/latency
+GET /api/logs/histogram/latency/by-dimension
+GET /api/logs/histogram/latency/by-provider
+GET /api/logs/histogram/models
+GET /api/logs/histogram/throughput
+GET /api/logs/histogram/throughput/by-provider
+GET /api/logs/histogram/tokens
+GET /api/logs/histogram/tokens/by-dimension
+GET /api/logs/histogram/tokens/by-provider
+GET /api/logs/rankings
+GET /api/logs/rankings/by-dimension
+GET /api/logs/recalculate-cost/status
+GET /api/logs/sessions/{session_id}
+GET /api/logs/sessions/{session_id}/summary
+GET /api/logs/stats
+GET /api/logs/user-agent-mappings
+GET /api/logs/{id}
+GET /api/mcp-logs
+GET /api/mcp-logs/filterdata
+GET /api/mcp-logs/histogram
+GET /api/mcp-logs/histogram/cost
+GET /api/mcp-logs/histogram/top-tools
+GET /api/mcp-logs/stats
+GET /api/mcp-logs/{id}
+
+@ managed Logs.View none protocol-scoped
+GET /metrics
+
+@ managed MCPGateway.Manage none mcp-safe
+POST /api/mcp/client
+DELETE,PUT /api/mcp/client/{id}
+POST /api/mcp/client/{id}/complete-oauth
+POST /api/mcp/client/{id}/initiate-verification
+POST /api/mcp/client/{id}/reauthorize
+POST /api/mcp/client/{id}/reconnect
+POST /api/mcp/client/{id}/verify-exchange
+POST /api/mcp/client/{id}/verify-headers
+POST /api/mcp/library
+POST /api/mcp/library/force-sync
+DELETE /api/mcp/library/{id}
+DELETE /api/mcp/per-user-headers/credential/{id}
+DELETE /api/mcp/sessions/{id}
+POST /api/mcp/sessions/{id}/reauth
+DELETE /api/oauth/config/{id}
+DELETE /api/oauth2/sessions/{id}
+
+@ managed MCPGateway.Manage none protocol-scoped
+PUT /api/mcp/per-user-headers/flows/{id}
+GET /api/oauth/per-user/flows/{id}/start
+PUT /api/oauth2/consent/flows/{id}
+
+@ managed MCPGateway.View none mcp-safe
+GET /api/mcp/clients
+GET /api/mcp/library
+GET /api/mcp/library/filterdata
+GET /api/mcp/sessions
+GET /api/oauth/config/{id}/status
+GET /api/oauth2/sessions
+
+@ managed MCPGateway.View none protocol-scoped
+GET /api/mcp/per-user-headers/flows/{id}
+GET /api/oauth/per-user/flows/{id}
+GET /api/oauth2/consent/flows/{id}
+
+@ managed ModelProvider.Manage provider-input provider-safe
+PUT /api/models/catalog
+POST /api/providers
+DELETE,PUT /api/providers/{provider}
+POST /api/providers/{provider}/keys
+DELETE,PUT /api/providers/{provider}/keys/{key_id}
+POST /api/providers/{provider}/keys/{key_id}/refresh-models
+POST /api/providers/{provider}/refresh-models
+
+@ managed ModelProvider.View none key-metadata
+GET /api/keys
+
+@ managed ModelProvider.View none provider-safe
+GET /api/models
+GET /api/models/base
+GET /api/models/details
+GET /api/models/parameters
+GET /api/providers
+GET /api/providers/{provider}
+GET /api/providers/{provider}/keys
+GET /api/providers/{provider}/keys/{key_id}
+
+@ managed Notifications.Manage notification-policy notification-policy
+POST /api/notifications
+
+@ managed Notifications.Manage webhook-input webhook-safe
+POST /api/webhooks
+POST /api/webhooks/deliveries/{id}/redeliver
+DELETE,PUT /api/webhooks/{id}
+POST /api/webhooks/{id}/rotate-secret
+POST /api/webhooks/{id}/test
+
+@ managed Notifications.View none webhook-safe
+GET /api/webhooks
+GET /api/webhooks/deliveries
+GET /api/webhooks/{id}
+GET /api/webhooks/{id}/deliveries
+
+@ managed Notifications.View notification-policy notification-policy
+GET /api/notifications
+
+@ managed Notifications.View websocket message-filter
+GET /ws
+
+@ managed Plugins.Manage plugin-mutation plugin-safe
+POST /api/plugins
+DELETE,PUT /api/plugins/{name}
+
+@ managed Plugins.View none plugin-safe
+GET /api/plugins
+GET /api/plugins/builtins
+GET /api/plugins/loaded
+GET /api/plugins/{name}
+
+@ managed PromptRepository.Manage none prompt-content
+POST /api/prompt-repo/folders
+DELETE,PUT /api/prompt-repo/folders/{id}
+POST /api/prompt-repo/prompts
+DELETE,PUT /api/prompt-repo/prompts/{id}
+POST /api/prompt-repo/prompts/{id}/sessions
+POST /api/prompt-repo/prompts/{id}/versions
+DELETE,PUT /api/prompt-repo/sessions/{id}
+POST /api/prompt-repo/sessions/{id}/commit
+PUT /api/prompt-repo/sessions/{id}/rename
+DELETE /api/prompt-repo/versions/{id}
+
+@ managed PromptRepository.Manage none skill-content
+POST /api/skills
+PUT /api/skills/all/version
+DELETE /api/skills/files/orphans
+POST /api/skills/files/upload
+DELETE,PUT /api/skills/{id}
+POST /api/skills/{id}/shift-version
+
+@ managed PromptRepository.View none prompt-content
+GET /api/prompt-repo/folders
+GET /api/prompt-repo/folders/{id}
+GET /api/prompt-repo/prompts
+GET /api/prompt-repo/prompts/{id}
+GET /api/prompt-repo/prompts/{id}/sessions
+GET /api/prompt-repo/prompts/{id}/versions
+GET /api/prompt-repo/sessions/{id}
+GET /api/prompt-repo/versions/{id}
+
+@ managed PromptRepository.View none skill-content
+GET /api/skills
+GET /api/skills/all/version
+GET /api/skills/{id}
+GET /api/skills/{id}/versions
+
+@ managed RoutingRules.Manage none routing-safe
+PUT /api/governance/complexity-analyzer-config
+POST /api/governance/complexity-analyzer-config/reset
+POST /api/governance/routing-rules
+DELETE,PUT /api/governance/routing-rules/{rule_id}
+PUT /api/routing/complexity-analyzer-config
+POST /api/routing/complexity-analyzer-config/reset
+DELETE /api/routing/complexity-analyzer-generations/{namespace}
+POST /api/routing/rules
+DELETE,PUT /api/routing/rules/{rule_id}
+
+@ managed RoutingRules.View none routing-safe
+GET /api/governance/complexity-analyzer-config
+GET /api/governance/routing-rules
+GET /api/governance/routing-rules/{rule_id}
+GET /api/routing/complexity-analyzer-config
+GET /api/routing/complexity-analyzer-generations
+GET /api/routing/complexity-analyzer-status
+GET /api/routing/rules
+GET /api/routing/rules/{rule_id}
+
+@ managed Settings.Manage branding-service branding-safe
+POST /api/branding/reset
+POST /api/branding/update
+
+@ managed Settings.Manage none ordinary
+DELETE /api/cache/clear-by-key/{cacheKey}
+DELETE /api/cache/clear/{cacheId}
+
+@ managed Settings.Manage settings-input settings-safe
+PUT /api/config
+POST /api/config/metadata
+PUT /api/feature-flags/{id}
+POST /api/pricing/force-sync
+PUT /api/proxy-config
+
+@ managed Settings.Manage,Logs.RevealContent none debug-explicit
+GET /api/dev/pprof
+GET /api/dev/pprof/goroutines
+
+@ managed Settings.View none settings-safe
+GET /api/config
+GET /api/feature-flags
+GET /api/proxy-config
+
+@ managed VirtualKeys.Manage none vk-values
+POST /api/governance/virtual-keys
+POST /api/governance/virtual-keys/rotate
+DELETE,PUT /api/governance/virtual-keys/{vk_id}
+DELETE,PUT /api/governance/virtual-keys/{vk_id}/budgets/{budget_id}/override
+POST /api/governance/virtual-keys/{vk_id}/rotate
+
+@ managed VirtualKeys.View vk-export vk-values
+GET /api/governance/virtual-keys
+GET /api/governance/virtual-keys/{vk_id}
+
+@ oauth-protocol - none protocol
+GET /oauth2/authorize
+POST /oauth2/register
+POST /oauth2/token
+
+@ public - none protocol
+GET /.well-known/jwks.json
+GET /.well-known/oauth-authorization-server
+GET /.well-known/oauth-authorization-server/{path:*}
+GET /.well-known/oauth-protected-resource
+GET /.well-known/oauth-protected-resource/{path:*}
+GET /api/branding/assets/{slot}/{hash}
+POST /api/branding/get
+GET /api/oauth/callback
+GET /api/skills/serve/all/download.zip
+GET /api/skills/serve/claude-code/.claude-plugin/marketplace.json
+POST /api/skills/serve/claude-code/plugins/{skill-name}/git-upload-pack
+GET /api/skills/serve/claude-code/plugins/{skill-name}/info/refs
+GET /api/skills/serve/codex/.agents/plugins/marketplace.json
+POST /api/skills/serve/codex/git-upload-pack
+GET /api/skills/serve/codex/info/refs
+POST /api/skills/serve/codex/plugins/{skill-name}/git-upload-pack
+GET /api/skills/serve/codex/plugins/{skill-name}/info/refs
+GET /api/skills/serve/{skill-name}/download.zip
+GET /api/skills/serve/{skill-name}/files/{filepath:*}
+GET /api/version
+GET /health
+
+@ rbac-service - none protocol
+POST /api/accounts/get-roles
+POST /api/accounts/set-roles
+POST /api/permissions/list
+POST /api/permissions/me
+POST /api/roles/create
+POST /api/roles/delete
+POST /api/roles/get
+POST /api/roles/list
+POST /api/roles/update
+
+@ static - none protocol
+GET /
+GET /robots.txt
+GET /{filepath:*}
+
+@ vk-self - none protocol
+GET /api/governance/virtual-keys/quota

@@ -1,4 +1,5 @@
-// Package host 连接 EE 身份服务与宿主路由：替换管理鉴权、导入旧管理员、兼容 WS/配置/临时令牌；不实现账号业务。
+// Package host 把EE的登录检查接到Bifrost已有接口上，并处理旧管理员导入、配置和WebSocket连接。
+// 账号的创建、密码和角色规则由业务模块负责。
 package host
 
 import (
@@ -23,7 +24,7 @@ import (
 
 type principalKey struct{}
 
-// consoleSessions 是管理鉴权需要的会话能力，由 identity.SessionService 满足；本包按实际需要声明，不持有整个身份服务。
+// consoleSessions 列出Bifrost接口所需的登录检查和账号查询，由身份模块的SessionService提供。
 type consoleSessions interface {
 	Authenticate(context.Context, string) (identity.Principal, error)
 	ValidateSession(context.Context, string) (identity.Principal, error)
@@ -32,32 +33,70 @@ type consoleSessions interface {
 	Me(context.Context, identity.Principal) (identity.Account, error)
 }
 
-// legacyImporter 是导入旧管理员需要的能力，由 identity.AccountService 满足。
+// legacyImporter 先查询系统是否已初始化，再按需导入旧管理员，由身份模块的AccountService提供。
 type legacyImporter interface {
 	State(context.Context) (identity.State, error)
 	BootstrapLegacy(ctx context.Context, username, passwordHash string) error
 }
 
-// identityRoutes 是接入身份 HTTP 层需要的能力，由 identityhttp.Handler 满足：注册端点、提供部署 origin 与同源判断。
+// identityRoutes 用于注册身份接口，以及查询和检查控制台的访问来源，由身份HTTP处理器提供。
 type identityRoutes interface {
 	Origin() string
 	SameOrigin(*fasthttp.RequestCtx) bool
 	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
 }
 
-// AuthAdapter 实现宿主的 ConsoleAuthProvider；依赖由 app 装配后注入，宿主对象只用于临时令牌与配置读取。
+// ConsoleAccess 检查已有管理接口的角色权限，并返回本次请求需要执行的前后处理。
+type ConsoleAccess interface {
+	Prepare(context.Context, *fasthttp.RequestCtx, identity.Principal) (schemas.BifrostHTTPMiddleware, error)
+}
+
+// WithConsoleAccess 接入角色权限组件；已接入接口检查失败时直接拒绝，不回退管理员检查。
+func WithConsoleAccess(access ConsoleAccess) AuthOption {
+	return func(a *AuthAdapter) { a.access = access }
+}
+
+// AdditionalRoutes 让角色等模块注册自己的接口，并告诉Bifrost哪些请求由该模块处理。
+// 匹配到的请求交给模块自己检查登录和权限。
+type AdditionalRoutes interface {
+	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
+	OwnsRoute(string, string) bool
+}
+
+// AuthOption 用于创建AuthAdapter时传入额外配置，例如角色接口或管理员查询。
+type AuthOption func(*AuthAdapter)
+
+// WithAdditionalRoutes 将角色等模块的接口加入同一个Bifrost应用。
+func WithAdditionalRoutes(routes AdditionalRoutes) AuthOption {
+	return func(a *AuthAdapter) { a.additional = routes }
+}
+
+// WithRecoveryAnchor 传入一个查询函数，用来查系统初始化时指定的管理员。
+// 供/api/config返回兼容认证信息；查询不返回密码，也不参与管理接口授权。
+func WithRecoveryAnchor(lookup func(context.Context) (identity.Account, error)) AuthOption {
+	return func(a *AuthAdapter) { a.anchor = lookup }
+}
+
+// AuthAdapter 将Bifrost的管理请求交给EE检查登录和权限；所需服务由app创建后传入。
 type AuthAdapter struct {
-	service consoleSessions
-	http    identityRoutes
-	host    *server.BifrostHTTPServer
+	service    consoleSessions
+	http       identityRoutes
+	host       *server.BifrostHTTPServer
+	access     ConsoleAccess
+	additional AdditionalRoutes
+	anchor     func(context.Context) (identity.Account, error)
 }
 
-// NewAuthAdapter 由 app 在身份服务与 HTTP 适配构造完成后调用；只接收会话线与路由接入能力，建号、重置、恢复对本包不可见。
-func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler identityRoutes) *AuthAdapter {
-	return &AuthAdapter{service: sessions, http: handler, host: host}
+// NewAuthAdapter 接收身份模块的登录检查、HTTP处理器和可选配置，供Bifrost注册和保护管理接口。
+func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler identityRoutes, options ...AuthOption) *AuthAdapter {
+	a := &AuthAdapter{service: sessions, http: handler, host: host}
+	for _, option := range options {
+		option(a)
+	}
+	return a
 }
 
-// Logger 是本包需要的日志能力，由 app 注入宿主 logger；消息为 printf 风格。
+// Logger 用于记录旧管理员导入结果，由app传入；msg可用%s等占位符。
 type Logger interface {
 	Info(msg string, args ...any)
 }
@@ -145,9 +184,12 @@ func validateLegacyFile(appDir string) error {
 	return nil
 }
 
-// RegisterSessionRoutes 用身份路由替换宿主的旧会话路由。
+// RegisterSessionRoutes 注册EE身份接口，替换Bifrost旧会话接口；传入角色接口时也一起注册。
 func (a *AuthAdapter) RegisterSessionRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
 	a.http.RegisterRoutes(r, m...)
+	if a.additional != nil {
+		a.additional.RegisterRoutes(r, m...)
+	}
 }
 
 // public 列出无需管理身份的 GET 入口：健康检查、版本、静态资源及各协议自行验证的 OAuth 发现路径。
@@ -208,8 +250,9 @@ func (a *AuthAdapter) authorizeTemporary(c *fasthttp.RequestCtx) error {
 	return nil
 }
 
-// APIMiddleware 是全部管理路由的鉴权：只有正常的主管理员会话放行，并为通知等上游能力设置 localAdmin 兼容标记。
-// 身份路由与公开入口直接放行；WebSocket 握手用票据或 Cookie 并绑定重验回调；/api/config 做认证投影与预检。
+// APIMiddleware 在Bifrost处理管理请求前检查登录；身份和角色接口交给各自模块检查，公开接口直接放行。
+// 注入角色组件时按接口权限检查；未注入时沿用身份模块的管理员策略。原有临时令牌入口保持原规则。
+// WebSocket连接会再次检查登录，配置接口还会限制旧认证字段的读写。
 func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(c *fasthttp.RequestCtx) {
@@ -218,7 +261,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			c.RemoveUserValue(principalKey{})
 			c.RemoveUserValue(handlers.WebSocketAuthorizeContextKey)
 			method, path := string(c.Method()), string(c.Path())
-			if public(method, path) || identityhttp.OwnsRoute(method, path) {
+			if public(method, path) || identityhttp.OwnsRoute(method, path) || (a.additional != nil && a.additional.OwnsRoute(method, path)) {
 				next(c)
 				return
 			}
@@ -248,11 +291,19 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			} else {
 				p, err = a.service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
 			}
+			var wrapper schemas.BifrostHTTPMiddleware
 			if err == nil {
-				err = a.service.RequireAccountManager(ctx, p)
+				if a.access != nil {
+					wrapper, err = a.access.Prepare(ctx, c, p)
+					if err == nil && wrapper == nil {
+						err = identity.ErrUnavailable
+					}
+				} else {
+					err = a.service.RequireAccountManager(ctx, p)
+				}
 			}
 			if err != nil {
-				if temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
+				if (errors.Is(err, identity.ErrUnauthorized) || errors.Is(err, identity.ErrForbidden)) && temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
 					if err = a.authorizeTemporary(c); err == nil {
 						next(c)
 						return
@@ -266,9 +317,11 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				return
 			}
 			c.SetUserValue(principalKey{}, p)
-			c.SetUserValue(schemas.IsLocalAdminContextKey, true)
-			if path == "/ws" {
-				sessionID := p.SessionID // 只捕获会话 ID，不保留 RequestCtx
+			if wrapper == nil {
+				c.SetUserValue(schemas.IsLocalAdminContextKey, true)
+			}
+			if path == "/ws" && wrapper == nil {
+				sessionID := p.SessionID // 连接后还会检查登录，只保留会话编号，避免继续引用已结束的HTTP请求。
 				c.SetUserValue(handlers.WebSocketAuthorizeContextKey, func(ctx context.Context) error {
 					ctx = identity.WithDiagnosticOperation(ctx, "identity.websocket")
 					p, err := a.service.ValidateSession(ctx, sessionID)
@@ -279,10 +332,18 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 				})
 			}
 			if path == "/api/config" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) {
-				a.serveConfig(ctx, c, p, next)
+				configHandler := next
+				if wrapper != nil {
+					configHandler = wrapper(next)
+				}
+				a.serveConfig(ctx, c, p, configHandler)
 				return
 			}
-			next(c)
+			if wrapper != nil {
+				wrapper(next)(c)
+			} else {
+				next(c)
+			}
 		}
 	}
 }

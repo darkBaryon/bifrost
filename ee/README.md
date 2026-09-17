@@ -16,11 +16,12 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http/、persistence/、hasher/ 分别适配入口、存储和 bcrypt |
 | [internal/pricing/](internal/pricing/README.md) | 国内厂商识别、价格换算与启动同步；persistence/ 适配上游定价覆盖和模型目录 |
 | [internal/guardrails/](internal/guardrails/README.md) | 本地内容安全规则框架及 BF Chat Hook；支持显式开启假检测器联调，真实检测器尚未接入 |
+| [internal/rbac/](internal/rbac/README.md) | 角色、权限目录、账号角色分配及对应HTTP接口 |
 | [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、会话路由、WebSocket 重验、配置投影 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |
 
-双方共享 HTTP Server、Router 和已有数据库连接；EE 内嵌上游 Handler 链，按业务需要增加外层处理。账号认证后端已实现，完整角色权限与认证页面后续开发。
+双方共享 HTTP Server、Router 和已有数据库连接；EE 内嵌上游 Handler 链，按业务需要增加外层处理。账号认证和角色管理接口已接入；已有管理接口已按角色授权，覆盖厂商、虚拟密钥、治理、路由、MCP、提示词、日志、Webhook、插件、设置和通知。通知长连接逐条消息检查权限；认证页面仍在后续范围。
 
 前端继续放在 `ee/ui/`，与 Go 后端保持各自的依赖和构建职责；本次迁移保留现有覆盖方式。
 
@@ -33,20 +34,25 @@ make -C ee help
 make -C ee dev     # EE API，默认 8080；前端开发服务器另行启动
 make -C ee build   # 构建并嵌入 UI，输出 ee/tmp/bifrost-http
 make -C ee test    # EE 模块的 go vet + go test
-make -C ee smoke            # 构建并执行隔离冒烟：国内定价 + 品牌 + SQLite 身份
+make -C ee smoke            # 构建并执行隔离冒烟：国内定价 + 品牌 + SQLite 身份和角色权限
 make -C ee smoke-pricing    # 国内定价失败现场回归与 HTTP 冒烟
 make -C ee smoke-identity   # 双节点 PostgreSQL 身份冒烟，需要 IDENTITY_TEST_POSTGRES_DSN
+make -C ee smoke-rbac-postgres # 双节点 PostgreSQL 角色权限冒烟，需要 RBAC_TEST_POSTGRES_DSN
 ```
 
 首次前端构建先在根 `ui/` 执行 `npm ci`。workspace 目标将 EE 加入根 go.work（缺失时初始化），dev/build 同步前端覆盖层。构建产物位于 `cmd/bifrost-http/ui/`，不入库。
 
-冒烟使用临时配置、随机端口和自有进程：品牌冒烟验证宿主接入、品牌操作与重启保留，身份冒烟验证初始化竞争、账号与密码流程、跨节点撤销、WS 与离线恢复；两者共用 `scripts/identity-smoke.py` 里的进程夹具。骨架探针接口、空插件、表注册和页面/响应标记已移除；已有数据库中的旧测试表不再使用。
+冒烟使用临时配置、随机端口和自有进程：品牌冒烟验证宿主接入、品牌操作与重启保留，身份冒烟验证初始化竞争、账号与密码流程、跨节点撤销、WS 与离线恢复；角色权限冒烟验证角色管理、撤权、敏感字段和通知筛选。这些脚本共用 `scripts/identity-smoke.py` 里的进程夹具。骨架探针接口、空插件、表注册和页面/响应标记已移除；已有数据库中的旧测试表不再使用。
 
 定价冒烟 `scripts/pricing-smoke.py` 验证覆盖同步、等价域名重启保留、汇率换算和非法文件降级；`smoke-pricing` 先运行失败现场回归脚本 `scripts/pricing-smoke-test.py`，验证进程回收、失败证据保留及金额断言诊断，再执行 HTTP 冒烟。
 
 ## 账号认证
 
 参见[接口](docs/账号认证接口.md)和[升级与恢复](docs/账号认证升级与恢复.md)。EE管理默认强制认证，旧管理员重新登录，新实例需要初始化密钥；管理脚本迁移为Cookie及同源Origin。
+
+## 角色权限
+
+参见[角色权限接口](docs/角色权限接口.md)。PostgreSQL 冒烟需设置 `RBAC_TEST_POSTGRES_DSN`，例如 `host=localhost user=postgres dbname=postgres sslmode=disable`；使用可创建临时数据库的测试账号。脚本不修改已有业务数据库。
 
 ## 文档
 

@@ -4,7 +4,11 @@ package identity
 import (
 	"context"
 	"errors"
+	"time"
 )
+
+// lastLoginPrecision 让最近登录时间按微秒保存和返回，保证两种数据库与响应一致。
+const lastLoginPrecision = time.Microsecond
 
 // Authenticate 用 Cookie 中的原始 token 换取身份；形状不对的 token 不查库。
 func (s *SessionService) Authenticate(ctx context.Context, raw string) (Principal, error) {
@@ -59,8 +63,11 @@ func (s *SessionService) Login(ctx context.Context, username, password, peerIP s
 	raw := randomToken()
 	var out IssuedSession
 	err = s.repo.Transaction(ctx, func(tx Tx) error {
-		// 比较密码期间可能发生重置或停用：签发前重读，版本或哈希变化则拒绝。
+		// 比较密码期间可能发生重置、停用或删除：签发前重读，版本或哈希变化则拒绝。
 		latest, err := tx.Account(c.ID)
+		if errors.Is(err, ErrNotFound) {
+			return ErrUnauthorized
+		}
 		if err != nil {
 			return err
 		}
@@ -74,6 +81,12 @@ func (s *SessionService) Login(ctx context.Context, username, password, peerIP s
 		}
 		p, err := verify(AuthRecord{Session: v, Account: latest}, now())
 		if err != nil {
+			return err
+		}
+		loggedAt := v.CreatedAt.Truncate(lastLoginPrecision)
+		latest.LastLoginAt = &loggedAt
+		latest.UpdatedAt = v.CreatedAt
+		if err = tx.SaveAccount(latest); err != nil {
 			return err
 		}
 		out = IssuedSession{Principal: p, Account: latest.Account, Token: raw, ExpiresAt: v.ExpiresAt}
@@ -97,11 +110,11 @@ func (s *SessionService) Logout(ctx context.Context, raw string) error {
 	return SafeError(s.repo.Transaction(ctx, func(tx Tx) error { return tx.RevokeSession(r.Session.ID, now()) }))
 }
 
-// IssueTicket 为正常的主管理员会话签发一次性 WebSocket 票据，原文只返回一次。
+// IssueTicket 检查账号是否允许接收通知，通过后签发一次性长连接票据。
 func (s *SessionService) IssueTicket(ctx context.Context, p Principal) (string, error) {
 	raw := randomToken()
 	err := s.repo.Transaction(ctx, func(tx Tx) error {
-		if _, err := s.manager(tx, p); err != nil {
+		if _, err := s.actor(ctx, tx, p, OpenConsoleStream, ""); err != nil {
 			return err
 		}
 		return tx.InsertTicket(Ticket{Hash: digest(raw), SessionID: p.SessionID, ExpiresAt: now().Add(WSTicketTTL)})
@@ -109,7 +122,7 @@ func (s *SessionService) IssueTicket(ctx context.Context, p Principal) (string, 
 	return raw, SafeError(err)
 }
 
-// ConsumeTicket 消费票据并返回其会话身份；票据只能用一次，且会话仍须是正常的主管理员会话。
+// ConsumeTicket 使用并作废票据；连接建立前再次检查登录状态和接收通知的权限。
 func (s *SessionService) ConsumeTicket(ctx context.Context, raw string) (Principal, error) {
 	if len(raw) != tokenLength {
 		return Principal{}, ErrUnauthorized
@@ -124,7 +137,7 @@ func (s *SessionService) ConsumeTicket(ctx context.Context, raw string) (Princip
 		if err != nil {
 			return err
 		}
-		if err := s.authorize(tx.State(), p); err != nil {
+		if err := s.authorizeTx(ctx, tx, p, OpenConsoleStream, ""); err != nil {
 			return err
 		}
 		out = p

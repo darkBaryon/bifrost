@@ -313,6 +313,16 @@ func (h *ConfigHandler) updateConfig(ctx *fasthttp.RequestCtx) {
 		return
 	}
 
+	if policy, present, ok := consolePolicy[ConsoleSettingsUpdatePolicy](ctx, ConsoleSettingsUpdatePolicyContextKey); !ok {
+		return
+	} else if present {
+		desired := ConsoleSettingsUpdate{Client: &payload.ClientConfig, Framework: &payload.FrameworkConfig}
+		if e := policy(ctx, &desired); e != nil {
+			sendConsolePolicyError(ctx, e)
+			return
+		}
+	}
+
 	// Validate MCP external URL overrides up front — the rest of this handler
 	// applies live mutations (drop-excess flag, MCP tool-manager reload, compat
 	// plugin reload, in-memory MCP config) before persisting, so a late
@@ -1075,6 +1085,15 @@ func (h *ConfigHandler) updateProxyConfig(ctx *fasthttp.RequestCtx) {
 	if err := json.Unmarshal(ctx.PostBody(), &payload); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
 		return
+	}
+
+	if policy, present, ok := consolePolicy[ConsoleProxyUpdatePolicy](ctx, ConsoleProxyUpdatePolicyContextKey); !ok {
+		return
+	} else if present {
+		if e := policy(ctx, &payload); e != nil {
+			sendConsolePolicyError(ctx, e)
+			return
+		}
 	}
 
 	// Validate proxy config

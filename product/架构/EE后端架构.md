@@ -2,7 +2,7 @@
 
 [← 产品与技术文档](../README.md) · [编码规范](../../workbench/规范/项目/编码规范.md)
 
-**已确认，2026-09-11（账号认证段 2026-09-12 更新）。** EE 自有后端采用 **feature-first：按业务能力分模块，模块内部保留分层**。本文约定整体架构；现有入口、装配和品牌模块已完成目录迁移，账号认证后端已于 2026-09-12 通过 Gate 2（仅后端：账号、凭据、会话、密码事件与管理路由接管；认证页面、项目操作日志页面与完整 RBAC 后续交付），其余示例模块按需开发。
+**已确认，2026-09-11（角色权限段 2026-09-17 更新）。** EE 自有后端采用 **feature-first：按业务能力分模块，模块内部保留分层**。本文约定整体架构；现有入口、装配和品牌模块已完成目录迁移，账号认证后端已于 2026-09-12 通过 Gate 2（仅后端：账号、凭据、会话、密码事件与管理路由接管；认证页面和项目操作日志页面后续交付；角色权限后端已实施，正在最终验收），其余示例模块按需开发。
 
 ## 1. 应用边界
 
@@ -19,7 +19,7 @@ HTTP Server
 Bifrost 插件链 → EE 插件适配 → EE 业务服务
 ```
 
-当前先由EE注入ConsoleAuthFactory，再执行上游Bootstrap（在管理路由注册前装配身份服务），随后EE attach装配品牌并调用上游Start。双方共享Server、Router和配置数据库，推理链保持宿主实现。identity及宿主认证适配已实现并通过Gate 2；认证页面、项目日志页面和完整RBAC后续开发。验收依据见[Gate2验收摘要2](../../workbench/evidence/账号认证-期1-Gate2验收摘要2.md)与[验收记录](../../workbench/cases/账号认证/期1/验收记录.md)，本文架构约定本身不作为功能已交付的证据。
+当前先由EE注入ConsoleAuthFactory，再执行上游Bootstrap（在管理路由注册前装配身份服务），随后EE attach装配品牌并调用上游Start。双方共享Server、Router和配置数据库，推理链保持宿主实现。identity及宿主认证适配已实现并通过Gate 2；角色权限后端已实施并接入管理路由，最终验收见[当前过程记录](../../workbench/cases/角色权限后端/期4/方案v1.md)；认证页面和项目日志页面后续开发。验收依据见[Gate2验收摘要2](../../workbench/evidence/账号认证-期1-Gate2验收摘要2.md)与[验收记录](../../workbench/cases/账号认证/期1/验收记录.md)，本文架构约定本身不作为功能已交付的证据。
 
 图中的“EE 外层 Handler”包装整个请求链，“EE 功能 Handler”处理具体接口。Bifrost 的 Handler 链内嵌在 EE 中，双方通过共享 Router 分发请求。调整 EE 的业务组织时，继续复用上游的协议适配、Provider、推理编排与治理实现。
 
@@ -51,7 +51,7 @@ ee/
 └── Makefile
 ```
 
-现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`、`internal/pricing/`及`internal/host/`；完整角色权限等模块后续按需建立。`pricing` 只在启动期运行一次，没有 HTTP、插件或 Worker 入口，是「按调用来源决定入口」的一个实例：它写上游既有的定价覆盖表并更新内存目录，不新建表、不改上游代码。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
+现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`、`internal/rbac/`、`internal/pricing/`、`internal/guardrails/`及`internal/host/`；audit 等仍为布局示例，按需建立。`pricing` 只在启动期运行一次，没有 HTTP、插件或 Worker 入口，是「按调用来源决定入口」的一个实例：它写上游既有的定价覆盖表并更新内存目录，不新建表、不改上游代码。`guardrails` 已有本地规则框架和 Chat Hook，真实检测器尚未接入。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
 
 ## 4. 模块内部的职责
 
@@ -67,6 +67,7 @@ ee/
 | `worker/` | 执行后台任务，调用业务服务 |
 | `persistence/` | 存储、表映射、迁移与事务实现 |
 | `providers/` | 外部服务的协议适配 |
+| `host/` | 所属业务接入宿主接口，例如角色授权、敏感字段处理 |
 
 业务规则由模块内函数或服务负责，入口和存储实现各司其职。业务模型、HTTP DTO 与数据库模型按各自用途定义，避免直接暴露内部字段。同一包内优先将需要一起理解的操作、类型、接口和错误放在一起，有明确阅读与维护收益后再拆文件。简单模块无需为这些概念逐一建文件，也不要求具备所有子包；具体遵循 [编码规范](../../workbench/规范/项目/编码规范.md#文件组织以阅读为先)。
 
@@ -75,7 +76,7 @@ ee/
 ## 5. 依赖与协作
 
 ```text
-http / plugin / worker / persistence / providers → 业务根包
+http / plugin / worker / persistence / providers / host → 业务根包
 app → 业务服务 + 具体实现（构造函数注入）
 ```
 
@@ -112,7 +113,7 @@ app → 业务服务 + 具体实现（构造函数注入）
 ## 7. 与 Bifrost 的协作边界
 
 - **集成归位**：`internal/host/` 负责宿主、管理路由、会话兼容等跨功能接入；具体业务插件留在所属模块。
-- **适配归位判定**：模块根包只依赖标准库；`<模块>/<子包>` 是把根包定义的接口适配到某个库（如 `identity/persistence`→GORM、`identity/http`→fasthttp、`identity/hasher`→bcrypt），库不是宿主对象；只有触及运行中宿主对象（`*server.BifrostHTTPServer`、handlers 上下文键、`TempTokens` 等）的代码才进 `internal/host/`。宿主接入对模块能力只声明自己需要的窄接口，由 `app` 显式注入。
+- **适配归位判定**：模块根包只依赖标准库。HTTP、数据库、密码算法及宿主对象留在适配子包。跨功能的认证中间件、会话兼容放在 `internal/host/`；只服务某项业务的宿主检查放在 `<模块>/host/`，例如 `rbac/host` 的路由权限与敏感字段处理。宿主接入只声明需要的窄接口，由 `app` 显式注入；这与角色权限开发蓝图已确认的目录一致。
 - **复用完整操作**：保留上游的存储与运行状态更新链。例如 Provider 修改还涉及内存配置、Core 和模型发现，不能只写表；审计也不能只凭 HTTP 状态判断变更结果。
 - **按缺口扩展**：先评估已有数据库、迁移、日志、向量库、插件与 Sidekiq，再增加实现；不重复包装整套 SDK 或另建基础设施。
 - **生命周期统一协调**：共享资源由创建者管理，EE 的初始化失败清理和关闭流程须与上游协调，避免重复关闭共享连接。

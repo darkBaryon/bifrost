@@ -260,7 +260,8 @@ def exercise(nodes, dbconfig, dsn):
     a.expect(200, '/ws?ticket='+ticket['ticket'], method='OPTIONS')
     a.expect(401, '/ws?token=legacy-private-token', method='GET')
     with contextlib.closing(websocket(b, ticket['ticket'])) as ws:
-        notification = {'title':'identity-test','message':'test notification','severity':'info','audience':'roles','role_ids':[987654]}
+        # 本脚本验证会话撤销；角色受众校验由 rbac-smoke.py 覆盖。
+        notification = {'title':'identity-test','message':'test notification','severity':'info','audience':'all'}
         b.expect(201, '/api/notifications', notification, token=admin)
         ws.settimeout(8)
         message = frame(ws)

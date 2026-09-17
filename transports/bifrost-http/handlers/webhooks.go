@@ -232,6 +232,14 @@ func (h *WebhookHandler) createWebhookEndpoint(ctx *fasthttp.RequestCtx) {
 		return
 	}
 	endpoint := req.toTable(uuid.NewString())
+	if policy, present, ok := consolePolicy[ConsoleWebhookPolicy](ctx, ConsoleWebhookPolicyContextKey); !ok {
+		return
+	} else if present {
+		if e := policy(ctx, ConsoleWebhookCreate, endpoint); e != nil {
+			sendConsolePolicyError(ctx, e)
+			return
+		}
+	}
 	if err := endpoint.Validate(); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
 		return
@@ -289,6 +297,14 @@ func (h *WebhookHandler) updateWebhookEndpoint(ctx *fasthttp.RequestCtx) {
 		}
 	}
 	endpoint := req.toTable(id)
+	if policy, present, ok := consolePolicy[ConsoleWebhookPolicy](ctx, ConsoleWebhookPolicyContextKey); !ok {
+		return
+	} else if present {
+		if e := policy(ctx, ConsoleWebhookUpdate, endpoint); e != nil {
+			sendConsolePolicyError(ctx, e)
+			return
+		}
+	}
 	if err := endpoint.Validate(); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
 		return
@@ -608,6 +624,14 @@ func (h *WebhookHandler) redeliverWebhook(ctx *fasthttp.RequestCtx) {
 	if endpoint.Disabled {
 		SendError(ctx, fasthttp.StatusBadRequest, "The endpoint this delivery belongs to is disabled")
 		return
+	}
+	if policy, present, ok := consolePolicy[ConsoleWebhookPolicy](ctx, ConsoleWebhookPolicyContextKey); !ok {
+		return
+	} else if present {
+		if e := policy(ctx, ConsoleWebhookRedeliver, endpoint); e != nil {
+			sendConsolePolicyError(ctx, e)
+			return
+		}
 	}
 	// Same id as the original delivery: the webhook-id header stays stable,
 	// so receiver-side deduplication of the replay remains intentional.

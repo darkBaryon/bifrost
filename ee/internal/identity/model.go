@@ -50,7 +50,7 @@ type EventAction string
 
 const (
 	ActionPasswordChange EventAction = "password_change" // 本人改密
-	ActionPasswordReset  EventAction = "password_reset"  // 主管理员重置
+	ActionPasswordReset  EventAction = "password_reset"  // 管理者重置
 	ActionAdminRecovery  EventAction = "admin_recovery"  // 离线恢复命令
 )
 
@@ -101,6 +101,9 @@ var tokenLength = base64.RawURLEncoding.EncodedLen(tokenBytes)
 // usernamePattern 只约束新建账号；迁移的旧用户名原样保留并允许登录。
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{2,63}$`)
 
+// ValidAccountID 检查账号编号是否符合身份模块使用的UUID格式。
+func ValidAccountID(id string) bool { return uuidPattern.MatchString(id) }
+
 // uuidPattern 校验调用方提供的账号 ID 与 operation_id。
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
 
@@ -119,7 +122,8 @@ type Account struct {
 	DisplayName        string
 	Status             AccountStatus
 	MustChangePassword bool
-	CreatedAt          time.Time // 建号时间；账号列表按它与 ID 倒序分页
+	CreatedAt          time.Time  // 建号时间；账号列表按它与 ID 倒序分页
+	LastLoginAt        *time.Time // 最近一次成功登录时间；从未登录或旧记录为nil
 }
 
 // AccountRecord 是账号的完整记录，只在服务与存储之间传递。
@@ -130,7 +134,7 @@ type AccountRecord struct {
 	UpdatedAt    time.Time
 }
 
-// State 是身份单例状态：是否已初始化以及主管理员账号。
+// State 是身份单例状态：是否已初始化以及固定恢复锚点账号。
 type State struct {
 	Initialized    bool
 	ChiefAccountID string
@@ -161,7 +165,7 @@ type IssuedSession struct {
 	ExpiresAt time.Time
 }
 
-// PasswordEvent 是密码操作记录；账号名是操作时的快照，记录不随账号停用删除。
+// PasswordEvent 是密码操作记录；账号名是操作时的快照，记录不随账号停用或删除而移除。
 type PasswordEvent struct {
 	ID          string
 	OperationID string // 重置由调用方提供的 UUID，其他事件由服务生成
@@ -206,9 +210,11 @@ type LoginLimit struct {
 	Window time.Duration
 }
 
-// Repository 由存储实现；读取方法在事务外执行，写入通过 Transaction。
+// Repository 提供账号存储；Read让一组查询看到同一份数据，Transaction让一组修改一起提交或回滚。
 // 读取未找到时返回 ErrNotFound，同时返回的值是零值，调用方不得使用；存储故障原样返回，由服务折叠为 ErrUnavailable。
 type Repository interface {
+	// Read执行一组账号查询，传入的Queries只供本次回调使用。
+	Read(context.Context, func(Queries) error) error
 	// State 读取单例状态；迁移完成后该行必然存在。
 	State(context.Context) (State, error)
 	// RecordByName 按登录名读取完整账号记录。
@@ -228,6 +234,8 @@ type Repository interface {
 
 // Tx 是一个已锁定 state 的身份事务；读取未找到时返回 ErrNotFound。
 type Tx interface {
+	// AccessPolicy返回加入当前事务的账号操作策略；未配置时由业务服务使用默认策略。
+	AccessPolicy() AccountPolicy
 	State() State
 	SaveState(State) error
 	Account(string) (AccountRecord, error)
@@ -235,6 +243,8 @@ type Tx interface {
 	// InsertAccount 与 InsertEvent 在唯一键冲突时返回 ErrConflict。
 	InsertAccount(AccountRecord) error
 	SaveAccount(AccountRecord) error
+	// DeleteAccount 删除账号及其会话、票据，保留密码事件；不存在返回ErrNotFound。
+	DeleteAccount(string) error
 	AuthByID(string) (AuthRecord, error)
 	InsertSession(Session) error
 	RevokeSession(string, time.Time) error
@@ -251,27 +261,6 @@ type PasswordHasher interface {
 	Hash(string) (string, error)
 	Compare(string, string) (bool, error)
 	ValidHash(string) bool
-}
-
-// AccountPolicy 决定谁能管理账号；State 由服务在同一读取或事务中提供，后续 RBAC 通过装配替换。
-// 受限会话（仍需改密）的限制由服务执行，策略不必重复检查。
-type AccountPolicy interface {
-	RequireAccountManager(State, Principal) error
-	CanReadAllPasswordEvents(State, Principal) (bool, error)
-}
-
-// ChiefPolicy 是 RBAC 接入前的暂行策略：只有主管理员能管理账号并查看全部事件。
-type ChiefPolicy struct{}
-
-func (ChiefPolicy) RequireAccountManager(state State, p Principal) error {
-	if !state.Initialized || p.AccountID != state.ChiefAccountID {
-		return ErrForbidden
-	}
-	return nil
-}
-
-func (c ChiefPolicy) CanReadAllPasswordEvents(state State, p Principal) (bool, error) {
-	return c.RequireAccountManager(state, p) == nil, nil
 }
 
 // 诊断关联：入口为一次操作分配 ID，存储在失败时连同操作名一起记录，日志不含凭据或 HTTP 对象。

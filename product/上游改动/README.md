@@ -121,3 +121,39 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
    - 对照 `transports/bifrost-http/handlers/temptokens.go` 里三个 scope 的 `AllowedRoutes`，确认 EE 的 `temporaryRoute()`（宿主认证接入包）仍逐条覆盖；上游加了 scope 而 EE 没跟上，那条流程会被 401 挡掉
 4. 上游若自行实现了同类扩展点（例如官方支持替换控制台认证），删除我们的对应改动，改用官方接口，并在此登记。
 5. 本期改动的完整背景见 [账号认证期 1 方案](../../workbench/cases/账号认证/期1/方案v2.md) §4.5 与 [验收记录](../../workbench/cases/账号认证/期1/验收记录.md)。
+
+## 角色权限后端期2候选的增量
+
+本节登记当前工作分支的期2候选，尚未合入主线。依据[期2方案](../../workbench/cases/角色权限后端/期2/方案v1.md)的上游白名单，仅涉及：
+
+- `transports/bifrost-http/handlers/providers.go`：updateProvider读取旧配置后、校验和保存前增加可选回调（+9行）。用于将EE隐藏的地址、请求头占位标记恢复为旧值，避免误存占位文字；未设置回调时原流程不变。
+- `transports/bifrost-http/handlers/consolepolicy.go`：提供厂商更新回调类型及安全错误处理。错误类型或空回调返回503，不继续更新；期2时只含厂商扩展点，后续扩展见下节。
+- `transports/bifrost-http/handlers/consolepolicy_test.go`：验证未注入、正确回调、错误类型、空回调和内部错误隐藏。
+
+同步上游时保留调用时点与默认行为，并执行Provider策略测试及EE期2真实HTTP冒烟，确认隐藏字段保留和请求头整份替换语义。
+
+## 角色权限后端期3与期4合并候选的增量
+
+用户授权合并提取，依据[合并方案](../../workbench/cases/角色权限后端/期3/方案v1.md)，在期2基础上增加下列可选扩展，未注入时保留原行为：
+
+| 文件 | 新增处理及调用位置 |
+|---|---|
+| `handlers/consolepolicy.go` | 设置、代理、Webhook、通知及WS消息检查的回调类型 |
+| `handlers/config.go` | 配置解码后、任何写入或运行时修改前检查；恢复隐藏字段 |
+| `handlers/webhooks.go` | 新建/更新校验前、重新投递入队前检查权限 |
+| `handlers/notifications.go` | 发布前检查权限和受众角色，列表按当前角色筛选 |
+| `handlers/websocket.go` | 在消息写锁内调用过滤器；权限失效关闭连接，无权接收的通知跳过 |
+
+配置更新必须在原handler内拿到解析后的设置才可比较，Webhook重投必须先拿到实际端点，WS建立后已脱离HTTP中间件，因此需要这些上游调用点。业务权限规则仍保留在EE。错误类型或空回调不能当成未配置，内部错误不能透传。
+
+同步上游时运行handler测试、EE权限测试和`ee/scripts/rbac-smoke.py`的SQLite/PG验证，尤其检查保存前拒绝、隐藏字段写回与长连接撤权。此处记录已验收分支的接缝，尚未部署或合入主线。
+
+### 最终验收修正（2026-09-17提出，2026-09-18通过后端验收）
+
+- `ConsolePolicyError` 仅保留使用方读取的 HTTP 状态，错误体仍由上游统一生成；没有注入策略时维持原行为。
+- 通知发布先由上游校验并规范化输入，再交给可选策略判权；EE 不重复做同一份受众格式校验。删除已不可达的 nil 分支。
+- `/metrics` 的文本格式问题在 EE 路由策略中修复，不改上游指标 handler。
+
+### 凭据发送目标权限（用户授权的验收修正）
+
+新增可选 `ConsoleProviderConfigPolicy`、`ConsoleProviderKeyPolicy`、`ConsoleMCPUpdatePolicy`。厂商配置在完整合并后、写入/模型发现前检查；Key创建/更新在合并后、保存前检查；MCP在TLS、OAuth和Headers解析后、临时连接验证前检查。`consolepolicy.go` 定义类型，调用点位于 `providers.go`、`provider_keys.go`、`mcp.go`，普通回归位于 `consolepolicy_test.go`。业务判断仍在EE，未注入时维持原流程。MCP已注入策略时由策略决定是否允许保留旧secret改变OAuth地址；没有注入时保留原必须重填的限制。

@@ -1,4 +1,4 @@
-// 本文件提供离线主管理员恢复入口，不启动HTTP服务或后台worker。
+// 本文件提供停机后恢复管理员的命令，只连接数据库，不启动HTTP服务或后台任务。
 package app
 
 import (
@@ -14,16 +14,19 @@ import (
 	"strings"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	rbacstore "github.com/darkBaryon/bifrost/ee/internal/rbac/persistence"
 	"github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"golang.org/x/term"
 )
 
-// maxPasswordLineBytes 是从 stdin 读一行密码的上限：最长可接受的密码加行尾的 CRLF；更长的输入读到上限即止，随后被密码规则拒绝。
+// maxPasswordLineBytes 限制从标准输入读取的字节数：密码最大长度加上行尾换行符。
+// 超长输入最多读到这里，随后由密码长度检查拒绝。
 const maxPasswordLineBytes = int64(identity.MaxPasswordBytes + len("\r\n"))
 
-// RecoverAdmin 只恢复已经存在的chief；调用者须先停止全部使用该库的实例。
+// RecoverAdmin 重置系统初始化时指定的管理员密码，并补回该账号的主管理员角色。
+// 使用前必须停止所有连接这个数据库的Bifrost实例；账号和角色表必须已准备好，不在恢复时建表。
 func RecoverAdmin(args []string) error {
 	if len(args) == 0 || args[0] != "recover-admin" {
 		return errors.New("usage: identity recover-admin --app-dir <directory>")
@@ -66,12 +69,15 @@ func RecoverAdmin(args []string) error {
 		return errors.New("cannot open recovery database")
 	}
 	defer store.Close(ctx)
-	// 恢复只需要密码规则；初始化密钥不参与，传空。
+	// 恢复使用已有账号，不需要首次初始化密钥，所以这里传空字符串。
 	options, e := identityOptions("")
 	if e != nil {
 		return e
 	}
-	svc, e := newIdentity(store.DB(), options, log)
+	if e = rbacstore.RequireComplete(ctx, store.DB()); e != nil {
+		return errors.New("complete RBAC migration is required for recovery")
+	}
+	svc, _, e := newConsoleServices(store.DB(), options, log)
 	if e != nil {
 		return e
 	}

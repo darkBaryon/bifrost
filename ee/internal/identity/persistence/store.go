@@ -18,13 +18,18 @@ import (
 
 // Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
 type Store struct {
-	db  *gorm.DB
-	log Logger
+	db            *gorm.DB
+	log           Logger
+	policyFactory PolicyFactory
 }
 
 // NewStore 复用宿主的数据库连接；存储故障经 log 记录安全诊断。
-func NewStore(db *gorm.DB, log Logger) *Store {
-	return &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}), log: log}
+func NewStore(db *gorm.DB, log Logger, options ...Option) *Store {
+	s := &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}), log: log}
+	for _, option := range options {
+		option(s)
+	}
+	return s
 }
 
 func notFound(err error) error {
@@ -39,14 +44,18 @@ const pgUniqueViolation = "23505"
 
 // conflict 把两种驱动的唯一键冲突转换为 ErrConflict，其他错误原样返回。
 func conflict(err error) error {
-	var pg *pgconn.PgError
-	var lite sqlite3.Error
-	switch {
-	case errors.As(err, &pg) && pg.Code == pgUniqueViolation,
-		errors.As(err, &lite) && (lite.ExtendedCode == sqlite3.ErrConstraintUnique || lite.ExtendedCode == sqlite3.ErrConstraintPrimaryKey):
+	if IsUniqueConflict(err) {
 		return identity.ErrConflict
 	}
 	return err
+}
+
+// IsUniqueConflict 识别PostgreSQL和SQLite的唯一键或主键冲突；其他错误返回false。
+func IsUniqueConflict(err error) bool {
+	var pg *pgconn.PgError
+	var lite sqlite3.Error
+	return (errors.As(err, &pg) && pg.Code == pgUniqueViolation) ||
+		(errors.As(err, &lite) && (lite.ExtendedCode == sqlite3.ErrConstraintUnique || lite.ExtendedCode == sqlite3.ErrConstraintPrimaryKey))
 }
 
 func (s *Store) State(ctx context.Context) (identity.State, error) {
@@ -105,9 +114,10 @@ func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, e
 
 // transaction 实现 identity.Tx；stage 记录最近执行的操作，供失败诊断定位阶段。
 type transaction struct {
-	db    *gorm.DB
-	state identity.State
-	stage string
+	db     *gorm.DB
+	state  identity.State
+	stage  string
+	policy identity.AccountPolicy
 }
 
 func (t *transaction) State() identity.State { return t.state }
@@ -145,6 +155,26 @@ func (t *transaction) SaveAccount(c identity.AccountRecord) error {
 	t.stage = "account.update"
 	r := accountRowOf(c)
 	return t.db.Save(&r).Error
+}
+
+// DeleteAccount 先清理票据和会话，再删账号；调用方事务保证整组操作回滚。
+func (t *transaction) DeleteAccount(id string) error {
+	t.stage = "account.delete"
+	sessions := t.db.Model(&sessionRow{}).Select("id").Where("account_id = ?", id)
+	if err := t.db.Where("session_id IN (?)", sessions).Delete(&ticketRow{}).Error; err != nil {
+		return err
+	}
+	if err := t.db.Where("account_id = ?", id).Delete(&sessionRow{}).Error; err != nil {
+		return err
+	}
+	result := t.db.Where("id = ?", id).Delete(&accountRow{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return identity.ErrNotFound
+	}
+	return nil
 }
 
 func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
@@ -228,19 +258,20 @@ func (s *Store) transaction(ctx context.Context, fn func(*transaction) error) er
 		phase = "transaction.begin"
 		return s.db.WithContext(ctx).Transaction(func(db *gorm.DB) error {
 			phase = "transaction.lock"
-			result := db.Model(&stateRow{}).Where("id = 1").UpdateColumn("revision", gorm.Expr("revision + 1"))
-			if result.Error != nil {
-				return result.Error
-			}
-			if result.RowsAffected != 1 {
-				return identity.ErrUnavailable
-			}
-			var row stateRow
-			if e := db.First(&row, 1).Error; e != nil {
+			t, e := lockTransaction(db)
+			if e != nil {
 				return e
 			}
-			t := &transaction{db: db, state: identity.State{Initialized: row.Initialized, ChiefAccountID: row.ChiefAccountID}, stage: "transaction.operation"}
-			e := fn(t)
+			if s.policyFactory != nil {
+				t.policy, e = s.policyFactory(db, readView{t})
+				if e != nil {
+					return e
+				}
+				if t.policy == nil {
+					return identity.ErrUnavailable
+				}
+			}
+			e = fn(t)
 			phase = t.stage
 			if e == nil {
 				phase = "transaction.commit"

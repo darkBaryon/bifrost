@@ -17,13 +17,14 @@ type accountRow struct {
 	AuthVersion        int64
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
+	LastLoginAt        *time.Time
 }
 
 func (accountRow) TableName() string { return "ee_identity_accounts" }
 
 func (r accountRow) account() identity.Account {
 	return identity.Account{ID: r.ID, Username: r.Username, DisplayName: r.DisplayName,
-		Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword, CreatedAt: r.CreatedAt}
+		Status: identity.AccountStatus(r.Status), MustChangePassword: r.MustChangePassword, CreatedAt: r.CreatedAt, LastLoginAt: r.LastLoginAt}
 }
 
 func (r accountRow) record() identity.AccountRecord {
@@ -33,7 +34,7 @@ func (r accountRow) record() identity.AccountRecord {
 func accountRowOf(c identity.AccountRecord) accountRow {
 	return accountRow{ID: c.ID, Username: c.Username, DisplayName: c.DisplayName, Status: string(c.Status),
 		MustChangePassword: c.MustChangePassword, PasswordHash: c.PasswordHash, AuthVersion: c.AuthVersion,
-		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+		CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, LastLoginAt: c.LastLoginAt}
 }
 
 // stateRow 是 ID 固定为 1 的单例；Revision 只用于在事务开始时取得写锁。

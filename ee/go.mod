@@ -4,10 +4,19 @@ go 1.27.0
 
 require (
 	github.com/fasthttp/router v1.5.4
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/mattn/go-sqlite3 v1.14.32
 	github.com/maximhq/bifrost/core v1.8.3
 	github.com/maximhq/bifrost/framework v1.6.0
+	github.com/maximhq/bifrost/plugins/compat v0.2.0
+	github.com/maximhq/bifrost/plugins/governance v1.7.0
+	github.com/maximhq/bifrost/plugins/logging v1.7.0
+	github.com/maximhq/bifrost/plugins/maxim v1.7.0
+	github.com/maximhq/bifrost/plugins/otel v1.5.0
+	github.com/maximhq/bifrost/plugins/routing v1.0.0
+	github.com/maximhq/bifrost/plugins/semanticcache v1.6.0
+	github.com/maximhq/bifrost/plugins/telemetry v1.6.0
 	github.com/maximhq/bifrost/transports v0.0.0
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5
@@ -118,7 +127,6 @@ require (
 	github.com/google/cel-go v0.30.0 // indirect
 	github.com/google/pprof v0.0.0-20260802141513-ef3492d7dac3 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.16 // indirect
 	github.com/googleapis/gax-go/v2 v2.22.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.29.0 // indirect
@@ -139,17 +147,9 @@ require (
 	github.com/mark3labs/mcp-go v0.43.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/maximhq/bifrost/plugins/compat v0.2.0 // indirect
-	github.com/maximhq/bifrost/plugins/governance v1.7.0 // indirect
-	github.com/maximhq/bifrost/plugins/logging v1.7.0 // indirect
-	github.com/maximhq/bifrost/plugins/maxim v1.7.0 // indirect
 	github.com/maximhq/bifrost/plugins/mocker v1.6.0 // indirect
 	github.com/maximhq/bifrost/plugins/modelcatalogresolver v1.1.0 // indirect
-	github.com/maximhq/bifrost/plugins/otel v1.5.0 // indirect
 	github.com/maximhq/bifrost/plugins/prompts v1.1.0 // indirect
-	github.com/maximhq/bifrost/plugins/routing v1.0.0 // indirect
-	github.com/maximhq/bifrost/plugins/semanticcache v1.6.0 // indirect
-	github.com/maximhq/bifrost/plugins/telemetry v1.6.0 // indirect
 	github.com/maximhq/maxim-go v0.2.1 // indirect
 	github.com/molecule-man/go-brrr v1.0.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect

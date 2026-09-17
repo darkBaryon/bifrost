@@ -64,7 +64,7 @@ func (s *PasswordService) replacePassword(tx Tx, c AccountRecord, hash string, m
 	return event, tx.InsertEvent(event)
 }
 
-// ResetPassword 由主管理员把目标密码重置为部署初始密码并强制改密，成功事件与改密同事务提交。
+// ResetPassword 由策略允许的账号管理者重置目标密码为部署初始密码并强制改密，成功事件与改密同事务提交。
 // 权限、目标或自我重置等业务失败会写入失败事件并提交，随后作为错误返回；存储故障与下述预检冲突才回滚。
 // 同一 actor/target 用同一 operation_id 重试时原样返回首次结果，不再改密。ErrConflict 有两种成因：
 // 同 ID 不同 actor/target（换新 ID 重试）；以及预检拒绝而事务内放行的权限竞态，此时整笔回滚、不写事件，用同一 ID 重试即可。
@@ -76,7 +76,7 @@ func (s *PasswordService) ResetPassword(ctx context.Context, p Principal, target
 	// 否则任何持有会话的成员都能靠反复调用把槽位占满，拖垮登录与改密。
 	// 预检失败不直接返回——仍进入事务，由其中的权限判定写失败事件（方案 4.2）。
 	var hash string
-	if s.RequireAccountManager(ctx, p) == nil {
+	if s.requireAction(ctx, p, ResetAccountPassword, targetID) == nil {
 		h, err := s.hash(s.options.InitialPassword)
 		if err != nil {
 			return PasswordEvent{}, err
@@ -111,15 +111,18 @@ func (s *PasswordService) ResetPassword(ctx context.Context, p Principal, target
 			return err
 		}
 		event.TargetName = target.Username
-		outcome = s.authorize(tx.State(), actual)
+		outcome = s.authorizeTx(ctx, tx, actual, ResetAccountPassword, targetID)
 		switch {
 		case outcome != nil:
 		case targetID == p.AccountID:
-			outcome = ErrForbidden // 主管理员改自己的密码走本人改密
+			outcome = ErrForbidden // 操作者改自己的密码走本人改密
 		case err != nil:
 			outcome = ErrNotFound
 		}
 		if outcome != nil {
+			if errors.Is(SafeError(outcome), ErrUnavailable) {
+				return outcome
+			}
 			event.Result, event.ReasonCode = ResultFailure, SafeError(outcome).Error()
 			return tx.InsertEvent(event)
 		}
@@ -137,7 +140,7 @@ func (s *PasswordService) ResetPassword(ctx context.Context, p Principal, target
 	return event, outcome
 }
 
-// RecoverAdmin 仅由离线命令调用：重设主管理员密码、启用账号并撤销全部会话，事件的操作者记为 operator。
+// RecoverAdmin 仅由离线命令调用：重设固定恢复锚点账号密码、启用账号并撤销全部会话，事件的操作者记为 operator。
 func (s *PasswordService) RecoverAdmin(ctx context.Context, password string) error {
 	if !s.validPassword(password) {
 		return ErrInvalid
@@ -158,7 +161,10 @@ func (s *PasswordService) RecoverAdmin(ctx context.Context, password string) err
 		c.Status = StatusActive
 		_, err = s.replacePassword(tx, c, hash, false,
 			PasswordEvent{ActorID: OperatorActor, ActorName: OperatorActor, TargetID: c.ID, TargetName: c.Username, Action: ActionAdminRecovery})
-		return err
+		if err != nil {
+			return err
+		}
+		return s.accessPolicy(tx).AfterRecover(ctx, tx.State())
 	}))
 }
 
@@ -176,11 +182,11 @@ func (s *PasswordService) ListPasswordEvents(ctx context.Context, p Principal, t
 	if err != nil {
 		return out, err
 	}
-	all, err := s.policy.CanReadAllPasswordEvents(state, actual)
-	if err != nil {
+	err = authorize(ctx, s.policy, state, actual, ReadAllPasswordEvents, "")
+	if err != nil && !errors.Is(err, ErrForbidden) {
 		return out, err
 	}
-	if !all {
+	if errors.Is(err, ErrForbidden) {
 		if target != "" && target != p.AccountID {
 			return out, ErrForbidden
 		}

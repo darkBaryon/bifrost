@@ -78,15 +78,16 @@ type loginRequest struct {
 
 // accountDTO 是账号的对外字段，不含密码、哈希或版本。
 type accountDTO struct {
-	ID                 string `json:"id"`
-	Username           string `json:"username"`
-	DisplayName        string `json:"display_name"`
-	Status             string `json:"status"`
-	MustChangePassword bool   `json:"must_change_password"`
+	ID                 string     `json:"id"`
+	Username           string     `json:"username"`
+	DisplayName        string     `json:"display_name"`
+	Status             string     `json:"status"`
+	MustChangePassword bool       `json:"must_change_password"`
+	LastLoginAt        *time.Time `json:"last_login_at"`
 }
 
 func toAccountDTO(a identity.Account) accountDTO {
-	return accountDTO{ID: a.ID, Username: a.Username, DisplayName: a.DisplayName, Status: string(a.Status), MustChangePassword: a.MustChangePassword}
+	return accountDTO{ID: a.ID, Username: a.Username, DisplayName: a.DisplayName, Status: string(a.Status), MustChangePassword: a.MustChangePassword, LastLoginAt: a.LastLoginAt}
 }
 
 type accountResponse struct {
@@ -120,6 +121,11 @@ type listRequest struct {
 type setStatusRequest struct {
 	AccountID string `json:"account_id"`
 	Status    string `json:"status"`
+}
+
+// deleteAccountRequest 只接收账号编号；删除权限及保护规则由服务检查。
+type deleteAccountRequest struct {
+	AccountID string `json:"account_id"`
 }
 
 // ---- 密码线 ----

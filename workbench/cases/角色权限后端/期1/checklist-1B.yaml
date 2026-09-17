@@ -1,0 +1,76 @@
+# 当前检查对象为1B；1A在d811dfd07冻结，清单另存checklist-1A.yaml。
+方案合同:
+  版本: 6
+  批次: 1B
+  已定稿: true
+  评审状态: 2026-09-16用户接受行为验证结果并跳过1B代码阅读；非完整期1验收
+必过命令:
+- name: batch-1b-scope
+  run: "python3 - <<'CHECK'\nimport subprocess\nfrom pathlib import Path\nbase = 'd811dfd07'\nroot = Path('ee/internal/rbac')\n\
+    production = ['permissions.go', 'roles.go', 'authorize.go', 'assignments.go', 'repository.go', 'errors.go']\n\
+    for name in production:\n    expected = subprocess.check_output(['git', 'show', base + ':ee/internal/rbac/'\
+    \ + name])\n    assert (root / name).read_bytes() == expected, '覆盖了1A已确认文件：' + name\nassert {p.name for p in\
+    \ root.iterdir()} == set(production + ['README.md', 'roles_test.go', 'service_test.go', 'fixture_test.go', 'identity',\
+    \ 'persistence'])\nidentity = {'README.md', 'access.go', 'accounts.go', 'core.go', 'model.go', 'passwords.go',\
+    \ 'session.go', 'persistence/README.md', 'persistence/scope.go', 'persistence/store.go'}\nallowed = {'ee/internal/identity/'\
+    \ + name for name in identity}\nallowed.add('ee/internal/rbac/README.md')\nfor folder, names in {\n    'persistence':\
+    \ ['store.go', 'rows.go', 'roles.go', 'migration.go', 'service_test.go', 'lifecycle_test.go', 'scope_test.go',\
+    \ 'concurrency_test.go'],\n    'identity': ['policy.go', 'policy_test.go'],\n}.items():\n    assert {p.name\
+    \ for p in (root / folder).iterdir()} == set(names)\n    allowed.update('ee/internal/rbac/' + folder + '/' +\
+    \ name for name in names)\nchanged = subprocess.check_output(['git', 'diff', '--name-only', '-z', base], text=True).split('\\\
+    0')\nnew = subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z'], text=True).split('\\\
+    0')\nassert all(not p or p in allowed or p.startswith('workbench/') for p in changed + new), '混入了本批范围外代码'\n\
+    for name in allowed:\n    if name.endswith('.go') and not name.endswith('_test.go'):\n        text = Path(name).read_text()\n\
+    \        assert 'OpenConsoleStream' not in text and 'rbac/http' not in text and 'rbac/host' not in text, name\n\
+    \        assert len(text.splitlines()) <= 500, name + '超过文件行数上限'\nprint('1B范围通过：保留1A六个文件，无HTTP/app/host/上游或通知授权接线')\n\
+    CHECK\n"
+- name: whitespace
+  run: git diff --check
+- name: go-format
+  run: gofmt -l ee/internal/rbac ee/internal/identity
+  expect_empty: true
+- name: sqlite-integration
+  run: cd ee && env -u RBAC_TEST_POSTGRES_DSN -u IDENTITY_TEST_POSTGRES_DSN GOWORK=off go test -race ./internal/rbac/...
+    ./internal/identity/persistence
+- name: postgres-integration
+  run: test -n "$RBAC_TEST_POSTGRES_DSN" && test -n "$IDENTITY_TEST_POSTGRES_DSN" && cd ee && GOWORK=off go test
+    -race ./internal/rbac/... ./internal/identity/persistence
+- name: ee-vet
+  run: cd ee && GOWORK=off go vet ./cmd/... ./internal/...
+- name: ee-tests-race
+  run: cd ee && GOWORK=off go test -race ./cmd/... ./internal/...
+- name: ee-build
+  run: cd ee && GOWORK=off go build -o tmp/bifrost-rbac-phase1b ./cmd/bifrost-http
+- name: workbench
+  run: python3 workbench/tools/build_views.py --check
+必存产物:
+- ee/internal/rbac/README.md
+- ee/internal/rbac/persistence/rows.go
+- ee/internal/rbac/persistence/store.go
+- ee/internal/rbac/persistence/roles.go
+- ee/internal/rbac/persistence/migration.go
+- ee/internal/rbac/identity/policy.go
+- ee/internal/identity/access.go
+- ee/internal/identity/persistence/scope.go
+- workbench/cases/角色权限后端/期1/方案v6.md
+- workbench/cases/角色权限后端/期1/checklist-1A.yaml
+- workbench/evidence/角色权限后端-期1-批次1B阅读与验收.md
+必含符号:
+- grep: TestConcurrentLastChiefAcrossFeatures
+  in: ee/internal/rbac/persistence
+- grep: TestLastChiefDisableBeforeUnassign
+  in: ee/internal/rbac/persistence
+- grep: TestLifecycleFailureRollsBackBothFeatures
+  in: ee/internal/rbac/persistence
+- grep: TestConcurrentDeleteAndAssign
+  in: ee/internal/rbac/persistence
+- grep: TestFirstBindingDatabaseFailure
+  in: ee/internal/rbac/persistence
+- grep: TestPermissionQueryFailureDoesNotDowngradeOrCommit
+  in: ee/internal/rbac/persistence
+收敛评审:
+  风险等级: L3
+  基线: d811dfd07
+  开发指南:
+  - ee/internal/rbac/README.md
+禁留标记: []

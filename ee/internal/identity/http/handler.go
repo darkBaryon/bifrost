@@ -58,6 +58,7 @@ var routes = [...]route{
 	{method: fasthttp.MethodPost, path: "/api/identity/me", name: "me", handle: (*Handler).me},
 	{method: fasthttp.MethodPost, path: "/api/identity/change-password", name: "change-password", handle: (*Handler).changePassword},
 	{method: fasthttp.MethodPost, path: "/api/accounts/create", name: "create", handle: (*Handler).createAccount},
+	{method: fasthttp.MethodPost, path: "/api/accounts/delete", name: "delete", handle: (*Handler).deleteAccount},
 	{method: fasthttp.MethodPost, path: "/api/accounts/list", name: "list", handle: (*Handler).listAccounts},
 	{method: fasthttp.MethodPost, path: "/api/accounts/set-status", name: "set-status", handle: (*Handler).setStatus},
 	{method: fasthttp.MethodPost, path: "/api/accounts/reset-password", name: "reset-password", handle: (*Handler).resetPassword},

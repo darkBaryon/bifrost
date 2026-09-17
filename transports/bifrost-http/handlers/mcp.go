@@ -2295,6 +2295,11 @@ func (h *MCPHandler) addMCPClient(ctx *fasthttp.RequestCtx) {
 
 // updateMCPClient handles PUT /api/mcp/client/{id} - Edit MCP client
 func (h *MCPHandler) updateMCPClient(ctx *fasthttp.RequestCtx) {
+	destinationPolicy, hasDestinationPolicy, validDestinationPolicy := consolePolicy[ConsoleMCPUpdatePolicy](ctx, ConsoleMCPUpdatePolicyContextKey)
+	if !validDestinationPolicy {
+		return
+	}
+
 	if h.store.ConfigStore == nil {
 		SendError(ctx, fasthttp.StatusServiceUnavailable, "MCP operations unavailable: config store is disabled")
 		return
@@ -2637,7 +2642,7 @@ func (h *MCPHandler) updateMCPClient(ctx *fasthttp.RequestCtx) {
 		// pairing across an endpoint change.
 		endpointChanged := resolvedOauthFields.AuthorizeURL != existingOauthConfig.AuthorizeURL ||
 			resolvedOauthFields.TokenURL != existingOauthConfig.TokenURL
-		if endpointChanged && req.OauthConfig.ClientSecret.ShouldPreserveStored() {
+		if !hasDestinationPolicy && endpointChanged && req.OauthConfig.ClientSecret.ShouldPreserveStored() {
 			SendError(ctx, fasthttp.StatusBadRequest, "client_secret must be resent explicitly when authorize_url or token_url changes")
 			return
 		}
@@ -2655,6 +2660,22 @@ func (h *MCPHandler) updateMCPClient(ctx *fasthttp.RequestCtx) {
 	if shouldRotateOAuthConfig && disabled {
 		SendError(ctx, fasthttp.StatusBadRequest, "oauth credentials cannot be rotated while disabling a client; send these as two separate requests")
 		return
+	}
+	if hasDestinationPolicy {
+		desired := *existingConfig
+		desired.Headers = headers
+		desired.TLSConfig = tlsConfig
+		if req.TokenExchange != nil {
+			desired.TokenExchange = req.TokenExchange
+		}
+		var desiredOAuth *configstore.MCPOAuthConfigFields
+		if existingOauthConfig != nil {
+			desiredOAuth = &resolvedOauthFields
+		}
+		if err := destinationPolicy(ctx, existingConfig, &desired, existingOauthConfig, desiredOAuth); err != nil {
+			sendConsolePolicyError(ctx, err)
+			return
+		}
 	}
 	// Pre-flight the new static headers against the upstream before anything
 	// is written. VerifyHeadersConnection dials its own ephemeral transport

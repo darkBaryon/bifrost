@@ -19,7 +19,7 @@
 | 文件 | 内容 |
 |---|---|
 | [handler.go](handler.go) | 路由表、`serve`、`OwnsRoute`、`RegisterRoutes` |
-| [session.go](session.go) / [accounts.go](accounts.go) / [passwords.go](passwords.go) | 按线的端点 |
+| [session.go](session.go) / [accounts.go](accounts.go) / [passwords.go](passwords.go) | 会话、账号（含删除）和密码端点 |
 | [protocol.go](protocol.go) | origin 校验、同源检查、Cookie、严格 JSON、错误映射 |
-| [dto.go](dto.go) | 请求/响应结构与转换，按 共同/会话/账号/密码 四段 |
-| [handler_test.go](handler_test.go) / [dto_test.go](dto_test.go) | 错误映射与 JSON 限制契约；账号响应键集合 |
+| [dto.go](dto.go) | 请求/响应结构与转换，按共同/会话/账号/密码分组；账号的 last_login_at 可空 |
+| [handler_test.go](handler_test.go) / [dto_test.go](dto_test.go) | 错误映射与 JSON 限制契约；账号与状态响应键集合 |

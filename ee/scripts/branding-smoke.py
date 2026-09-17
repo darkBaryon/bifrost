@@ -63,9 +63,10 @@ class Fixture(identity_smoke.Node):
 def smoke(fixture):
     fixture.start()
     # 上游路由与嵌入 UI 正常，骨架探针不再随正式应用装配。
-    code, body, headers = fixture.call('/api/ee/ping', method='GET', anonymous=True)
-    assert code == 200 and 'text/html' in headers.get('Content-Type', '')  # 上游 SPA fallback
-    assert b'"probe_rows"' not in body and b'ee-probe' not in body
+    # 角色权限接入后，未注册的 API 返回 404，不再落到前端页面。
+    body, headers = fixture.expect(404, '/api/ee/ping', method='GET', anonymous=True)
+    assert 'application/json' in headers.get('Content-Type', '')
+    assert 'probe_rows' not in json.dumps(body) and 'ee-probe' not in json.dumps(body)
     assert headers.get('X-Bifrost-EE') is None
     code, _, headers = fixture.call('/api/version', method='GET', anonymous=True)
     assert code == 200 and headers.get('X-Bifrost-EE') is None

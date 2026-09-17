@@ -149,16 +149,15 @@ func validateNotificationInput(input *schemas.NotificationInput) error {
 	return nil
 }
 
-// create is the admin half of the API. list is safe for any authenticated user
-// because it only ever returns rows the caller's role is already entitled to
-// see, but publishing is the opposite: a single POST reaches every dashboard
-// user on the deployment. RBAC in this transport is enterprise-only and
-// path-based, so the floor is enforced here instead - only the local admin (and
-// therefore also an auth-disabled deployment, where the middleware marks every
-// request local admin) may publish. In-process producers call Publish directly
-// and are intentionally not subject to this check.
+// create publishes through the injected console policy when present. Without a
+// policy, only the local admin may publish (including auth-disabled deployments).
+// This restriction applies to the HTTP endpoint; in-process producers use Publish.
 func (s *NotificationService) create(ctx *fasthttp.RequestCtx) {
-	if localAdmin, _ := ctx.UserValue(schemas.IsLocalAdminContextKey).(bool); !localAdmin {
+	policy, present, ok := consolePolicy[ConsoleNotificationPolicy](ctx, ConsoleNotificationPolicyContextKey)
+	if !ok {
+		return
+	}
+	if localAdmin, _ := ctx.UserValue(schemas.IsLocalAdminContextKey).(bool); !present && !localAdmin {
 		SendError(ctx, fasthttp.StatusForbidden, "Only administrators can publish notifications")
 		return
 	}
@@ -166,6 +165,16 @@ func (s *NotificationService) create(ctx *fasthttp.RequestCtx) {
 	if err := sonic.Unmarshal(ctx.PostBody(), &input); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
 		return
+	}
+	if present {
+		if err := validateNotificationInput(&input); err != nil {
+			SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+			return
+		}
+		if err := policy.AuthorizePublish(ctx, input); err != nil {
+			sendConsolePolicyError(ctx, err)
+			return
+		}
 	}
 	notification, err := s.Publish(ctx, input)
 	if err != nil {
@@ -185,6 +194,10 @@ type notificationListResponse struct {
 }
 
 func (s *NotificationService) list(ctx *fasthttp.RequestCtx) {
+	policy, present, ok := consolePolicy[ConsoleNotificationPolicy](ctx, ConsoleNotificationPolicyContextKey)
+	if !ok {
+		return
+	}
 	if s.store == nil {
 		SendError(ctx, fasthttp.StatusServiceUnavailable, ErrNotificationsUnavailable.Error())
 		return
@@ -220,7 +233,11 @@ func (s *NotificationService) list(ctx *fasthttp.RequestCtx) {
 		}
 		for i := range rows {
 			n := notificationFromTable(&rows[i])
-			if localAdmin || notificationVisibleToRole(&n, roleID, hasRole) {
+			visible := localAdmin || notificationVisibleToRole(&n, roleID, hasRole)
+			if present {
+				visible = policy.CanView(&n)
+			}
+			if visible {
 				result = append(result, n)
 				if len(result) == limit+1 {
 					break

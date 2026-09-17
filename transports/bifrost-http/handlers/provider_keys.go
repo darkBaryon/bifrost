@@ -160,6 +160,15 @@ func (h *ProviderHandler) createProviderKey(ctx *fasthttp.RequestCtx) {
 		key.Enabled = bifrost.Ptr(true)
 	}
 
+	if policy, present, ok := consolePolicy[ConsoleProviderKeyPolicy](ctx, ConsoleProviderKeyPolicyContextKey); !ok {
+		return
+	} else if present {
+		if err := policy(ctx, providerConfig, nil, &key); err != nil {
+			sendConsolePolicyError(ctx, err)
+			return
+		}
+	}
+
 	if err := h.inMemoryStore.AddProviderKey(ctx, provider, key); err != nil {
 		logger.Warn("Failed to create key for provider %s: %v", provider, err)
 		if errors.Is(err, lib.ErrNotFound) {
@@ -264,6 +273,15 @@ func (h *ProviderHandler) updateProviderKey(ctx *fasthttp.RequestCtx) {
 	if err := validateProviderKeyURL(baseProvider, mergedKey); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, err.Error())
 		return
+	}
+
+	if policy, present, ok := consolePolicy[ConsoleProviderKeyPolicy](ctx, ConsoleProviderKeyPolicyContextKey); !ok {
+		return
+	} else if present {
+		if err := policy(ctx, providerConfig, oldRawKey, &mergedKey); err != nil {
+			sendConsolePolicyError(ctx, err)
+			return
+		}
 	}
 
 	if err := h.inMemoryStore.UpdateProviderKey(ctx, provider, keyID, mergedKey); err != nil {
