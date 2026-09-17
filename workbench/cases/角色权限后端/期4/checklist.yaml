@@ -8,23 +8,24 @@
   run: "python3 - <<'CHECK'\nfrom pathlib import Path\nimport subprocess\nbase='4420d1b12'\nreview_fixes={'ee/internal/rbac/persistence/store.go','ee/internal/identity/persistence/store.go','ee/internal/rbac/http/handler.go','ee/internal/rbac/http/protocol.go'}\n\
     root=Path('ee/internal/rbac/host')\nassert not (root/'routes.json').exists()\nassert not (root/'testdata/authorization-v4.json').exists()\n\
     assert 'legacy-admin' not in (root/'routes.txt').read_text()\nproduction={p.name for p in root.glob('*.go')\
-    \ if not p.name.endswith('_test.go')}\nassert production=={'authorization.go','routes.go','request.go','response.go','providers.go','logs.go','webhooks.go','plugins.go','settings.go','notifications.go'}\n\
+    \ if not p.name.endswith('_test.go')}\nassert production=={'authorization.go','routes.go','request.go','response.go','providers.go','logs.go','webhooks.go','plugins.go','settings.go','notifications.go','credentials.go','plugin_credentials.go'}\n\
     for p in root.glob('*.go'): assert len(p.read_text().splitlines())<=500,p\nfor folder in ['ee/internal/rbac/persistence','ee/internal/identity/persistence','ee/internal/rbac/http']:\n\
     \ for name in subprocess.check_output(['git','ls-tree','-r','--name-only',base,folder],text=True).splitlines():\n\
     \  if name.endswith('.go') and not name.endswith('_test.go') and name not in review_fixes:\n   assert\
     \ Path(name).read_bytes()==subprocess.check_output(['git','show',base+':'+name]),name\nchanged=subprocess.check_output(['git','diff','--name-only',base,'--','transports'],text=True).splitlines()\n\
-    allowed={'consolepolicy.go','consolepolicy_test.go','config.go','notifications.go','webhooks.go','websocket.go'}\n\
+    allowed={'consolepolicy.go','consolepolicy_test.go','config.go','notifications.go','webhooks.go','websocket.go','providers.go','provider_keys.go','mcp.go'}\n\
     assert all(p.startswith('transports/bifrost-http/handlers/') and Path(p).name in allowed for p in\
-    \ changed),changed\nprint('范围通过：十个主体文件；数据库与角色HTTP仅允许已记录的四处评审修复；上游仅批准的六个文件；未导入大JSON')\nCHECK\n"
+    \ changed),changed\nprint('范围通过：十二个主体文件；数据库与角色HTTP仅允许已记录的四处评审修复；上游仅批准的策略接入文件；未导入大JSON')\nCHECK\n"
 - name: whitespace
   run: git diff --check
 - name: go-format
   run: gofmt -l ee/internal/rbac ee/internal/identity ee/internal/host ee/internal/app transports/bifrost-http/handlers/consolepolicy.go
     transports/bifrost-http/handlers/consolepolicy_test.go transports/bifrost-http/handlers/config.go
     transports/bifrost-http/handlers/notifications.go transports/bifrost-http/handlers/webhooks.go transports/bifrost-http/handlers/websocket.go
+    transports/bifrost-http/handlers/providers.go transports/bifrost-http/handlers/provider_keys.go transports/bifrost-http/handlers/mcp.go
   expect_empty: true
 - name: source-route-contract
-  run: cd ee && GOWORK=off go test ./internal/rbac/host -run "TestMetricsAuthorizationPreservesText|TestRootGuardListsAllAllowedMethods|TestRouteSourceDigest|TestEveryManagedRouteAuthorization|TestClientFieldsAreExhaustivelyClassified|TestClientOptionalMatchesHostUpdateBranches"
+  run: cd ee && GOWORK=off go test ./internal/rbac/host -run "Test.*CredentialDestination|TestMetricsAuthorizationPreservesText|TestRootGuardListsAllAllowedMethods|TestRouteSourceDigest|TestEveryManagedRouteAuthorization|TestClientFieldsAreExhaustivelyClassified|TestClientOptionalMatchesHostUpdateBranches"
 - name: workbench
   run: python3 workbench/tools/build_views.py --check
 必存产物:

@@ -3,10 +3,12 @@ package host
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
+	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -140,22 +142,35 @@ func projectSettings(value any) {
 }
 
 // proxyUpdate 更新代理时，把隐藏的代理地址换回数据库里的原值。
-func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyConfig) error {
-	if desired.URL != redacted {
-		return nil
+func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyConfig, access rbac.Access) error {
+	if desired == nil {
+		return consoleError(rbac.ErrInvalid)
 	}
 	if a.config == nil || a.config.ConfigStore == nil {
 		return consoleError(rbac.ErrUnavailable)
 	}
 	current, e := a.config.ConfigStore.GetProxyConfig(ctx)
-	if e != nil {
+	if e != nil && !errors.Is(e, configstore.ErrNotFound) {
 		return consoleError(rbac.ErrUnavailable)
 	}
-	if current == nil || current.URL == "" || current.URL == redacted {
-		return consoleError(rbac.ErrInvalid)
+	if desired.URL == redacted {
+		if current == nil || current.URL == "" || current.URL == redacted {
+			return consoleError(rbac.ErrInvalid)
+		}
+		desired.URL = current.URL
 	}
-	desired.URL = current.URL
-	return nil
+	if current == nil {
+		return nil
+	}
+	password := desired.Password
+	if password == redacted {
+		password = current.Password
+	}
+	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
+	retained := current.Password != "" && password == current.Password
+	before := struct{ Type, URL string }{string(current.Type), current.URL}
+	after := struct{ Type, URL string }{string(desired.Type), desired.URL}
+	return consoleError(credentialDestination(access, retained, before, after))
 }
 
 // restoreURL 恢复隐藏地址；没有旧地址时拒绝保存占位文字。

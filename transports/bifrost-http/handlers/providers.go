@@ -549,6 +549,15 @@ func (h *ProviderHandler) updateProvider(ctx *fasthttp.RequestCtx) {
 		config.StoreRawRequestResponse = *payload.StoreRawRequestResponse
 	}
 
+	if policy, present, ok := consolePolicy[ConsoleProviderConfigPolicy](ctx, ConsoleProviderConfigPolicyContextKey); !ok {
+		return
+	} else if present {
+		if err := policy(ctx, oldConfigRaw, &config); err != nil {
+			sendConsolePolicyError(ctx, err)
+			return
+		}
+	}
+
 	// Add provider to store if it doesn't exist (upsert behavior)
 	if _, err := h.inMemoryStore.GetProviderConfigRaw(provider); err != nil {
 		if !errors.Is(err, lib.ErrNotFound) {

@@ -153,3 +153,7 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
 - `ConsolePolicyError` 仅保留使用方读取的 HTTP 状态，错误体仍由上游统一生成；没有注入策略时维持原行为。
 - 通知发布先由上游校验并规范化输入，再交给可选策略判权；EE 不重复做同一份受众格式校验。删除已不可达的 nil 分支。
 - `/metrics` 的文本格式问题在 EE 路由策略中修复，不改上游指标 handler。
+
+### 凭据发送目标权限（用户授权的验收修正）
+
+新增可选 `ConsoleProviderConfigPolicy`、`ConsoleProviderKeyPolicy`、`ConsoleMCPUpdatePolicy`。厂商配置在完整合并后、写入/模型发现前检查；Key创建/更新在合并后、保存前检查；MCP在TLS、OAuth和Headers解析后、临时连接验证前检查。`consolepolicy.go` 定义类型，调用点位于 `providers.go`、`provider_keys.go`、`mcp.go`，普通回归位于 `consolepolicy_test.go`。业务判断仍在EE，未注入时维持原流程。MCP已注入策略时由策略决定是否允许保留旧secret改变OAuth地址；没有注入时保留原必须重填的限制。

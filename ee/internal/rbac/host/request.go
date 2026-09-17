@@ -11,6 +11,7 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/valyala/fasthttp"
@@ -112,7 +113,7 @@ func (a *Adapter) checkSensitiveRequest(c *fasthttp.RequestCtx, r requestAccess)
 		if err := checkPluginMutation(c, r.Access); err != nil {
 			return err
 		}
-		return a.restorePlugin(c)
+		return a.restorePlugin(c, r.Access)
 	case guardSettingsInput:
 		if r.Route.Pattern == "/api/config" {
 			return checkSettingsInput(c)
@@ -140,11 +141,22 @@ func (a *Adapter) installPolicies(c *fasthttp.RequestCtx, r requestAccess) {
 		c.SetUserValue(handlers.WebSocketAuthorizeContextKey, func(ctx context.Context) error { return a.service.Authorize(ctx, subject, rbac.NotificationsView) })
 		c.SetUserValue(handlers.WebSocketMessageFilterContextKey, a.messageFilter(subject))
 	}
+	c.SetUserValue(handlers.ConsoleMCPUpdatePolicyContextKey, handlers.ConsoleMCPUpdatePolicy(func(_ context.Context, current, desired *schemas.MCPClientConfig, oldOAuth *tables.TableOauthConfig, nextOAuth *configstore.MCPOAuthConfigFields) error {
+		return consoleError(mcpDestination(current, desired, oldOAuth, nextOAuth, r.Access))
+	}))
 	c.SetUserValue(handlers.ConsoleProviderUpdatePolicyContextKey, handlers.ConsoleProviderUpdatePolicy(restoreProvider))
+	c.SetUserValue(handlers.ConsoleProviderConfigPolicyContextKey, handlers.ConsoleProviderConfigPolicy(func(_ context.Context, current, desired *configstore.ProviderConfig) error {
+		return consoleError(providerDestination(current, desired, r.Access))
+	}))
+	c.SetUserValue(handlers.ConsoleProviderKeyPolicyContextKey, handlers.ConsoleProviderKeyPolicy(func(_ context.Context, provider *configstore.ProviderConfig, current, desired *schemas.Key) error {
+		return consoleError(providerKeyDestination(provider, current, desired, r.Access))
+	}))
 	c.SetUserValue(handlers.ConsoleSettingsUpdatePolicyContextKey, handlers.ConsoleSettingsUpdatePolicy(func(ctx context.Context, desired *handlers.ConsoleSettingsUpdate) error {
 		return consoleError(a.settingsUpdate(ctx, desired, r.Access))
 	}))
-	c.SetUserValue(handlers.ConsoleProxyUpdatePolicyContextKey, handlers.ConsoleProxyUpdatePolicy(a.proxyUpdate))
+	c.SetUserValue(handlers.ConsoleProxyUpdatePolicyContextKey, handlers.ConsoleProxyUpdatePolicy(func(ctx context.Context, desired *tables.GlobalProxyConfig) error {
+		return a.proxyUpdate(ctx, desired, r.Access)
+	}))
 	c.SetUserValue(handlers.ConsoleWebhookPolicyContextKey, handlers.ConsoleWebhookPolicy(func(ctx context.Context, op handlers.ConsoleWebhookOperation, endpoint *tables.TableWebhookEndpoint) error {
 		return a.webhookUpdate(ctx, subject, op, endpoint)
 	}))

@@ -75,3 +75,78 @@ func checkProviderInput(c *fasthttp.RequestCtx, r requestAccess) error {
 	}
 	return nil
 }
+
+// providerDestination 在宿主完成占位符恢复后检查；当前Key会原样保留，停用的Key也不能借机改到新地址。
+func providerDestination(current, desired *configstore.ProviderConfig, access rbac.Access) error {
+	if current == nil || desired == nil {
+		return rbac.ErrUnavailable
+	}
+	oldNetwork, nextNetwork := schemas.NetworkConfig{}, schemas.NetworkConfig{}
+	if current.NetworkConfig != nil {
+		oldNetwork = *current.NetworkConfig
+	}
+	if desired.NetworkConfig != nil {
+		nextNetwork = *desired.NetworkConfig
+	}
+	retained := len(current.Keys) > 0 || retainedValues(headerValues(oldNetwork.ExtraHeaders), headerValues(nextNetwork.ExtraHeaders))
+	target := func(c *configstore.ProviderConfig, n schemas.NetworkConfig) any {
+		base := schemas.ModelProvider("")
+		var paths map[schemas.RequestType]string
+		if c.CustomProviderConfig != nil {
+			base = c.CustomProviderConfig.BaseProviderType
+			paths = c.CustomProviderConfig.RequestPathOverrides
+		}
+		return struct {
+			URL      string
+			Insecure bool
+			CA       string
+			Proxy    any
+			Base     schemas.ModelProvider
+			Paths    map[schemas.RequestType]string
+		}{n.BaseURL, n.InsecureSkipVerify, secretText(n.CACertPEM), proxyTarget(c.ProxyConfig), base, paths}
+	}
+	if err := credentialDestination(access, retained, target(current, oldNetwork), target(desired, nextNetwork)); err != nil {
+		return err
+	}
+	return credentialDestination(access, retainedValues(proxyCredentials(current.ProxyConfig), proxyCredentials(desired.ProxyConfig)), proxyTarget(current.ProxyConfig), proxyTarget(desired.ProxyConfig))
+}
+
+func proxyTarget(p *schemas.ProxyConfig) any {
+	if p == nil {
+		p = &schemas.ProxyConfig{}
+	}
+	return struct {
+		Type    schemas.ProxyType
+		URL, CA string
+	}{p.Type, secretText(p.URL), secretText(p.CACertPEM)}
+}
+
+func proxyCredentials(p *schemas.ProxyConfig) []string {
+	if p == nil {
+		return nil
+	}
+	return []string{secretText(p.Username), secretText(p.Password)}
+}
+
+// providerKeyDestination 同时考虑该Key保留的秘密和仍会随请求发送的厂商级请求头。
+func providerKeyDestination(provider *configstore.ProviderConfig, current, desired *schemas.Key, access rbac.Access) error {
+	if provider == nil || desired == nil {
+		return rbac.ErrUnavailable
+	}
+	if current == nil {
+		current = &schemas.Key{}
+	}
+	before, oldSecrets, err := keyConnection(current)
+	if err != nil {
+		return err
+	}
+	after, newSecrets, err := keyConnection(desired)
+	if err != nil {
+		return err
+	}
+	retained := retainedValues(oldSecrets, newSecrets)
+	if provider.NetworkConfig != nil {
+		retained = retained || retainedValues(headerValues(provider.NetworkConfig.ExtraHeaders), headerValues(provider.NetworkConfig.ExtraHeaders))
+	}
+	return credentialDestination(access, retained, before, after)
+}

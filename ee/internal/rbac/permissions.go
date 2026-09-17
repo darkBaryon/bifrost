@@ -16,6 +16,7 @@ const (
 	ModuleSettings         ModuleCode = "Settings"
 	ModuleNotifications    ModuleCode = "Notifications"
 	ModuleUsers            ModuleCode = "Users"
+	ModuleSecurity         ModuleCode = "Security"
 )
 
 // Module 表示一个功能模块，包含模块名称和它下面的权限项。
@@ -85,6 +86,9 @@ func Catalogue() []Module {
 			{Code: NotificationsView, Name: "查看", Available: true},
 			{Code: NotificationsManage, Name: "管理", Available: true},
 		}},
+		{Code: ModuleSecurity, Name: "安全", Permissions: []PermissionDefinition{
+			{Code: SecurityChangeCredentialDestination, Name: "允许将已有凭据用于新地址", Available: true},
+		}},
 		{Code: ModuleUsers, Name: "账号与角色", Permissions: []PermissionDefinition{
 			{Code: UsersView, Name: "查看", Available: true},
 			{Code: UsersManage, Name: "管理", Available: true},
@@ -141,6 +145,9 @@ const (
 	// 通知与Webhook：控制台消息，以及向其他系统发送事件数据的通知机制。
 	NotificationsView   Permission = "Notifications.View"   // 查看通知及Webhook配置。
 	NotificationsManage Permission = "Notifications.Manage" // 管理通知及Webhook配置、执行相关管理操作。
+
+	// 安全：跨模块的敏感操作，仍需同时拥有对应模块的管理权限。
+	SecurityChangeCredentialDestination Permission = "Security.ChangeCredentialDestination" // 沿用已有凭据更换发送地址、代理或TLS信任设置；不包含明文读取。
 
 	// 账号与角色：控制台使用者，以及授予他们的操作权限。
 	UsersView   Permission = "Users.View"   // 查看账号、角色和角色分配。

@@ -83,7 +83,7 @@ def exercise_sensitive(node, admin, member, member_id, psql):
     with socket.socket() as reserved:
         reserved.bind(('127.0.0.1', 0))
         secret = 'RBAC_SECRET_PROBE'
-        body = {'name': 'Sensitive webhook', 'url': f'http://127.0.0.1:{reserved.getsockname()[1]}/hook?key={secret}', 'events': ['async_job.completed'], 'allow_private_network': True, 'include_response': True}
+        body = {'name': 'Sensitive webhook', 'url': f'http://127.0.0.1:{reserved.getsockname()[1]}/hook?key={secret}', 'events': ['async_job.completed'], 'allow_private_network': True, 'include_response': True, 'headers': {'Authorization': 'WEBHOOK_FIXTURE'}}
         before = stored("SELECT count(*) FROM config_webhook_endpoints WHERE name='Sensitive webhook'")
         node.expect(403, '/api/webhooks', body, token=member)
         assert stored("SELECT count(*) FROM config_webhook_endpoints WHERE name='Sensitive webhook'") == before
@@ -96,6 +96,14 @@ def exercise_sensitive(node, admin, member, member_id, psql):
         node.expect(403, '/api/webhooks/' + endpoint['id'], dict(body, include_response=True), method='PUT', token=member)
         after, _ = node.expect(200, '/api/webhooks/' + endpoint['id'], method='GET', token=member)
         assert after == safe
+        redirected = dict(body, url=f'http://127.0.0.1:{reserved.getsockname()[1]}/other', headers=safe['headers'])
+        node.expect(403, '/api/webhooks/' + endpoint['id'], redirected, method='PUT', token=member)
+        unchanged, _ = node.expect(200, '/api/webhooks/' + endpoint['id'], method='GET', token=member)
+        assert unchanged == safe
+        grant('Notifications.View', 'Notifications.Manage', 'Security.ChangeCredentialDestination')
+        node.expect(200, '/api/webhooks/' + endpoint['id'], redirected, method='PUT', token=member)
+        node.expect(200, '/api/webhooks/' + endpoint['id'], body, method='PUT', token=member)
+        grant('Notifications.View', 'Notifications.Manage')
         result, _ = node.expect(200, '/api/webhooks/' + endpoint['id'] + '/test', {}, token=member)
         assert result['delivered'] is False and secret not in json.dumps(result), 'synthetic delivery error revealed URL credential'
         node.expect(200, '/api/webhooks/' + endpoint['id'], dict(body, url='<redacted>'), method='PUT', token=member)
@@ -159,6 +167,22 @@ def exercise_provider(node, admin, member, grant, stored):
         node.expect(200, path, payload, method='PUT', token=member)
         assert persisted()['base_url'] == url and persisted()['extra_headers'] == network['extra_headers']
         runtime(network['extra_headers'])
+        # 只验证保存边界；拒绝后不发送推理，不采集被转发的凭据。
+        changed = json.loads(json.dumps(payload))
+        changed['network_config']['base_url'] = f'http://127.0.0.1:{server.server_port}/changed'
+        before, calls = persisted(), len(requests)
+        node.expect(403, path, changed, method='PUT', token=member)
+        assert persisted() == before and len(requests) == calls
+        grant('Security.ChangeCredentialDestination')
+        node.expect(403, path, changed, method='PUT', token=member)  # 敏感权限不代替模块管理权限。
+        grant('ModelProvider.Manage', 'Security.ChangeCredentialDestination')
+        node.expect(200, path, changed, method='PUT', token=member)
+        assert persisted()['base_url'] == changed['network_config']['base_url']
+        restore = json.loads(json.dumps(payload))
+        restore['network_config']['base_url'] = url
+        node.expect(200, path, restore, method='PUT', token=member)
+        grant('ModelProvider.Manage')
+        node.expect(403, path, changed, method='PUT', token=member)
         for expected in ({'Authorization': 'REPLACED', 'X-New': 'new'}, {'X-New': 'new'}, {}):
             payload['network_config']['extra_headers'] = expected
             node.expect(200, path, payload, method='PUT', token=member)

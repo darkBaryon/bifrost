@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -226,7 +227,7 @@ func validatePluginNames(value any) error {
 func hasMarker(v any) bool {
 	switch v := v.(type) {
 	case string:
-		return v == redacted
+		return strings.EqualFold(v, redacted)
 	case map[string]any:
 		for _, child := range v {
 			if hasMarker(child) {
@@ -245,7 +246,7 @@ func hasMarker(v any) bool {
 
 // restoreMarkers 把请求里的隐藏标记换回旧值；找不到旧值就拒绝。
 func restoreMarkers(desired, current any) (any, error) {
-	if s, ok := desired.(string); ok && s == redacted {
+	if s, ok := desired.(string); ok && strings.EqualFold(s, redacted) {
 		if current == nil || current == redacted {
 			return nil, rbac.ErrInvalid
 		}
@@ -254,7 +255,7 @@ func restoreMarkers(desired, current any) (any, error) {
 	switch d := desired.(type) {
 	case map[string]any:
 		// SecretVar的完整遮盖代表整个凭据；数据库格式可能仍是字符串/env引用。
-		if value, ok := d["value"].(string); ok && value == redacted {
+		if value, ok := d["value"].(string); ok && strings.EqualFold(value, redacted) {
 			if current == nil {
 				return nil, rbac.ErrInvalid
 			}
@@ -286,7 +287,7 @@ func restoreMarkers(desired, current any) (any, error) {
 }
 
 // restorePlugin 更新内置插件时读取旧配置，恢复被前端原样传回的隐藏字段。
-func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx) error {
+func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx, access rbac.Access) error {
 	if !c.IsPut() && !c.IsPost() {
 		return nil
 	}
@@ -295,13 +296,19 @@ func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx) error {
 		return rbac.ErrInvalid
 	}
 	config, ok := body["config"]
-	if !ok || !hasMarker(config) {
+	if !ok {
 		return nil
 	}
 	if c.IsPost() {
-		return rbac.ErrInvalid
+		if hasMarker(config) {
+			return rbac.ErrInvalid
+		}
+		return nil
 	}
 	name, _ := c.UserValue("name").(string)
+	if !hasMarker(config) && name != "otel" && name != "telemetry" {
+		return nil
+	}
 	// 自定义配置由具备 LoadNative 的操作者完全控制。
 	if _, builtin := builtinPermissions[name]; !builtin {
 		return nil
@@ -327,9 +334,20 @@ func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx) error {
 	if json.Unmarshal(raw, &current) != nil {
 		return rbac.ErrUnavailable
 	}
+	current, e = pluginStoredShape(name, current)
+	if e != nil {
+		return e
+	}
+	config, e = pluginStoredShape(name, config)
+	if e != nil {
+		return e
+	}
 	body["config"], e = restoreMarkers(config, current)
 	if e != nil {
 		return e
+	}
+	if err := pluginDestination(name, current, body["config"], access); err != nil {
+		return err
 	}
 	raw, e = json.Marshal(body)
 	if e != nil {

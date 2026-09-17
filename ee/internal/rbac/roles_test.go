@@ -3,6 +3,7 @@ package rbac
 
 import (
 	"encoding/base64"
+	"slices"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestCursorRejectsAmbiguousIDs(t *testing.T) {
 
 func TestPresetCatalogue(t *testing.T) {
 	codes := Permissions()
-	if len(codes) != 29 {
+	if len(codes) != 30 {
 		t.Fatal(len(codes))
 	}
 	seen := map[Permission]bool{}
@@ -34,6 +35,16 @@ func TestPresetCatalogue(t *testing.T) {
 		if p == UsersView || p == UsersManage {
 			t.Fatal("developer got Users")
 		}
+	}
+	for _, role := range roles[1:] {
+		for _, code := range role.PermissionCodes {
+			if code == SecurityChangeCredentialDestination {
+				t.Fatal("sensitive permission granted by default")
+			}
+		}
+	}
+	if !slices.Contains(rolePermissions(roles[0]), SecurityChangeCredentialDestination) {
+		t.Fatal("chief lacks new permission")
 	}
 	catalogue := Catalogue()
 	catalogue[0].Permissions[0].Code = "changed"

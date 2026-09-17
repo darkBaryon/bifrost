@@ -11,6 +11,8 @@ import (
 	"github.com/fasthttp/websocket"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
+	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 
@@ -141,5 +143,30 @@ func TestProviderPolicyErrorsHideInternalText(t *testing.T) {
 		if c.Response.StatusCode() != tt.status || strings.Contains(string(c.Response.Body()), "private-credential") {
 			t.Fatal("unsafe policy error")
 		}
+	}
+}
+
+// Destination denial precedes even the temporary network verification, not just persistence.
+func TestMCPDestinationPolicyBeforeVerification(t *testing.T) {
+	SetLogger(&mockLogger{})
+	old := &schemas.MCPClientConfig{ID: "client", Name: "Fixture", ConnectionType: schemas.MCPConnectionTypeHTTP, AuthType: schemas.MCPAuthTypeHeaders, Headers: map[string]schemas.SecretVar{"Authorization": *schemas.NewSecretVar("fixture")}}
+	cfg := &mockUpdateConfigStore{}
+	store := &lib.Config{ConfigStore: cfg, ClientConfig: &configstore.ClientConfig{}, MCPConfig: &schemas.MCPConfig{ClientConfigs: []*schemas.MCPClientConfig{old}}}
+	manager := &fakeMCPManagerVerifyOnly{}
+	handler := &MCPHandler{store: store, mcpManager: manager}
+	c := &fasthttp.RequestCtx{}
+	c.SetUserValue("id", old.ID)
+	c.Request.SetBodyString(`{"headers":{"Authorization":"new-fixture"},"tls_config":{"insecure_skip_verify":true}}`)
+	called := false
+	c.SetUserValue(ConsoleMCPUpdatePolicyContextKey, ConsoleMCPUpdatePolicy(func(_ context.Context, before, after *schemas.MCPClientConfig, _ *tables.TableOauthConfig, _ *configstore.MCPOAuthConfigFields) error {
+		called = true
+		if after.TLSConfig == nil || !after.TLSConfig.InsecureSkipVerify || after.Headers["Authorization"].Val != "new-fixture" {
+			t.Fatal("not resolved")
+		}
+		return &ConsolePolicyError{Status: fasthttp.StatusForbidden}
+	}))
+	handler.updateMCPClient(c)
+	if !called || c.Response.StatusCode() != 403 || manager.verifyCalls != 0 || manager.updateCalls != 0 || cfg.updates != 0 {
+		t.Fatal("denial reached side effects", c.Response.StatusCode(), string(c.Response.Body()))
 	}
 }

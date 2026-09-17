@@ -18,6 +18,9 @@ const (
 	ConsoleNotificationPolicyContextKey   consolePolicyKey = "console-notification-policy"
 	WebSocketMessageFilterContextKey      consolePolicyKey = "console-message-filter"
 	ConsoleProviderUpdatePolicyContextKey consolePolicyKey = "console-provider-update"
+	ConsoleProviderConfigPolicyContextKey consolePolicyKey = "console-provider-config"
+	ConsoleProviderKeyPolicyContextKey    consolePolicyKey = "console-provider-key"
+	ConsoleMCPUpdatePolicyContextKey      consolePolicyKey = "console-mcp-update"
 	ConsoleSettingsUpdatePolicyContextKey consolePolicyKey = "console-settings-update"
 	ConsoleProxyUpdatePolicyContextKey    consolePolicyKey = "console-proxy-update"
 	ConsoleWebhookPolicyContextKey        consolePolicyKey = "console-webhook-operation"
@@ -35,6 +38,18 @@ type WebSocketMessageFilter func(context.Context, []byte) (bool, error)
 
 // ConsoleProviderUpdatePolicy 在验证或写入前恢复完整请求里的保留标记。
 type ConsoleProviderUpdatePolicy func(context.Context, *configstore.ProviderConfig, *schemas.NetworkConfig, *schemas.ProxyConfig) error
+
+// ConsoleProviderConfigPolicy checks the merged configuration before saving or discovery.
+// Both snapshots are read-only; a nil policy preserves the original upstream behavior.
+type ConsoleProviderConfigPolicy func(context.Context, *configstore.ProviderConfig, *configstore.ProviderConfig) error
+
+// ConsoleProviderKeyPolicy checks a merged key and its provider before any write or discovery.
+// The current key is nil when creating a key; the desired key is always provided.
+type ConsoleProviderKeyPolicy func(context.Context, *configstore.ProviderConfig, *schemas.Key, *schemas.Key) error
+
+// ConsoleMCPUpdatePolicy checks resolved credentials and connection settings before
+// any connection verification, credential rotation, or persistence. Snapshots are read-only.
+type ConsoleMCPUpdatePolicy func(context.Context, *schemas.MCPClientConfig, *schemas.MCPClientConfig, *tables.TableOauthConfig, *configstore.MCPOAuthConfigFields) error
 
 // ConsoleSettingsUpdate 是请求独享的期望配置，策略可恢复保留字段。
 type ConsoleSettingsUpdate struct {

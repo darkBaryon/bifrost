@@ -62,11 +62,11 @@ func (a *Adapter) webhookUpdate(ctx context.Context, subject rbac.Subject, op ha
 	if op == handlers.ConsoleWebhookRedeliver {
 		return nil
 	}
-	if desired.URL != redacted {
+	if op == handlers.ConsoleWebhookCreate {
+		if desired.URL == redacted {
+			return consoleError(rbac.ErrInvalid)
+		}
 		return nil
-	}
-	if op != handlers.ConsoleWebhookUpdate {
-		return consoleError(rbac.ErrInvalid)
 	}
 	if a.config == nil {
 		return consoleError(rbac.ErrUnavailable)
@@ -75,9 +75,16 @@ func (a *Adapter) webhookUpdate(ctx context.Context, subject rbac.Subject, op ha
 	if !ok || current == nil {
 		return consoleError(rbac.ErrNotFound)
 	}
-	if current.URL == "" || current.URL == redacted {
-		return consoleError(rbac.ErrInvalid)
+	if desired.URL == redacted {
+		if current.URL == "" || current.URL == redacted {
+			return consoleError(rbac.ErrInvalid)
+		}
+		desired.URL = current.URL
 	}
-	desired.URL = current.URL
+	// 签名密钥只用来计算签名，不随请求发送；需要保护的是会实际发送的自定义认证头。
+	if err := credentialDestination(access, retainedValues(secretHeaderValues(current.Headers), secretHeaderValues(desired.Headers)), current.URL, desired.URL); err != nil {
+		return consoleError(err)
+	}
+
 	return nil
 }
