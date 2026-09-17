@@ -38,7 +38,7 @@ func unsupportedRequest(ctx *schemas.BifrostContext, req *schemas.BifrostChatReq
 	return false
 }
 
-func inputText(req *schemas.BifrostChatRequest, limit int) (string, error) {
+func extractInputText(req *schemas.BifrostChatRequest, limit int) (string, error) {
 	if len(req.Input) == 0 {
 		return "", errUnsupported
 	}
@@ -57,7 +57,7 @@ func inputText(req *schemas.BifrostChatRequest, limit int) (string, error) {
 }
 
 // 每个 choice 是独立候选回答，分别检测，防止拼接不相干回答改变语义；总体仍共享字节预算。
-func outputTexts(resp *schemas.BifrostResponse, limit int) ([]string, error) {
+func extractOutputTexts(resp *schemas.BifrostResponse, limit int) ([]string, error) {
 	if resp == nil || resp.ChatResponse == nil {
 		return nil, errUnsupported
 	}

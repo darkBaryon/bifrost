@@ -90,6 +90,9 @@ func TestInputAndOutputBlocking(t *testing.T) {
 	if strings.Contains(strings.Join(log.entries, " "), "private unsafe text") {
 		t.Fatal("logged input")
 	}
+	if !strings.Contains(strings.Join(log.entries, " "), "category=business_rule") {
+		t.Fatal("missing business category in safety log")
+	}
 	output, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
 	resp := response("safe", "unsafe second choice")
 	gotResp, blocked, err := output.PostLLMHook(testContext(), resp, nil)
@@ -202,7 +205,7 @@ func TestPluginConstruction(t *testing.T) {
 	}
 	options := safety.Options{StatusCode: 400, DenyMessage: "denied"}
 	if _, err := safety.New(nil, options, log); err == nil {
-		t.Fatal("nil engine accepted")
+		t.Fatal("nil checker accepted")
 	}
 	if _, err := safety.New(e, options, nil); err == nil {
 		t.Fatal("nil logger accepted")

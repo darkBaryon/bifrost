@@ -23,7 +23,7 @@ func rule(id string) guardrails.Rule {
 		Threshold: guardrails.Medium, OnMatch: guardrails.Block, OnError: guardrails.Block, Timeout: time.Second}
 }
 
-func mustEngine(t *testing.T, rules []guardrails.Rule, detectors map[string]guardrails.Detector) *guardrails.Engine {
+func mustChecker(t *testing.T, rules []guardrails.Rule, detectors map[string]guardrails.Detector) *guardrails.Checker {
 	t.Helper()
 	e, err := guardrails.New(rules, detectors, 1024)
 	if err != nil {
@@ -47,11 +47,11 @@ func TestRuleActionsAndThreshold(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := rule("one")
 			r.OnMatch = tc.action
-			e := mustEngine(t, []guardrails.Rule{r}, map[string]guardrails.Detector{"one": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			e := mustChecker(t, []guardrails.Rule{r}, map[string]guardrails.Detector{"one": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
 				return []guardrails.Finding{{Level: tc.level}}, nil
 			})})
 			result, err := e.Check(context.Background(), guardrails.Input, "text")
-			if err != nil || result.Action != tc.want || len(result.Events) != 1 || result.Events[0].Outcome != tc.outcome {
+			if err != nil || result.Action != tc.want || len(result.RuleEvaluations) != 1 || result.RuleEvaluations[0].Outcome != tc.outcome {
 				t.Fatalf("result=%+v err=%v", result, err)
 			}
 		})
@@ -70,7 +70,7 @@ func TestOrderShortCircuitAndStages(t *testing.T) {
 	rules := []guardrails.Rule{rule("observe"), rule("output"), rule("block"), rule("never")}
 	rules[0].OnMatch = guardrails.Observe
 	rules[1].Stage = guardrails.Output
-	e := mustEngine(t, rules, detectors)
+	e := mustChecker(t, rules, detectors)
 	result, err := e.Check(context.Background(), guardrails.Input, "")
 	if err != nil || result.Action != guardrails.Block || strings.Join(calls, ",") != "observe,block" {
 		t.Fatalf("calls=%v result=%+v err=%v", calls, result, err)
@@ -99,9 +99,9 @@ func TestDetectorFailures(t *testing.T) {
 				r := rule("one")
 				r.OnError = action
 				r.Timeout = time.Millisecond
-				e := mustEngine(t, []guardrails.Rule{r}, map[string]guardrails.Detector{"one": tc.detector})
+				e := mustChecker(t, []guardrails.Rule{r}, map[string]guardrails.Detector{"one": tc.detector})
 				result, err := e.Check(context.Background(), guardrails.Input, "text")
-				if err != nil || result.Action != action || len(result.Events) != 1 || result.Events[0].Failure != tc.failure || result.Events[0].Outcome != guardrails.Failed {
+				if err != nil || result.Action != action || len(result.RuleEvaluations) != 1 || result.RuleEvaluations[0].Failure != tc.failure || result.RuleEvaluations[0].Outcome != guardrails.Failed {
 					t.Fatalf("result=%+v err=%v", result, err)
 				}
 			})
@@ -112,14 +112,14 @@ func TestDetectorFailures(t *testing.T) {
 func TestAllowFailureContinuesToBlockingRule(t *testing.T) {
 	r := rule("broken")
 	r.OnError = guardrails.Allow
-	e := mustEngine(t, []guardrails.Rule{r, rule("block")}, map[string]guardrails.Detector{
+	e := mustChecker(t, []guardrails.Rule{r, rule("block")}, map[string]guardrails.Detector{
 		"broken": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, errors.New("failed") }),
 		"block": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
 			return []guardrails.Finding{{Level: guardrails.High}}, nil
 		}),
 	})
 	result, err := e.Check(context.Background(), guardrails.Input, "text")
-	if err != nil || result.Action != guardrails.Block || len(result.Events) != 2 {
+	if err != nil || result.Action != guardrails.Block || len(result.RuleEvaluations) != 2 {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
@@ -129,7 +129,7 @@ func TestCancellationIsNotFailOpen(t *testing.T) {
 	defer cancel()
 	r := rule("one")
 	r.OnError = guardrails.Allow
-	e := mustEngine(t, []guardrails.Rule{r}, map[string]guardrails.Detector{"one": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { cancel(); return nil, nil })})
+	e := mustChecker(t, []guardrails.Rule{r}, map[string]guardrails.Detector{"one": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { cancel(); return nil, nil })})
 	result, err := e.Check(ctx, guardrails.Input, "text")
 	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block {
 		t.Fatalf("result=%+v err=%v", result, err)
@@ -137,7 +137,7 @@ func TestCancellationIsNotFailOpen(t *testing.T) {
 }
 
 func TestInputLimitsAndEmptyPolicy(t *testing.T) {
-	e := mustEngine(t, nil, nil)
+	e := mustChecker(t, nil, nil)
 	for _, tc := range []struct {
 		stage guardrails.Stage
 		text  string
@@ -153,7 +153,7 @@ func TestInputLimitsAndEmptyPolicy(t *testing.T) {
 		}
 	}
 	result, err := e.Check(context.Background(), guardrails.Input, "")
-	if err != nil || result.Action != guardrails.Allow || len(result.Events) != 0 || e.HasRules(guardrails.Input) {
+	if err != nil || result.Action != guardrails.Allow || len(result.RuleEvaluations) != 0 || e.HasRules(guardrails.Input) {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
@@ -164,7 +164,7 @@ func TestConfigurationSnapshotAndConcurrentChecks(t *testing.T) {
 	})
 	rules := []guardrails.Rule{rule("one")}
 	detectors := map[string]guardrails.Detector{"one": d}
-	e := mustEngine(t, rules, detectors)
+	e := mustChecker(t, rules, detectors)
 	rules[0].OnMatch = guardrails.Observe
 	delete(detectors, "one")
 	var wg sync.WaitGroup
@@ -217,13 +217,13 @@ func TestInvalidRules(t *testing.T) {
 }
 
 func TestUninitializedEngineAndContext(t *testing.T) {
-	for _, e := range []*guardrails.Engine{nil, {}} {
+	for _, e := range []*guardrails.Checker{nil, {}} {
 		result, err := e.Check(context.Background(), guardrails.Input, "")
 		if !errors.Is(err, guardrails.ErrInvalidInput) || result.Action != guardrails.Block {
 			t.Fatalf("uninitialized result=%+v err=%v", result, err)
 		}
 	}
-	e := mustEngine(t, nil, nil)
+	e := mustChecker(t, nil, nil)
 	if _, err := e.Check(nil, guardrails.Input, ""); !errors.Is(err, guardrails.ErrInvalidInput) {
 		t.Fatalf("nil context: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestUninitializedEngineAndContext(t *testing.T) {
 
 // 超限和取消必须先于线性 UTF-8 扫描；出错不能丢失此前已完成的观察事件。
 func TestCheckErrorPrecedenceAndEvents(t *testing.T) {
-	e := mustEngine(t, nil, nil)
+	e := mustChecker(t, nil, nil)
 	oversized := strings.Repeat("x", 1024) + string([]byte{0xff})
 	if _, err := e.Check(context.Background(), guardrails.Input, oversized); !errors.Is(err, guardrails.ErrTextTooLarge) {
 		t.Fatalf("size must precede UTF-8 validation: %v", err)
@@ -255,7 +255,7 @@ func TestCheckErrorPrecedenceAndEvents(t *testing.T) {
 	defer cancel()
 	first, second := rule("first"), rule("second")
 	first.OnMatch = guardrails.Observe
-	e = mustEngine(t, []guardrails.Rule{first, second}, map[string]guardrails.Detector{
+	e = mustChecker(t, []guardrails.Rule{first, second}, map[string]guardrails.Detector{
 		"first": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
 			return []guardrails.Finding{{Level: guardrails.High}}, nil
 		}),
@@ -265,7 +265,7 @@ func TestCheckErrorPrecedenceAndEvents(t *testing.T) {
 		}),
 	})
 	result, err := e.Check(ctx, guardrails.Input, "text")
-	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block || len(result.Events) != 1 || result.Events[0].Action != guardrails.Observe {
+	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block || len(result.RuleEvaluations) != 1 || result.RuleEvaluations[0].Action != guardrails.Observe {
 		t.Fatalf("completed event lost: result=%+v err=%v", result, err)
 	}
 }

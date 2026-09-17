@@ -13,7 +13,7 @@ import (
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
 
-// Bootstrap 取代上游 main 里的 s.Bootstrap(ctx) 调用：先注入身份装配工厂，再执行上游装配，最后接入品牌与国内定价。
+// Bootstrap 取代上游 main 里的 s.Bootstrap(ctx) 调用：先注入身份装配工厂，再执行上游装配，最后接入 EE 功能。
 // log 是入口按 -log-level/-log-style 配置好的宿主 logger，EE 自有代码的日志都经它输出。
 func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log schemas.Logger) error {
 	var auth *eehost.AuthAdapter
@@ -46,6 +46,9 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schema
 	db := s.Config.ConfigStore.DB()
 	if db == nil {
 		return errors.New("ee: config store returned a nil *gorm.DB")
+	}
+	if err := assembleGuardrails(ctx, s, log); err != nil {
+		return err
 	}
 	// 复用上游配置数据库，由品牌存储适配负责自己的表迁移。
 	if err := s.Config.ConfigStore.RunMigration(ctx, eeconfig.MigrateBranding); err != nil {

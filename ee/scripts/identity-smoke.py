@@ -55,9 +55,11 @@ class Node:
     def new_client(cookies=None):
         return urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(cookies if cookies is not None else http.cookiejar.CookieJar()))
 
-    def start(self, *, default_home=None):
+    def start(self, *, default_home=None, extra_env=None):
         env = {k: v for k, v in os.environ.items() if not k.startswith(('BIFROST_', 'EE_', 'OPENAI_', 'ANTHROPIC_', 'AWS_', 'AZURE_'))}
         env.update(EE_PUBLIC_ORIGIN=self.url, BIFROST_SETUP_TOKEN=self.setup)
+        # 联调脚本显式注入自己的配置；不继承终端里的 EE 或模型凭据。
+        env.update(extra_env or {})
         self.log = (self.root / 'server.log').open('ab')
         command = [self.binary, '-host', '127.0.0.1', '-port', str(self.port)]
         cwd = None
