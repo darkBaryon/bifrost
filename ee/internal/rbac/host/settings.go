@@ -1,4 +1,4 @@
-// 本文件在保存设置前检查实际改动需要哪些权限，并把隐藏的地址恢复为原值。
+// 本文件检查设置修改的权限，隐藏和恢复秘密，并检查代理携带旧凭据修改连接设置的操作。
 package host
 
 import (
@@ -15,9 +15,6 @@ import (
 	"github.com/tidwall/gjson"
 	"github.com/valyala/fasthttp"
 )
-
-// 派生认证字段与认证适配负责的白名单不在本层独立判权。
-var clientIdentityFields = map[string]bool{"enforce_governance_header": true, "enforce_scim_auth": true, "whitelisted_routes": true}
 
 // 非零/非空才更新的字段来自宿主 updateConfig；其余字段比较解码后的默认值。
 var clientOptional = map[string]bool{"initial_pool_size": true, "max_request_body_size_mb": true, "mcp_agent_depth": true, "mcp_tool_execution_timeout": true, "mcp_code_mode_binding_level": true, "mcp_server_auth_mode": true, "dual_credential_conflict_behavior": true, "async_job_result_ttl": true, "routing_chain_max_depth": true, "enable_logging": true, "oauth2_server_config": true}
@@ -59,9 +56,6 @@ func (a *Adapter) settingsUpdate(_ context.Context, desired *handlers.ConsoleSet
 		}
 		value := after.Field(i)
 		if clientOptional[name] && value.IsZero() {
-			continue
-		}
-		if clientIdentityFields[name] {
 			continue
 		}
 		if reflect.DeepEqual(before.Field(i).Interface(), value.Interface()) {
@@ -121,7 +115,7 @@ var clientPermissions = map[string][]rbac.Permission{
 	"async_job_result_ttl":                       {},
 	"required_headers":                           {},
 	"logging_headers":                            {rbac.LogsManage, rbac.LogsRevealContent},
-	"whitelisted_routes":                         {},
+	"whitelisted_routes":                         {}, // 由身份适配检查，不在这里重复判权。
 	"hide_deleted_virtual_keys_in_filters":       {rbac.LogsManage},
 	"routing_chain_max_depth":                    {rbac.RoutingRulesManage},
 	"mcp_external_client_url":                    {rbac.MCPGatewayManage},
@@ -141,7 +135,7 @@ func projectSettings(value any) {
 	})
 }
 
-// proxyUpdate 更新代理时，把隐藏的代理地址换回数据库里的原值。
+// proxyUpdate 恢复隐藏的代理地址，并检查旧凭据是否改用了新地址或TLS信任设置。
 func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyConfig, access rbac.Access) error {
 	if desired == nil {
 		return consoleError(rbac.ErrInvalid)
@@ -168,8 +162,13 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 	}
 	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
 	retained := current.Password != "" && password == current.Password
-	before := struct{ Type, URL string }{string(current.Type), current.URL}
-	after := struct{ Type, URL string }{string(desired.Type), desired.URL}
+	target := func(p *tables.GlobalProxyConfig) any {
+		return struct {
+			Type, URL     string
+			SkipTLSVerify bool
+		}{string(p.Type), p.URL, p.SkipTLSVerify}
+	}
+	before, after := target(current), target(desired)
 	return consoleError(credentialDestination(access, retained, before, after))
 }
 

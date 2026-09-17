@@ -2,7 +2,6 @@
 package host
 
 import (
-	"encoding/json"
 	"reflect"
 	"slices"
 
@@ -19,10 +18,6 @@ func credentialDestination(access rbac.Access, retained bool, before, after any)
 		return requirePermissions(access, rbac.SecurityChangeCredentialDestination)
 	}
 	return nil
-}
-
-func secretText(v *schemas.SecretVar) string {
-	return schemas.SecretVarAsString(v)
 }
 
 func retainedValues(before, after []string) bool {
@@ -45,87 +40,9 @@ func headerValues(headers map[string]string) []string {
 func secretHeaderValues(headers map[string]schemas.SecretVar) []string {
 	values := make([]string, 0, len(headers))
 	for _, value := range headers {
-		values = append(values, secretText(&value))
+		values = append(values, schemas.SecretVarAsString(&value))
 	}
 	return values
-}
-
-// keyConnection 从Key的实际类型读取目标和凭据，包含别名下的地址；不把模型名、权重等普通字段算作目标。
-// SecretVar用存储表达比较，避免环境变量引用与API对象格式不同；不记录这些值到日志或错误。
-func keyConnection(key *schemas.Key) (map[string]string, []string, error) {
-	data, err := json.Marshal(key)
-	if err != nil {
-		return nil, nil, rbac.ErrUnavailable
-	}
-	var value any
-	if json.Unmarshal(data, &value) != nil {
-		return nil, nil, rbac.ErrUnavailable
-	}
-	targets := map[string]string{}
-	var credentials []string
-	var walk func(any, string) error
-	walk = func(value any, path string) error {
-		m, ok := value.(map[string]any)
-		if !ok {
-			return nil
-		}
-		for name, child := range m {
-			field := path + "/" + name
-			switch name {
-			case "endpoint", "url", "workspace_url", "github_domain", "region", "arn", "role_arn", "project_id", "project_number", "runtime", "control_plane", "mantle", "agent_runtime", "s3":
-				text, err := configSecretText(child)
-				if err != nil {
-					return err
-				}
-				if text != "" {
-					targets[field] = text
-				}
-			case "value", "client_secret", "auth_credentials", "access_key", "secret_key", "session_token", "private_key":
-				text, err := configSecretText(child)
-				if err != nil {
-					return err
-				}
-				credentials = append(credentials, text)
-			default:
-				if err := walk(child, field); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
-	}
-	if err := walk(value, ""); err != nil {
-		return nil, nil, err
-	}
-	// 云厂商还可使用服务器身份；没有显式密钥不等于没有需要保护的凭据。
-	if key != nil {
-		if key.BedrockKeyConfig != nil && secretText(&key.BedrockKeyConfig.SecretKey) == "" && secretText(&key.Value) == "" {
-			credentials = append(credentials, "ambient:bedrock")
-		}
-		if key.BedrockMantleKeyConfig != nil && secretText(&key.BedrockMantleKeyConfig.SecretKey) == "" && secretText(&key.Value) == "" {
-			credentials = append(credentials, "ambient:bedrock-mantle")
-		}
-		if key.VertexKeyConfig != nil && secretText(&key.VertexKeyConfig.AuthCredentials) == "" {
-			credentials = append(credentials, "ambient:vertex")
-		}
-	}
-	return targets, credentials, nil
-}
-
-// configSecretText 用于插件的存储JSON和API中的SecretVar两种输入；不是通用配置字段解析器。
-func configSecretText(value any) (string, error) {
-	if value == nil {
-		return "", nil
-	}
-	data, err := json.Marshal(value)
-	if err != nil {
-		return "", rbac.ErrUnavailable
-	}
-	var secret schemas.SecretVar
-	if json.Unmarshal(data, &secret) != nil {
-		return "", rbac.ErrInvalid
-	}
-	return secretText(&secret), nil
 }
 
 // mcpDestination 检查MCP可修改的TLS及OAuth目标。连接URL本身由宿主固定，不能通过更新接口修改。
@@ -145,7 +62,7 @@ func mcpDestination(current, desired *schemas.MCPClientConfig, oldOAuth *tables.
 		return struct {
 			Insecure bool
 			CA       string
-		}{c.InsecureSkipVerify, secretText(c.CACertPEM)}
+		}{c.InsecureSkipVerify, schemas.SecretVarAsString(c.CACertPEM)}
 	}
 	if err := credentialDestination(access, retained, tls(current.TLSConfig), tls(desired.TLSConfig)); err != nil {
 		return err
@@ -155,7 +72,7 @@ func mcpDestination(current, desired *schemas.MCPClientConfig, oldOAuth *tables.
 		if oldOAuth.RegistrationURL != nil {
 			registration = *oldOAuth.RegistrationURL
 		}
-		retained := retainedValues([]string{secretText(oldOAuth.ClientSecret)}, []string{secretText(nextOAuth.ClientSecret)})
+		retained := retainedValues([]string{schemas.SecretVarAsString(oldOAuth.ClientSecret)}, []string{schemas.SecretVarAsString(nextOAuth.ClientSecret)})
 		before := []string{oldOAuth.AuthorizeURL, oldOAuth.TokenURL, registration}
 		after := []string{nextOAuth.AuthorizeURL, nextOAuth.TokenURL, nextOAuth.RegistrationURL}
 		if err := credentialDestination(access, retained, before, after); err != nil {

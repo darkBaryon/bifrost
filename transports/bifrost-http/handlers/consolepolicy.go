@@ -28,7 +28,7 @@ const (
 
 // ConsoleNotificationPolicy 控制发布及当前请求快照中的多角色可见性。
 type ConsoleNotificationPolicy interface {
-	// AuthorizePublish receives input already validated and normalized by the notification handler.
+	// AuthorizePublish 接收通知处理器已经校验并规范化的发布内容。
 	AuthorizePublish(context.Context, schemas.NotificationInput) error
 	CanView(*schemas.Notification) bool
 }
@@ -39,16 +39,15 @@ type WebSocketMessageFilter func(context.Context, []byte) (bool, error)
 // ConsoleProviderUpdatePolicy 在验证或写入前恢复完整请求里的保留标记。
 type ConsoleProviderUpdatePolicy func(context.Context, *configstore.ProviderConfig, *schemas.NetworkConfig, *schemas.ProxyConfig) error
 
-// ConsoleProviderConfigPolicy checks the merged configuration before saving or discovery.
-// Both snapshots are read-only; a nil policy preserves the original upstream behavior.
+// ConsoleProviderConfigPolicy 在保存和发现模型前检查合并后的配置，两个快照均只读。
+// 未注入时保持上游行为；注入类型错误或空回调时返回503。
 type ConsoleProviderConfigPolicy func(context.Context, *configstore.ProviderConfig, *configstore.ProviderConfig) error
 
-// ConsoleProviderKeyPolicy checks a merged key and its provider before any write or discovery.
-// The current key is nil when creating a key; the desired key is always provided.
+// ConsoleProviderKeyPolicy 在保存和发现模型前检查合并后的Key及所属厂商。
+// 新建时旧Key为nil，期望Key始终存在；快照只读。
 type ConsoleProviderKeyPolicy func(context.Context, *configstore.ProviderConfig, *schemas.Key, *schemas.Key) error
 
-// ConsoleMCPUpdatePolicy checks resolved credentials and connection settings before
-// any connection verification, credential rotation, or persistence. Snapshots are read-only.
+// ConsoleMCPUpdatePolicy 在验证连接、轮换凭据或保存前检查恢复后的凭据和连接设置；快照只读。
 type ConsoleMCPUpdatePolicy func(context.Context, *schemas.MCPClientConfig, *schemas.MCPClientConfig, *tables.TableOauthConfig, *configstore.MCPOAuthConfigFields) error
 
 // ConsoleSettingsUpdate 是请求独享的期望配置，策略可恢复保留字段。

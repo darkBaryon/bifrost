@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/valyala/fasthttp"
+	"reflect"
 	"testing"
 
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
@@ -212,5 +214,101 @@ func TestPluginCredentialDestination(t *testing.T) {
 	json.Unmarshal([]byte(`{"profiles":[{"collector_url":"https://a.invalid","headers":{"Authorization":"fixture"}},{"collector_url":"https://b.invalid","headers":{"Authorization":"fixture"}}]}`), &multi)
 	if err := pluginDestination("otel", multi, multi, rbac.Access{}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCredentialDestinationReviewBoundaries(t *testing.T) {
+	t.Run("proxy TLS", func(t *testing.T) {
+		store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: "https://old.invalid", Password: "fixture"}}
+		a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
+		next := *store.proxy
+		next.Password, next.SkipTLSVerify = redacted, true
+		var denial *handlers.ConsolePolicyError
+		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
+			t.Fatal("TLS change must require permission", err)
+		}
+		if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
+			t.Fatal(err)
+		}
+		next.SkipTLSVerify, next.Timeout = false, 60
+		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); err != nil {
+			t.Fatal("ordinary update", err)
+		}
+	})
+	t.Run("alias names", func(t *testing.T) {
+		for _, name := range []string{"value", "client_secret", "endpoint", "aliases"} {
+			var old, next schemas.Key
+			decode := func(endpoint string, key *schemas.Key) {
+				if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"`+name+`":{"model_id":"model","endpoint":"`+endpoint+`"}}}`), key); err != nil {
+					t.Fatal(err)
+				}
+			}
+			decode("https://old.invalid", &old)
+			decode("https://new.invalid", &next)
+			if err := providerKeyDestination(&configstore.ProviderConfig{}, &old, &next, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
+				t.Fatal(name, err)
+			}
+			if err := providerKeyDestination(&configstore.ProviderConfig{}, &old, &next, credentialAccess()); err != nil {
+				t.Fatal(name, err)
+			}
+		}
+	})
+	t.Run("OTEL header targets", func(t *testing.T) {
+		var old, next any
+		if err := json.Unmarshal([]byte(`{"profiles":[{"collector_url":"https://traces.invalid","metrics_endpoint":"https://metrics.invalid","headers":{"Authorization":"fixture"},"metrics_headers":{"Authorization":"metrics-fixture"}}]}`), &old); err != nil {
+			t.Fatal(err)
+		}
+		next = cloneCredentialConfig(t, old)
+		next.(map[string]any)["profiles"].([]any)[0].(map[string]any)["metrics_headers"] = map[string]any{}
+		if err := pluginDestination("otel", old, next, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
+			t.Fatal(err)
+		}
+		if err := pluginDestination("otel", old, next, credentialAccess()); err != nil {
+			t.Fatal(err)
+		}
+		if err := pluginDestination("otel", old, old, rbac.Access{}); err != nil {
+			t.Fatal("no-op", err)
+		}
+	})
+}
+
+type credentialPluginStore struct {
+	configstore.ConfigStore
+	plugin *tables.TablePlugin
+}
+
+func (s *credentialPluginStore) GetPlugin(context.Context, string) (*tables.TablePlugin, error) {
+	return s.plugin, nil
+}
+
+func TestPluginPartialCredentialDestinationUpdate(t *testing.T) {
+	var current map[string]any
+	if err := json.Unmarshal([]byte(`{"profiles":[{"collector_url":"https://old.invalid","protocol":"http","headers":{"Authorization":"fixture"}}]}`), &current); err != nil {
+		t.Fatal(err)
+	}
+	store := &credentialPluginStore{plugin: &tables.TablePlugin{Name: "otel", Config: current}}
+	a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
+	for _, config := range []string{`{}`, `{"plugin_span_filter":{"mode":"exclude","plugins":["logging"]}}`, `{"profiles":[{"collector_url":"https://old.invalid","protocol":"http","headers":{"Authorization":"<REDACTED>"}}]}`} {
+		var c fasthttp.RequestCtx
+		c.Request.Header.SetMethod(fasthttp.MethodPut)
+		c.SetUserValue("name", "otel")
+		c.Request.SetBodyString(`{"config":` + config + `}`)
+		if err := a.preparePluginUpdate(&c, rbac.Access{}); err != nil {
+			t.Fatal(config, err)
+		}
+		var body map[string]any
+		if err := json.Unmarshal(c.PostBody(), &body); err != nil {
+			t.Fatal(err)
+		}
+		expected, err := pluginStoredShape("otel", current)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(body["config"].(map[string]any)["profiles"], expected.(map[string]any)["profiles"]) {
+			t.Fatal("partial update changed profiles")
+		}
+		if current["profiles"].([]any)[0].(map[string]any)["headers"].(map[string]any)["Authorization"] != "fixture" {
+			t.Fatal("current config mutated")
+		}
 	}
 }

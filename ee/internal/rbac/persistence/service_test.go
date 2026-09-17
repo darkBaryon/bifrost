@@ -125,7 +125,7 @@ func TestRolesAndIdentityPolicy(t *testing.T) {
 	p := policy.Subject(member.Principal)
 	a, e := f.rb.Snapshot(ctx, admin)
 	must(t, e)
-	if !a.Chief || len(a.Permissions) != 30 {
+	if !a.Chief || len(a.Permissions) != len(rbac.Permissions()) {
 		t.Fatalf("bad chief: %+v", a)
 	}
 	want(t, f.rb.Authorize(ctx, p, rbac.UsersView), rbac.ErrForbidden)

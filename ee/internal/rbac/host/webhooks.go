@@ -48,6 +48,7 @@ func projectWebhooks(value any, access rbac.Access, pattern string) {
 }
 
 // webhookUpdate 保存或重新投递前检查权限；更新时把隐藏地址换回原值。
+// 更新时还会检查：保留认证头并修改投递地址，需要额外的敏感权限。
 func (a *Adapter) webhookUpdate(ctx context.Context, subject rbac.Subject, op handlers.ConsoleWebhookOperation, desired *tables.TableWebhookEndpoint) error {
 	if desired == nil {
 		return consoleError(rbac.ErrInvalid)
@@ -82,9 +83,5 @@ func (a *Adapter) webhookUpdate(ctx context.Context, subject rbac.Subject, op ha
 		desired.URL = current.URL
 	}
 	// 签名密钥只用来计算签名，不随请求发送；需要保护的是会实际发送的自定义认证头。
-	if err := credentialDestination(access, retainedValues(secretHeaderValues(current.Headers), secretHeaderValues(desired.Headers)), current.URL, desired.URL); err != nil {
-		return consoleError(err)
-	}
-
-	return nil
+	return consoleError(credentialDestination(access, retainedValues(secretHeaderValues(current.Headers), secretHeaderValues(desired.Headers)), current.URL, desired.URL))
 }

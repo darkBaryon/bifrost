@@ -113,7 +113,7 @@ func (a *Adapter) checkSensitiveRequest(c *fasthttp.RequestCtx, r requestAccess)
 		if err := checkPluginMutation(c, r.Access); err != nil {
 			return err
 		}
-		return a.restorePlugin(c, r.Access)
+		return a.preparePluginUpdate(c, r.Access)
 	case guardSettingsInput:
 		if r.Route.Pattern == "/api/config" {
 			return checkSettingsInput(c)

@@ -28,10 +28,10 @@
 | [providers.go](providers.go) | 隐藏厂商凭据，更新时保留原值 |
 | [logs.go](logs.go) | 分开控制日志概要、正文、敏感查询和导出 |
 | [webhooks.go](webhooks.go) | 控制向外部地址发送事件通知；包含日志正文时额外检查权限 |
-| [plugins.go](plugins.go) | 检查插件操作影响哪些功能，隐藏凭据，更新时恢复隐藏字段 |
+| [plugins.go](plugins.go) | 检查插件操作影响哪些功能，更新时合并旧配置、恢复隐藏字段并检查凭据目标 |
 | [settings.go](settings.go) | 比较设置真正改了什么，再检查对应功能的权限 |
 | [credentials.go](credentials.go) | 比较旧凭据和新目标，统一检查敏感权限；含MCP的TLS/OAuth边界 |
-| [plugin_credentials.go](plugin_credentials.go) | 处理内置上报插件的地址与凭据组合，兼容旧配置格式 |
+| [plugincredentials.go](plugincredentials.go) | 处理内置上报插件的地址与凭据组合，兼容旧配置格式 |
 | [notifications.go](notifications.go) | 按角色筛选通知，长连接每条消息重新检查权限 |
 
 ## 修改时要知道
@@ -44,7 +44,7 @@
 - 携带旧凭据更换地址、代理或TLS信任设置需要 `Security.ChangeCredentialDestination`，同时仍需所属模块管理权限。主管理员默认拥有，普通角色可单独授予；不开放凭据明文读取。厂商密钥的地址覆盖与新建密钥继承旧请求头也检查；MCP的已保存用户令牌及令牌交换不能因换了可见密钥就视为全新凭据。
 - `<redacted>`表示保留原值，不能直接保存为新密钥或地址；没有旧值时拒绝更新。
 - 插件和设置可能影响其他功能，例如修改日志正文保存方式还需要日志权限。
-- 新内置插件或新配置字段需要补上权限规则；对应检查和测试会发现遗漏。
+- 新内置插件或新配置字段需要补上权限规则；路由、设置字段和内置插件目录有自动核对；Key字段由providers.go的keyConnection显式识别，上游升级时还须人工核对新增目标和凭据字段。
 
 ## 验证
 

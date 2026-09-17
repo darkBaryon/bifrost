@@ -18,7 +18,7 @@ import (
 
 // —— 请求校验与字段解析 ——
 
-// maxBodyBytes 将请求正文限制为16 KiB，与身份接口使用相同的上限。
+// maxBodyBytes 沿用身份接口的正文上限。
 const maxBodyBytes = authhttp.MaxBodyBytes
 
 // decode 只接受一个JSON对象；allowed列出允许的字段，required列出必须传的字段。

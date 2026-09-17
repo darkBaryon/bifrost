@@ -4,6 +4,7 @@ package host
 import (
 	"encoding/json"
 	"errors"
+	"maps"
 	"reflect"
 	"strings"
 
@@ -224,6 +225,7 @@ func validatePluginNames(value any) error {
 }
 
 // hasMarker 检查请求是否包含要求保留原值的隐藏标记。
+// 插件SecretVar使用上游的大写<REDACTED>，本包使用小写；此处同时识别两种。
 func hasMarker(v any) bool {
 	switch v := v.(type) {
 	case string:
@@ -286,8 +288,8 @@ func restoreMarkers(desired, current any) (any, error) {
 	return desired, nil
 }
 
-// restorePlugin 更新内置插件时读取旧配置，恢复被前端原样传回的隐藏字段。
-func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx, access rbac.Access) error {
+// preparePluginUpdate 合并内置插件配置、恢复隐藏字段，并检查旧凭据是否改用了新上报目标。
+func (a *Adapter) preparePluginUpdate(c *fasthttp.RequestCtx, access rbac.Access) error {
 	if !c.IsPut() && !c.IsPost() {
 		return nil
 	}
@@ -306,7 +308,7 @@ func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx, access rbac.Access) erro
 		return nil
 	}
 	name, _ := c.UserValue("name").(string)
-	if !hasMarker(config) && name != "otel" && name != "telemetry" {
+	if !hasMarker(config) && !hasDestinationCheck(name) {
 		return nil
 	}
 	// 自定义配置由具备 LoadNative 的操作者完全控制。
@@ -334,6 +336,16 @@ func (a *Adapter) restorePlugin(c *fasthttp.RequestCtx, access rbac.Access) erro
 	if json.Unmarshal(raw, &current) != nil {
 		return rbac.ErrUnavailable
 	}
+	// 与宿主updatePlugin保持一致：顶层浅合并，缺省字段沿用原值。
+	incoming, ok := config.(map[string]any)
+	if config != nil && !ok {
+		return rbac.ErrInvalid
+	}
+	previous, _ := current.(map[string]any)
+	merged := make(map[string]any, len(previous)+len(incoming))
+	maps.Copy(merged, previous)
+	maps.Copy(merged, incoming)
+	config = merged
 	current, e = pluginStoredShape(name, current)
 	if e != nil {
 		return e

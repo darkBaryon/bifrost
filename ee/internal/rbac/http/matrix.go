@@ -143,6 +143,9 @@ var matrixGrants = map[rbac.Permission]matrixGrant{
 	rbac.PluginsLoadNative:      {[]resourceCode{resourcePlugins}, []operationCode{operationLoadNative}},
 	rbac.SettingsAuthConfig:     {[]resourceCode{resourceSettings}, []operationCode{operationAuthConfig}},
 	rbac.SettingsImportConfig:   {[]resourceCode{resourceSettings}, []operationCode{operationImportConfig}},
+
+	// 前端没有独立操作开关；保存配置时由后端检查完整权限组合。
+	rbac.SecurityChangeCredentialDestination: {},
 }
 
 // matrix 先将所有操作设为false，再打开账号已有权限对应的操作；不根据权限字符串猜测关系。

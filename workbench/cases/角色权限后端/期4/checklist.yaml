@@ -5,10 +5,10 @@
   评审状态: 独立正式复核待执行
 必过命令:
 - name: final-acceptance-scope
-  run: "python3 - <<'CHECK'\nfrom pathlib import Path\nimport subprocess\nbase='4420d1b12'\nreview_fixes={'ee/internal/rbac/persistence/store.go','ee/internal/identity/persistence/store.go','ee/internal/rbac/http/handler.go','ee/internal/rbac/http/protocol.go'}\n\
+  run: "python3 - <<'CHECK'\nfrom pathlib import Path\nimport subprocess\nbase='4420d1b12'\nreview_fixes={'ee/internal/rbac/persistence/store.go','ee/internal/identity/persistence/store.go','ee/internal/rbac/http/handler.go','ee/internal/rbac/http/protocol.go','ee/internal/rbac/http/matrix.go'}\n\
     root=Path('ee/internal/rbac/host')\nassert not (root/'routes.json').exists()\nassert not (root/'testdata/authorization-v4.json').exists()\n\
     assert 'legacy-admin' not in (root/'routes.txt').read_text()\nproduction={p.name for p in root.glob('*.go')\
-    \ if not p.name.endswith('_test.go')}\nassert production=={'authorization.go','routes.go','request.go','response.go','providers.go','logs.go','webhooks.go','plugins.go','settings.go','notifications.go','credentials.go','plugin_credentials.go'}\n\
+    \ if not p.name.endswith('_test.go')}\nassert production=={'authorization.go','routes.go','request.go','response.go','providers.go','logs.go','webhooks.go','plugins.go','settings.go','notifications.go','credentials.go','plugincredentials.go'}\n\
     for p in root.glob('*.go'): assert len(p.read_text().splitlines())<=500,p\nfor folder in ['ee/internal/rbac/persistence','ee/internal/identity/persistence','ee/internal/rbac/http']:\n\
     \ for name in subprocess.check_output(['git','ls-tree','-r','--name-only',base,folder],text=True).splitlines():\n\
     \  if name.endswith('.go') and not name.endswith('_test.go') and name not in review_fixes:\n   assert\

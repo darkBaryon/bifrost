@@ -15,6 +15,8 @@ import uuid
 
 auth = runpy.run_path(str(Path(__file__).with_name('identity-smoke.py')))
 Node, psql = auth['Node'], auth['psql']
+EXPECTED_PERMISSION_COUNT = 30
+
 sensitive = runpy.run_path(str(Path(__file__).with_name('rbac-sensitive-smoke.py')))['exercise_sensitive']
 
 
@@ -35,14 +37,14 @@ def exercise(nodes):
     a.expect(201, '/api/identity/initialize', {'setup_token': a.setup, 'username': 'admin', 'password': 'Admin-password-1'})
     admin = a.login('admin', 'Admin-password-1')
     permissions, _ = a.expect(200, '/api/permissions/list', {}, token=admin)
-    assert sum(len(m['permissions']) for m in permissions['modules']) == 30
+    assert sum(len(m['permissions']) for m in permissions['modules']) == EXPECTED_PERMISSION_COUNT
     me, _ = a.expect(200, '/api/permissions/me', {}, token=admin)
-    assert len(me['permissions']) == 30 and len(me['roles']) == 1
+    assert len(me['permissions']) == EXPECTED_PERMISSION_COUNT and len(me['roles']) == 1
     chief_has_no_permission_rows(a)
     chief, _ = a.expect(200, '/api/roles/get', {'role_id': 1}, token=admin)
     role = chief['role']
     updated, _ = a.expect(200, '/api/roles/update', {'role_id': 1, 'name': role['name'], 'description': 'updated chief', 'permission_codes': role['permission_codes']}, token=admin)
-    assert len(updated['role']['permission_codes']) == 30
+    assert len(updated['role']['permission_codes']) == EXPECTED_PERMISSION_COUNT
     chief_has_no_permission_rows(a)
     own_id = me['account_id']
     a.expect(403, '/api/accounts/set-roles', {'account_id': own_id, 'role_ids': []}, token=admin)
