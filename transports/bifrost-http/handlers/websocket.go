@@ -26,6 +26,9 @@ const websocketWriteTimeout = 10 * time.Second
 // connection has already been handed back to the transport.
 var errWebSocketClientClosed = errors.New("websocket client is closed")
 
+// websocketAuthorizationTimeout bounds each callback using the established two-second limit.
+const websocketAuthorizationTimeout = 2 * time.Second
+
 // WebSocketAuthorizeContextKey carries an optional connection revalidation callback.
 // The callback must only capture durable identifiers, never a pooled RequestCtx.
 const WebSocketAuthorizeContextKey = "bifrost.websocket.authorize"
@@ -38,6 +41,7 @@ type WebSocketClient struct {
 	hasRole    bool
 	localAdmin bool
 	authorize  func(context.Context) error
+	filter     WebSocketMessageFilter
 
 	// closed is set under mu once the connection's owning handler is done with
 	// it. It cannot be inferred from conn: fasthttp hands the upgrade handler a
@@ -141,6 +145,10 @@ func isLocalhost(host string) bool {
 
 // connectStream handles WebSocket connections for real-time streaming
 func (h *WebSocketHandler) connectStream(ctx *fasthttp.RequestCtx) {
+	filter, _, ok := consolePolicy[WebSocketMessageFilter](ctx, WebSocketMessageFilterContextKey)
+	if !ok {
+		return
+	}
 	upgrader := h.getUpgrader()
 	// Copy request metadata before the hijack callback outlives RequestCtx.
 	roleID, hasRole := notificationRoleID(ctx)
@@ -157,6 +165,7 @@ func (h *WebSocketHandler) connectStream(ctx *fasthttp.RequestCtx) {
 		client.roleID, client.hasRole = roleID, hasRole
 		client.localAdmin = localAdmin
 		client.authorize = authorize
+		client.filter = filter
 		ws.SetPongHandler(func(string) error {
 			client.mu.Lock()
 			defer client.mu.Unlock()
@@ -251,7 +260,7 @@ func (h *WebSocketHandler) writeSafely(client *WebSocketClient, write func(conn 
 	}()
 
 	if client.authorize != nil {
-		checkCtx, cancel := context.WithTimeout(h.ctx, 2*time.Second)
+		checkCtx, cancel := context.WithTimeout(h.ctx, websocketAuthorizationTimeout)
 		err := client.authorize(checkCtx)
 		cancel()
 		if err != nil {
@@ -273,6 +282,18 @@ func (h *WebSocketHandler) writeSafely(client *WebSocketClient, write func(conn 
 // sendMessageSafely sends a message to a client with proper locking and error handling
 func (h *WebSocketHandler) sendMessageSafely(client *WebSocketClient, messageType int, data []byte) error {
 	return h.writeSafely(client, func(conn *websocket.Conn) error {
+		if client.filter != nil {
+			checkCtx, cancel := context.WithTimeout(h.ctx, websocketAuthorizationTimeout)
+			send, err := client.filter(checkCtx, data)
+			cancel()
+			if err != nil {
+				_ = conn.UnderlyingConn().SetReadDeadline(time.Now())
+				return errors.New("websocket message is no longer authorized")
+			}
+			if !send {
+				return nil
+			}
+		}
 		// Set a write deadline to prevent hanging connections
 		if err := conn.SetWriteDeadline(time.Now().Add(websocketWriteTimeout)); err != nil {
 			return err
@@ -361,7 +382,7 @@ func (h *WebSocketHandler) BroadcastNotification(notification *schemas.Notificat
 	h.mu.RLock()
 	clients := make([]*WebSocketClient, 0, len(h.clients))
 	for _, client := range h.clients {
-		if client.localAdmin || notificationVisibleToRole(notification, client.roleID, client.hasRole) {
+		if client.filter != nil || client.localAdmin || notificationVisibleToRole(notification, client.roleID, client.hasRole) {
 			clients = append(clients, client)
 		}
 	}

@@ -1,8 +1,11 @@
-// 本文件检查导出密钥等额外操作，并为厂商更新接入保存前的检查。
+// 本文件分派各类请求检查，并让原handler在保存或发送前调用对应检查。
 package host
 
 import (
+	"context"
 	"encoding/json"
+	"github.com/maximhq/bifrost/framework/configstore/tables"
+	"slices"
 	"strings"
 
 	authhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
@@ -83,9 +86,11 @@ func queryBool(c *fasthttp.RequestCtx, key string) (bool, error) {
 	}
 }
 
+var jsonInputGuards = []guard{guardProviderInput, guardPluginMutation, guardSettingsInput, guardWebhookInput, guardNotificationPolicy}
+
 // checkSensitiveRequest 在原handler执行前检查特殊参数，例如导出虚拟密钥需要额外的明文读取权限。
 func (a *Adapter) checkSensitiveRequest(c *fasthttp.RequestCtx, r requestAccess) error {
-	if r.Route.Guard == guardProviderInput && len(c.PostBody()) > 0 {
+	if slices.Contains(jsonInputGuards, r.Route.Guard) && len(c.PostBody()) > 0 {
 		if err := strictJSON(c.PostBody()); err != nil {
 			return err
 		}
@@ -99,8 +104,19 @@ func (a *Adapter) checkSensitiveRequest(c *fasthttp.RequestCtx, r requestAccess)
 		if enabled {
 			return requirePermissions(r.Access, rbac.VirtualKeysRevealKey)
 		}
+	case guardLogsQuery:
+		return checkLogQuery(c, r)
 	case guardProviderInput:
 		return checkProviderInput(c, r)
+	case guardPluginMutation:
+		if err := checkPluginMutation(c, r.Access); err != nil {
+			return err
+		}
+		return a.restorePlugin(c)
+	case guardSettingsInput:
+		if r.Route.Pattern == "/api/config" {
+			return checkSettingsInput(c)
+		}
 	}
 	return nil
 }
@@ -113,12 +129,23 @@ func consoleError(err error) error {
 	return &handlers.ConsolePolicyError{Status: rbachttp.Status(err)}
 }
 
-// installPolicies 在厂商更新保存前恢复隐藏字段；没有这个回调，占位文字会被当作新配置写入。
+// installPolicies 把本次请求需要的检查传给原handler，包括保存配置、发布通知和长连接发消息。
 func (a *Adapter) installPolicies(c *fasthttp.RequestCtx, r requestAccess) {
+	subject := r.Subject
+	c.SetUserValue(handlers.ConsoleNotificationPolicyContextKey, notificationPolicy{a.service, subject, r.Access})
 	if r.Access.Chief {
 		c.SetUserValue(schemas.IsLocalAdminContextKey, true)
 	}
-	if r.Route.Projection == projectionProviderSafe {
-		c.SetUserValue(handlers.ConsoleProviderUpdatePolicyContextKey, handlers.ConsoleProviderUpdatePolicy(restoreProvider))
+	if r.Route.Guard == guardWebsocket {
+		c.SetUserValue(handlers.WebSocketAuthorizeContextKey, func(ctx context.Context) error { return a.service.Authorize(ctx, subject, rbac.NotificationsView) })
+		c.SetUserValue(handlers.WebSocketMessageFilterContextKey, a.messageFilter(subject))
 	}
+	c.SetUserValue(handlers.ConsoleProviderUpdatePolicyContextKey, handlers.ConsoleProviderUpdatePolicy(restoreProvider))
+	c.SetUserValue(handlers.ConsoleSettingsUpdatePolicyContextKey, handlers.ConsoleSettingsUpdatePolicy(func(ctx context.Context, desired *handlers.ConsoleSettingsUpdate) error {
+		return consoleError(a.settingsUpdate(ctx, desired, r.Access))
+	}))
+	c.SetUserValue(handlers.ConsoleProxyUpdatePolicyContextKey, handlers.ConsoleProxyUpdatePolicy(a.proxyUpdate))
+	c.SetUserValue(handlers.ConsoleWebhookPolicyContextKey, handlers.ConsoleWebhookPolicy(func(ctx context.Context, op handlers.ConsoleWebhookOperation, endpoint *tables.TableWebhookEndpoint) error {
+		return a.webhookUpdate(ctx, subject, op, endpoint)
+	}))
 }

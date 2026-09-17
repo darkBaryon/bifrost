@@ -18,7 +18,7 @@ type object = map[string]any
 // projectSensitiveResponse 按接口规则处理响应；提示词和协议内容保持原格式，配置JSON按权限隐藏字段。
 func projectSensitiveResponse(c *fasthttp.RequestCtx, r requestAccess) error {
 	switch r.Route.Projection {
-	case projectionProtocol, projectionProtocolScoped, projectionPromptContent, projectionSkillContent:
+	case projectionProtocol, projectionProtocolScoped, projectionPromptContent, projectionSkillContent, projectionDebugExplicit, projectionMessageFilter:
 		return nil
 	}
 	c.Response.Header.Set("Cache-Control", "no-store")
@@ -65,11 +65,24 @@ func projectSensitiveResponse(c *fasthttp.RequestCtx, r requestAccess) error {
 		}
 	case projectionGovernanceNestedVk:
 		projectGovernance(value, r.Access)
+	case projectionLogsContent:
+		if !r.Access.Allows(rbac.LogsRevealContent) {
+			value, e = projectLogs(value, r.Route.Pattern)
+			if e != nil {
+				return e
+			}
+		}
 	case projectionMcpSafe:
 		projectMCP(value)
+	case projectionPluginSafe:
+		projectPlugins(value, r.Access)
+	case projectionSettingsSafe:
+		projectSettings(value)
 	case projectionRoutingSafe:
 		projectRouting(value, r.Access)
-	case projectionOrdinary:
+	case projectionWebhookSafe:
+		projectWebhooks(value, r.Access, r.Route.Pattern)
+	case projectionOrdinary, projectionBrandingSafe, projectionNotificationPolicy:
 	default:
 		return rbac.ErrUnavailable
 	}
@@ -214,14 +227,21 @@ func projectRouting(value any, access rbac.Access) {
 
 // validateShape 检查预期的对象和列表是否仍是原来的结构；结构变了就拒绝返回，避免跳过字段隐藏。
 func validateShape(value any, r requestAccess) error {
+	if r.Route.Projection == projectionPluginSafe && (r.Route.Pattern == "/api/plugins/builtins" || r.Route.Pattern == "/api/plugins/loaded") {
+		return validatePluginNames(value)
+	}
+
 	var failure error
-	// 这些列表里的每一项都应是对象；如果变成字符串等结构，就不能继续假定敏感字段已被处理。
+	// 这些列表里的每一项都应是对象；结构变了就不能假定敏感字段已被处理。
 	collections := map[projection][]string{
 		projectionProviderSafe:       {"providers", "keys"},
 		projectionKeyMetadata:        {"keys"},
 		projectionVkValues:           {"virtual_keys", "results", "rotated_keys", "successful"},
 		projectionGovernanceNestedVk: {"customers", "teams", "virtual_keys", "providers"},
+		projectionLogsContent:        {"logs", "items"},
 		projectionMcpSafe:            {"clients", "client_configs", "mcp_clients", "sessions"},
+		projectionPluginSafe:         {"plugins"},
+		projectionWebhookSafe:        {"endpoints", "webhooks", "deliveries"},
 	}
 	children := collections[r.Route.Projection]
 	objects(value, children, func(v object) {
@@ -254,6 +274,12 @@ func validateShape(value any, r requestAccess) error {
 			checkObject(v, "proxy_config")
 			if network, ok := v["network_config"].(map[string]any); ok {
 				checkObject(network, "extra_headers")
+			}
+		})
+	case projectionSettingsSafe:
+		objects(value, []string{"restart_required", "config"}, func(v object) {
+			for _, key := range []string{"client_config", "framework_config", "proxy_config"} {
+				checkObject(v, key)
 			}
 		})
 	case projectionVkValues:

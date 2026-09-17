@@ -1,0 +1,55 @@
+方案合同:
+  版本: 1
+  批次: 四期后端整体验收
+  已定稿: true
+  评审状态: 独立正式复核待执行
+必过命令:
+- name: phase34-extraction-scope
+  run: "python3 - <<'CHECK'\nfrom pathlib import Path\nimport subprocess\nbase='4420d1b12'\n\
+    source='b38493b07'\nroot=Path('ee/internal/rbac/host')\nassert not (root/'routes.json').exists()\n\
+    assert not (root/'testdata/authorization-v4.json').exists()\nassert 'legacy-admin'\
+    \ not in (root/'routes.txt').read_text()\nproduction={p.name for p in root.glob('*.go')\
+    \ if not p.name.endswith('_test.go')}\nassert production=={'authorization.go','routes.go','request.go','response.go','providers.go','logs.go','webhooks.go','plugins.go','settings.go','notifications.go'}\n\
+    for p in root.glob('*.go'): assert len(p.read_text().splitlines())<=500,p\nfor\
+    \ folder in ['ee/internal/rbac/persistence','ee/internal/identity/persistence','ee/internal/rbac/http']:\n\
+    \ for name in subprocess.check_output(['git','ls-tree','-r','--name-only',base,folder],text=True).splitlines():\n\
+    \  if name.endswith('.go') and not name.endswith('_test.go'):\n   assert Path(name).read_bytes()==subprocess.check_output(['git','show',base+':'+name]),name\n\
+    changed=subprocess.check_output(['git','diff','--name-only',base,'--','transports'],text=True).splitlines()\n\
+    allowed={'consolepolicy.go','consolepolicy_test.go','config.go','notifications.go','webhooks.go','websocket.go'}\n\
+    assert all(p.startswith('transports/bifrost-http/handlers/') and Path(p).name\
+    \ in allowed for p in changed),changed\nprint('范围通过：十个主体文件；数据库与角色HTTP生产实现冻结；上游仅批准的六个文件；未导入大JSON')\n\
+    CHECK\n"
+- name: whitespace
+  run: git diff --check
+- name: go-format
+  run: gofmt -l ee/internal/rbac/host ee/internal/identity/access.go ee/internal/identity/session.go
+    ee/internal/rbac/authorize.go ee/internal/rbac/identity/policy.go ee/internal/rbac/persistence/service_test.go
+    ee/internal/rbac/persistence/lifecycle_test.go ee/internal/host/auth.go ee/internal/host/permissions_test.go
+    ee/internal/app/identity.go transports/bifrost-http/handlers/consolepolicy.go
+    transports/bifrost-http/handlers/consolepolicy_test.go transports/bifrost-http/handlers/config.go
+    transports/bifrost-http/handlers/notifications.go transports/bifrost-http/handlers/webhooks.go
+    transports/bifrost-http/handlers/websocket.go
+  expect_empty: true
+- name: source-route-contract
+  run: cd ee && GOWORK=off go test ./internal/rbac/host -run "TestRouteSourceDigest|TestEveryManagedRouteAuthorization|TestClientFieldsAreExhaustivelyClassified|TestClientOptionalMatchesHostUpdateBranches"
+- name: workbench
+  run: python3 workbench/tools/build_views.py --check
+必存产物:
+- ee/scripts/rbac-smoke.py
+- ee/scripts/rbac-sensitive-smoke.py
+- ee/internal/rbac/host/README.md
+- workbench/evidence/角色权限后端-期3与期4-阅读与验证.md
+必含符号:
+- grep: ValidateNotificationAudience
+  in: ee/internal/rbac/authorize.go
+- grep: WebSocketMessageFilter
+  in: transports/bifrost-http/handlers/websocket.go
+收敛评审:
+  风险等级: L3
+  基线: f371548b5444693d7e259033bec9f4a467e3748b
+  开发指南:
+  - ee/internal/rbac/README.md
+  - ee/internal/rbac/host/README.md
+  - ee/internal/identity/README.md
+  - ee/internal/host/README.md
+禁留标记: []

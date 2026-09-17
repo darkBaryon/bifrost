@@ -158,7 +158,11 @@ func validateNotificationInput(input *schemas.NotificationInput) error {
 // request local admin) may publish. In-process producers call Publish directly
 // and are intentionally not subject to this check.
 func (s *NotificationService) create(ctx *fasthttp.RequestCtx) {
-	if localAdmin, _ := ctx.UserValue(schemas.IsLocalAdminContextKey).(bool); !localAdmin {
+	policy, present, ok := consolePolicy[ConsoleNotificationPolicy](ctx, ConsoleNotificationPolicyContextKey)
+	if !ok {
+		return
+	}
+	if localAdmin, _ := ctx.UserValue(schemas.IsLocalAdminContextKey).(bool); !present && !localAdmin {
 		SendError(ctx, fasthttp.StatusForbidden, "Only administrators can publish notifications")
 		return
 	}
@@ -166,6 +170,16 @@ func (s *NotificationService) create(ctx *fasthttp.RequestCtx) {
 	if err := sonic.Unmarshal(ctx.PostBody(), &input); err != nil {
 		SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
 		return
+	}
+	if present {
+		if err := validateNotificationInput(&input); err != nil {
+			SendError(ctx, fasthttp.StatusBadRequest, "Invalid request payload")
+			return
+		}
+		if err := policy.AuthorizePublish(ctx, input); err != nil {
+			sendConsolePolicyError(ctx, err)
+			return
+		}
 	}
 	notification, err := s.Publish(ctx, input)
 	if err != nil {
@@ -185,6 +199,14 @@ type notificationListResponse struct {
 }
 
 func (s *NotificationService) list(ctx *fasthttp.RequestCtx) {
+	policy, present, ok := consolePolicy[ConsoleNotificationPolicy](ctx, ConsoleNotificationPolicyContextKey)
+	if !ok {
+		return
+	}
+	if present && policy == nil {
+		sendConsolePolicyError(ctx, nil)
+		return
+	}
 	if s.store == nil {
 		SendError(ctx, fasthttp.StatusServiceUnavailable, ErrNotificationsUnavailable.Error())
 		return
@@ -220,7 +242,11 @@ func (s *NotificationService) list(ctx *fasthttp.RequestCtx) {
 		}
 		for i := range rows {
 			n := notificationFromTable(&rows[i])
-			if localAdmin || notificationVisibleToRole(&n, roleID, hasRole) {
+			visible := localAdmin || notificationVisibleToRole(&n, roleID, hasRole)
+			if present {
+				visible = policy.CanView(&n)
+			}
+			if visible {
 				result = append(result, n)
 				if len(result) == limit+1 {
 					break

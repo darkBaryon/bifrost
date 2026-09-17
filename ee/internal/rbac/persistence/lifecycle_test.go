@@ -167,6 +167,8 @@ func TestPermissionQueryFailureDoesNotDowngradeOrCommit(t *testing.T) {
 	if len(page.Items) != 0 {
 		t.Fatal("permission query failure downgraded to self events")
 	}
+	_, e = f.auth.Session.IssueTicket(ctx, f.admin.Principal)
+	want(t, e, identity.ErrUnavailable)
 	_, e = f.auth.Password.ResetPassword(ctx, f.admin.Principal, member.Account.ID, "2c6585f2-857c-4c27-a0c0-8ee0ff0f1002")
 	want(t, e, identity.ErrUnavailable)
 	after, e := f.store.RecordByName(ctx, "member")

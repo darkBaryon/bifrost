@@ -65,6 +65,8 @@ func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Princip
 		permission = rbac.UsersView
 	case auth.CreateAccounts, auth.ChangeAccountStatus, auth.ResetAccountPassword, auth.ReadAllPasswordEvents:
 		permission = rbac.UsersManage
+	case auth.OpenConsoleStream:
+		permission = rbac.NotificationsView
 	default:
 		return auth.ErrForbidden
 	}

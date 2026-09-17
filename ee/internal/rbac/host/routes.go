@@ -11,17 +11,17 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/fasthttp/router"
+	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 
-// kind 说明谁负责检查这个接口。managed由本包检查，legacy-admin仍只允许初始化管理员。
+// kind 说明谁负责检查这个接口；managed由本包检查，其他类别交给各自的处理器。
 type kind string
 
 const (
 	kindIdentityService kind = "identity-service"
 	kindInference       kind = "inference"
 	kindManaged         kind = "managed"
-	kindLegacyAdmin     kind = "legacy-admin"
 	kindOauthProtocol   kind = "oauth-protocol"
 	kindPublic          kind = "public"
 	kindRbacService     kind = "rbac-service"
@@ -33,26 +33,41 @@ const (
 type guard string
 
 const (
-	guardNone          guard = "none"
-	guardProviderInput guard = "provider-input"
-	guardVkExport      guard = "vk-export"
+	guardBrandingService    guard = "branding-service"
+	guardLogsQuery          guard = "logs-query"
+	guardNone               guard = "none"
+	guardNotificationPolicy guard = "notification-policy"
+	guardPluginMutation     guard = "plugin-mutation"
+	guardProviderInput      guard = "provider-input"
+	guardSettingsInput      guard = "settings-input"
+	guardVkExport           guard = "vk-export"
+	guardWebhookInput       guard = "webhook-input"
+	guardWebsocket          guard = "websocket"
 )
 
 // projection 指定返回结果要隐藏哪些内容；protocol表示由原接口处理，不改响应。
 type projection string
 
 const (
+	projectionBrandingSafe       projection = "branding-safe"
+	projectionDebugExplicit      projection = "debug-explicit"
+	projectionGovernanceNestedVk projection = "governance-nested-vk"
+	projectionKeyMetadata        projection = "key-metadata"
+	projectionLogsContent        projection = "logs-content"
+	projectionMcpSafe            projection = "mcp-safe"
+	projectionMessageFilter      projection = "message-filter"
+	projectionNotificationPolicy projection = "notification-policy"
+	projectionOrdinary           projection = "ordinary"
+	projectionPluginSafe         projection = "plugin-safe"
+	projectionPromptContent      projection = "prompt-content"
 	projectionProtocol           projection = "protocol"
 	projectionProtocolScoped     projection = "protocol-scoped"
-	projectionPromptContent      projection = "prompt-content"
-	projectionSkillContent       projection = "skill-content"
-	projectionOrdinary           projection = "ordinary"
 	projectionProviderSafe       projection = "provider-safe"
-	projectionKeyMetadata        projection = "key-metadata"
-	projectionVkValues           projection = "vk-values"
-	projectionGovernanceNestedVk projection = "governance-nested-vk"
-	projectionMcpSafe            projection = "mcp-safe"
 	projectionRoutingSafe        projection = "routing-safe"
+	projectionSettingsSafe       projection = "settings-safe"
+	projectionSkillContent       projection = "skill-content"
+	projectionVkValues           projection = "vk-values"
+	projectionWebhookSafe        projection = "webhook-safe"
 )
 
 // routeEntry 将一个完整接口地址与权限、额外检查和响应处理放在一起。
@@ -101,9 +116,9 @@ func decodeRouteManifest(raw []byte) ([]routeEntry, error) {
 					group.Permissions = append(group.Permissions, permission)
 				}
 			}
-			if !slices.Contains([]kind{kindIdentityService, kindInference, kindManaged, kindLegacyAdmin, kindOauthProtocol, kindPublic, kindRbacService, kindStatic, kindVkSelf}, group.Kind) ||
-				!slices.Contains([]guard{guardNone, guardProviderInput, guardVkExport}, group.Guard) ||
-				!slices.Contains([]projection{projectionProtocol, projectionProtocolScoped, projectionPromptContent, projectionSkillContent, projectionOrdinary, projectionProviderSafe, projectionKeyMetadata, projectionVkValues, projectionGovernanceNestedVk, projectionMcpSafe, projectionRoutingSafe}, group.Projection) {
+			if !slices.Contains([]kind{kindIdentityService, kindInference, kindManaged, kindOauthProtocol, kindPublic, kindRbacService, kindStatic, kindVkSelf}, group.Kind) ||
+				!slices.Contains([]guard{guardBrandingService, guardLogsQuery, guardNone, guardNotificationPolicy, guardPluginMutation, guardProviderInput, guardSettingsInput, guardVkExport, guardWebhookInput, guardWebsocket}, group.Guard) ||
+				!slices.Contains([]projection{projectionBrandingSafe, projectionDebugExplicit, projectionGovernanceNestedVk, projectionKeyMetadata, projectionLogsContent, projectionMcpSafe, projectionMessageFilter, projectionNotificationPolicy, projectionOrdinary, projectionPluginSafe, projectionPromptContent, projectionProtocol, projectionProtocolScoped, projectionProviderSafe, projectionRoutingSafe, projectionSettingsSafe, projectionSkillContent, projectionVkValues, projectionWebhookSafe}, group.Projection) {
 				return nil, invalid()
 			}
 			if group.Kind == kindManaged && len(group.Permissions) == 0 {
@@ -158,6 +173,15 @@ func (a *Adapter) VerifyRoutes(actual *router.Router) error {
 				return fmt.Errorf("unclassified route: %s", key)
 			}
 			matcher.Handle(method, pattern, func(c *fasthttp.RequestCtx) { c.SetUserValue(matchedRouteKey{}, entry) })
+		}
+	}
+	names := lib.GetBuiltinPluginNames()
+	if len(names) != len(builtinPermissions) {
+		return fmt.Errorf("builtin plugin catalogue changed")
+	}
+	for _, name := range names {
+		if _, ok := builtinPermissions[name]; !ok {
+			return fmt.Errorf("unclassified builtin plugin: %s", name)
 		}
 	}
 	a.matcher = matcher

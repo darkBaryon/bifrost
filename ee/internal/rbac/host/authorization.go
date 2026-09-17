@@ -11,6 +11,7 @@ import (
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/valyala/fasthttp"
 )
 
@@ -19,11 +20,12 @@ type Adapter struct {
 	service *rbac.Service
 	matcher *router.Router
 	log     Logger
+	config  *lib.Config
 }
 
 // NewAdapter 创建权限接入组件；接收请求前必须先调用VerifyRoutes核对路由。
-func NewAdapter(service *rbac.Service, log Logger) *Adapter {
-	return &Adapter{service: service, log: log}
+func NewAdapter(service *rbac.Service, config *lib.Config, log Logger) *Adapter {
+	return &Adapter{service: service, config: config, log: log}
 }
 
 // requestAccess 保存当前操作者、这次查到的权限和命中的接口规则，只用于当前请求。
@@ -69,12 +71,6 @@ func (a *Adapter) Prepare(ctx context.Context, c *fasthttp.RequestCtx, p identit
 			}
 		}
 	}, nil
-}
-
-// Manages 判断这个接口是否已在本期接入角色授权；后期接口继续交给原管理员检查。
-func (a *Adapter) Manages(method, path string) bool {
-	entry, ok := a.match(method, path)
-	return ok && entry.Kind == kindManaged
 }
 
 // Logger 用于记录权限处理失败的位置，由app传入；不记录密钥或响应正文。

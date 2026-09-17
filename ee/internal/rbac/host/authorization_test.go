@@ -1,4 +1,4 @@
-// 本文件逐个验证本期131个管理接口：最小权限可访问，缺少任一权限或数据库故障时不得执行原handler。
+// 本文件逐个验证全部205个管理接口：最小权限可访问，缺少任一权限或数据库故障时不得执行原handler。
 package host
 
 import (
@@ -54,7 +54,7 @@ func TestEveryManagedRouteAuthorization(t *testing.T) {
 		checked++
 		t.Run(key, func(t *testing.T) {
 			repository := &routeRepository{codes: rbac.Permissions()}
-			adapter := NewAdapter(rbac.New(repository), nil)
+			adapter := NewAdapter(rbac.New(repository), nil, nil)
 			routes := router.New()
 			called := 0
 			routes.Handle(entry.Method, entry.Pattern, func(c *fasthttp.RequestCtx) {
@@ -108,10 +108,10 @@ func TestEveryManagedRouteAuthorization(t *testing.T) {
 			run(503)
 		})
 	}
-	if checked != 131 {
-		t.Fatalf("managed coverage %d want %d", checked, 131)
+	if checked != 205 {
+		t.Fatalf("managed coverage %d want %d", checked, 205)
 	}
-	t.Logf("verified %d managed method/pattern entries against the phase-2 rules; pinned source comparison is in TestRouteSourceDigest", checked)
+	t.Logf("verified %d managed method/pattern entries against the full phase-2/3/4 rules; pinned source comparison is in TestRouteSourceDigest", checked)
 }
 
 func TestKnownProtocolAndSelfManagedRoutesRemainOwned(t *testing.T) {
@@ -125,7 +125,7 @@ func TestKnownProtocolAndSelfManagedRoutesRemainOwned(t *testing.T) {
 			routes := router.New()
 			called := false
 			routes.Handle(entry.Method, entry.Pattern, func(c *fasthttp.RequestCtx) { called = true; c.SetStatusCode(204) })
-			adapter := NewAdapter(nil, nil)
+			adapter := NewAdapter(nil, nil, nil)
 			if e := adapter.VerifyRoutes(routes); e != nil {
 				t.Fatal(e)
 			}

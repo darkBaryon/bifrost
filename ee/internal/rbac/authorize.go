@@ -188,3 +188,22 @@ func (s *Service) write(ctx context.Context, fn func(Tx) error) error {
 	}
 	return SafeError(s.repo.Write(ctx, fn))
 }
+
+// ValidateNotificationAudience 检查操作者能否发布通知，以及接收通知的角色是否都存在。
+func (s *Service) ValidateNotificationAudience(ctx context.Context, p Subject, ids []RoleID) error {
+	return s.read(ctx, func(v Queries) error {
+		if e := checkPermission(v, p, NotificationsManage); e != nil {
+			return e
+		}
+		normalized, e := roleIDs(ids)
+		if e != nil {
+			return e
+		}
+		for _, id := range normalized {
+			if _, e := v.Role(id); e != nil {
+				return e
+			}
+		}
+		return nil
+	})
+}

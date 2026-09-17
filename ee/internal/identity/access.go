@@ -15,6 +15,7 @@ const (
 	ChangeAccountStatus   AccountAction = "accounts.status"
 	ResetAccountPassword  AccountAction = "accounts.reset_password"
 	ReadAllPasswordEvents AccountAction = "password_events.read_all"
+	OpenConsoleStream     AccountAction = "console_stream.open"
 )
 
 // AccountPolicy 提供操作判权及同事务生命周期约束。
@@ -38,14 +39,14 @@ type ChiefPolicy struct{}
 
 func (ChiefPolicy) Authorize(_ context.Context, state State, p Principal, action AccountAction, _ string) error {
 	switch action {
-	case ReadAccounts, CreateAccounts, ChangeAccountStatus, ResetAccountPassword, ReadAllPasswordEvents:
+	case ReadAccounts, CreateAccounts, ChangeAccountStatus, ResetAccountPassword, ReadAllPasswordEvents, OpenConsoleStream:
 	default:
 		return ErrForbidden
 	}
 	return requireChief(state, p)
 }
 
-// requireChief 检查是否为系统初始化时指定的主管理员；票据入口在角色授权接入前沿用此限制。
+// requireChief 检查是否为系统初始化时指定的主管理员；未接入角色策略时使用这个默认限制。
 func requireChief(state State, p Principal) error {
 	if !state.Initialized || p.AccountID != state.ChiefAccountID {
 		return ErrForbidden

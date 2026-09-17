@@ -153,10 +153,8 @@ func TestRolesAndIdentityPolicy(t *testing.T) {
 	must(t, e)
 	_, e = f.auth.Account.ListAccounts(ctx, member.Principal, "", 20)
 	want(t, e, auth.ErrForbidden)
-	// 通知权限不能提前开放票据；本批仍只允许固定主管理员。
-	_, e = f.auth.Session.IssueTicket(ctx, member.Principal)
-	want(t, e, auth.ErrForbidden)
-	ticket, e := f.auth.Session.IssueTicket(ctx, f.admin.Principal)
+	// 有通知权限的普通账号可以建立连接，票据仍然只能用一次。
+	ticket, e := f.auth.Session.IssueTicket(ctx, member.Principal)
 	must(t, e)
 	_, e = f.auth.Session.ConsumeTicket(ctx, ticket)
 	must(t, e)

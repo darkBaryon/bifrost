@@ -20,7 +20,13 @@ func TestSensitiveProjectionFixtures(t *testing.T) {
 		{"keys", projectionKeyMetadata, "/api/keys", `[{"key_id":"uuid","provider":"test","value":"LEAK","aws_config":{"secret":"LEAK"}}]`},
 		{"vk", projectionVkValues, "/api/governance/virtual-keys", `{"virtual_keys":[{"id":"vk","value":"LEAK"}]}`},
 		{"governance", projectionGovernanceNestedVk, "/api/governance/customers", `{"customers":[{"id":"c","virtual_keys":[{"id":"vk","value":"LEAK"}]}]}`},
+		{"logs", projectionLogsContent, "/api/logs", `{"logs":[{"id":"log","model":"model","content_summary":"LEAK","metadata":{"value":"LEAK"},"future_payload":"LEAK","error":"LEAK","raw_request":"LEAK"}],"pagination":{"limit":20}}`},
+		{"log", projectionLogsContent, "/api/logs/{id}", `{"id":"log","input":"LEAK","plugin_logs":"LEAK","redaction_mapping":"LEAK"}`},
+		{"mcp-log", projectionLogsContent, "/api/mcp-logs/{id}", `{"id":"log","tool_name":"tool","arguments":"LEAK","result":"LEAK","user_agent":"LEAK"}`},
 		{"mcp", projectionMcpSafe, "/api/mcp/clients", `{"clients":[{"id":"client","stdio_config":{"command":"LEAK","args":["LEAK"],"envs":{"KEY":"LEAK"}},"last_failure":{"message":"LEAK","stage":"connect"},"node_states":{"n":{"last_failure":{"message":"LEAK","stage":"connect"}}}}]}`},
+		{"plugin", projectionPluginSafe, "/api/plugins", `{"plugins":[{"name":"custom","config":{"secret":"LEAK"},"status":{"logs":["LEAK"]}}]}`},
+		{"settings", projectionSettingsSafe, "/api/config", `{"framework_config":{"pricing_url":"https://example.invalid/?key=LEAK"},"restart_required":{"proxy_config":{"url":"https://user:LEAK@example.invalid"}}}`},
+		{"webhook", projectionWebhookSafe, "/api/webhooks/deliveries", `{"deliveries":[{"id":"delivery","http_status":200,"payload":"LEAK","response_body":"LEAK","last_error":"LEAK"}]}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -51,6 +57,14 @@ func TestGovernanceProjectionPreservesExplicitReveal(t *testing.T) {
 }
 
 func TestInvalidProjectionAndSafeErrors(t *testing.T) {
+	for _, body := range []string{`{"total_requests":"LEAK"}`, `[]`} {
+		c := requestCtx("GET", "/api/logs/stats", "")
+		c.Response.Header.SetContentType("application/json")
+		c.Response.SetBodyString(body)
+		if e := projectSensitiveResponse(c, requestAccess{Route: routeEntry{Pattern: "/api/logs/stats", Projection: projectionLogsContent}}); e != rbac.ErrUnavailable {
+			t.Fatalf("invalid aggregation accepted: %s: %v", body, e)
+		}
+	}
 	c := requestCtx("GET", "/api/providers", "")
 	c.SetStatusCode(500)
 	c.Response.Header.Set("X-Request-ID", "trace-id")
@@ -65,7 +79,7 @@ func TestInvalidProjectionAndSafeErrors(t *testing.T) {
 }
 
 func TestRejectMalformedSensitiveContainers(t *testing.T) {
-	for _, kind := range []projection{projectionProviderSafe, projectionMcpSafe} {
+	for _, kind := range []projection{projectionProviderSafe, projectionLogsContent, projectionMcpSafe, projectionPluginSafe, projectionWebhookSafe} {
 		c := requestCtx("GET", "/api/test", "")
 		c.Response.Header.SetContentType("application/json")
 		c.Response.SetBodyString(`{"providers":"LEAK","logs":["LEAK"],"clients":"LEAK","plugins":"LEAK","deliveries":"LEAK"}`)
@@ -116,5 +130,49 @@ func TestRoutingStructuresPreserveConfiguration(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestPluginMarkerReplacement(t *testing.T) {
+	current := object{"headers": object{"Authorization": "credential", "X-Delete": "old"}, "api_key": "env.MAXIM_KEY"}
+	next := object{"headers": object{"Authorization": redacted, "X-New": "new"}, "api_key": object{"value": redacted}}
+	value, e := restoreMarkers(next, current)
+	if e != nil {
+		t.Fatal(e)
+	}
+	raw, _ := json.Marshal(value)
+	if strings.Contains(string(raw), "X-Delete") || !strings.Contains(string(raw), "credential") || !strings.Contains(string(raw), "env.MAXIM_KEY") {
+		t.Fatalf("wrong replacement: %s", raw)
+	}
+	if _, ok := current["headers"].(object)["X-New"]; ok {
+		t.Fatal("mutated stored config")
+	}
+	if _, e := restoreMarkers(object{"missing": redacted}, current); e != rbac.ErrInvalid {
+		t.Fatal("accepted orphan marker", e)
+	}
+}
+
+func TestBuiltinPluginNameResponses(t *testing.T) {
+	for _, path := range []string{"/api/plugins/builtins", "/api/plugins/loaded"} {
+		c := requestCtx("GET", path, "")
+		c.Response.Header.SetContentType("application/json")
+		c.Response.SetBodyString(`{"plugins":["telemetry","logging"]}`)
+		if e := projectSensitiveResponse(c, requestAccess{Route: routeEntry{Pattern: path, Projection: projectionPluginSafe}}); e != nil {
+			t.Fatalf("plugin name list rejected: %s: %v", path, e)
+		}
+	}
+}
+
+func TestWebhookSyntheticFailureDoesNotRevealURL(t *testing.T) {
+	for _, codes := range [][]rbac.Permission{nil, rbac.Permissions()} {
+		c := requestCtx("POST", "/api/webhooks/example/test", `{}`)
+		c.Response.Header.SetContentType("application/json")
+		c.Response.SetBodyString(`{"delivered":false,"error":"Post https://receiver.invalid/?api_key=LEAK: dial failed"}`)
+		if e := projectSensitiveResponse(c, requestAccess{Route: routeEntry{Pattern: "/api/webhooks/{id}/test", Projection: projectionWebhookSafe}, Access: rbac.Access{Permissions: codes}}); e != nil {
+			t.Fatal(e)
+		}
+		if strings.Contains(string(c.Response.Body()), "LEAK") {
+			t.Fatal("synthetic test exposed URL credential")
+		}
 	}
 }

@@ -97,18 +97,11 @@ func (s *SessionService) Logout(ctx context.Context, raw string) error {
 	return SafeError(s.repo.Transaction(ctx, func(tx Tx) error { return tx.RevokeSession(r.Session.ID, now()) }))
 }
 
-// IssueTicket 为正常的固定主管理员会话签发一次性 WebSocket 票据；角色授权在后续批次接入。
+// IssueTicket 检查账号是否允许接收通知，通过后签发一次性长连接票据。
 func (s *SessionService) IssueTicket(ctx context.Context, p Principal) (string, error) {
 	raw := randomToken()
 	err := s.repo.Transaction(ctx, func(tx Tx) error {
-		actual, _, err := current(tx.AuthByID, p)
-		if err != nil {
-			return err
-		}
-		if err := fullSession(actual); err != nil {
-			return err
-		}
-		if err := requireChief(tx.State(), actual); err != nil {
+		if _, err := s.actor(ctx, tx, p, OpenConsoleStream, ""); err != nil {
 			return err
 		}
 		return tx.InsertTicket(Ticket{Hash: digest(raw), SessionID: p.SessionID, ExpiresAt: now().Add(WSTicketTTL)})
@@ -116,7 +109,7 @@ func (s *SessionService) IssueTicket(ctx context.Context, p Principal) (string, 
 	return raw, SafeError(err)
 }
 
-// ConsumeTicket 消费一次性票据；账号仍须为正常会话的固定主管理员。
+// ConsumeTicket 使用并作废票据；连接建立前再次检查登录状态和接收通知的权限。
 func (s *SessionService) ConsumeTicket(ctx context.Context, raw string) (Principal, error) {
 	if len(raw) != tokenLength {
 		return Principal{}, ErrUnauthorized
@@ -131,10 +124,7 @@ func (s *SessionService) ConsumeTicket(ctx context.Context, raw string) (Princip
 		if err != nil {
 			return err
 		}
-		if err := fullSession(p); err != nil {
-			return err
-		}
-		if err := requireChief(tx.State(), p); err != nil {
+		if err := s.authorizeTx(ctx, tx, p, OpenConsoleStream, ""); err != nil {
 			return err
 		}
 		out = p

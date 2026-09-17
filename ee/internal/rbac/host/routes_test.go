@@ -75,7 +75,7 @@ func TestOptionalHandlerRegistrationProfiles(t *testing.T) {
 				if enabled {
 					profile.handler.RegisterRoutes(routes)
 				}
-				adapter := NewAdapter(nil, nil)
+				adapter := NewAdapter(nil, nil, nil)
 				if err := adapter.VerifyRoutes(routes); err != nil {
 					t.Fatal(err)
 				}
@@ -106,7 +106,7 @@ func TestOptionalHandlerRegistrationProfiles(t *testing.T) {
 	}
 }
 
-// 摘要来自固定完整候选b38493b07，按期2范围裁剪后独立计算；防止整理格式时遗漏或改错规则。
+// 摘要来自固定完整候选b38493b07，按完整范围独立计算；防止整理格式时遗漏或改错规则。
 func TestRouteSourceDigest(t *testing.T) {
 	var rows []string
 	for _, r := range manifest() {
@@ -118,7 +118,7 @@ func TestRouteSourceDigest(t *testing.T) {
 	}
 	sort.Strings(rows)
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(rows, "\n")+"\n")))
-	if len(rows) != 817 || digest != "99a98397233b81617c59a5675892a1d2aa764d1ce0b999f0809bc2ccb48a1df1" {
+	if len(rows) != 817 || digest != "b5c8bb41457e87e0717855df78067515e578c4315c7a429e69105ec6679e596d" {
 		t.Fatalf("route source drift: count=%d digest=%s", len(rows), digest)
 	}
 }
@@ -136,18 +136,18 @@ func TestInvalidRouteRules(t *testing.T) {
 		}
 	}
 }
-func TestLaterPhasesDoNotUseRoleAuthorization(t *testing.T) {
+func TestAllPhasesUseRoleAuthorization(t *testing.T) {
 	routes := router.New()
 	paths := []string{"/api/providers", "/api/logs", "/api/plugins", "/api/config", "/api/webhooks", "/api/notifications", "/ws"}
 	for _, p := range paths {
 		routes.GET(p, func(*fasthttp.RequestCtx) {})
 	}
-	adapter := NewAdapter(nil, nil)
+	adapter := NewAdapter(nil, nil, nil)
 	if err := adapter.VerifyRoutes(routes); err != nil {
 		t.Fatal(err)
 	}
 	for _, p := range paths {
-		if adapter.Manages("GET", p) != (p == "/api/providers") {
+		if entry, ok := adapter.match("GET", p); !ok || entry.Kind != kindManaged {
 			t.Fatalf("wrong phase: %s", p)
 		}
 	}

@@ -11,11 +11,9 @@ import (
 )
 
 type failingConsoleAccess struct {
-	manages bool
-	err     error
+	err error
 }
 
-func (p failingConsoleAccess) Manages(string, string) bool { return p.manages }
 func (p failingConsoleAccess) Prepare(context.Context, *fasthttp.RequestCtx, identity.Principal) (schemas.BifrostHTTPMiddleware, error) {
 	return nil, p.err
 }
@@ -27,10 +25,9 @@ func TestRolePolicyFailureDoesNotFallBack(t *testing.T) {
 		policy failingConsoleAccess
 		status int
 	}{
-		{"unavailable", failingConsoleAccess{true, identity.ErrUnavailable}, 503},
-		{"forbidden", failingConsoleAccess{true, identity.ErrForbidden}, 403},
-		{"missing-wrapper", failingConsoleAccess{true, nil}, 503},
-		{"not-integrated", failingConsoleAccess{false, identity.ErrUnavailable}, 200},
+		{"unavailable", failingConsoleAccess{identity.ErrUnavailable}, 503},
+		{"forbidden", failingConsoleAccess{identity.ErrForbidden}, 403},
+		{"missing-wrapper", failingConsoleAccess{nil}, 503},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			adapter.access = tt.policy

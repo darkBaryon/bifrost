@@ -3,6 +3,8 @@ package host
 
 import (
 	"context"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
@@ -73,5 +75,52 @@ func TestVirtualKeyExportRequiresReveal(t *testing.T) {
 		if err := (&Adapter{}).checkSensitiveRequest(c, r); err != tt.want {
 			t.Errorf("%s got %v want %v", tt.query, err, tt.want)
 		}
+	}
+}
+
+func TestGuardRejectsSensitiveQueries(t *testing.T) {
+	for _, path := range []string{"/api/logs?content_search=secret", "/api/logs?metadata_customer=secret", "/api/logs?user_agents=secret", "/api/logs?dimension=user_agent", "/api/logs?dimensions=models,metadata_keys", "/api/logs/rankings?all=true", "/api/logs/rankings/by-dimension?all=true", "/api/logs/dashboard?all=true"} {
+		route := strings.Split(path, "?")[0]
+		r := requestAccess{Route: routeEntry{Pattern: route}}
+		if e := checkLogQuery(requestCtx("GET", path, ""), r); e != rbac.ErrForbidden {
+			t.Errorf("%s got %v", path, e)
+		}
+	}
+	for _, path := range []string{"/api/logs?limit=1&limit=2", "/api/logs/rankings?all=yes"} {
+		if e := checkLogQuery(requestCtx("GET", path, ""), requestAccess{Route: routeEntry{Pattern: "/api/logs/rankings"}}); e != rbac.ErrInvalid {
+			t.Errorf("%s got %v", path, e)
+		}
+	}
+}
+
+func TestPluginGuardsDoNotDependOnPath(t *testing.T) {
+	for _, method := range []string{"POST", "PUT", "DELETE"} {
+		c := requestCtx(method, "/api/plugins/custom", `{"name":"custom","enabled":false}`)
+		c.SetUserValue("name", "custom")
+		if e := checkPluginMutation(c, rbac.Access{Permissions: []rbac.Permission{rbac.PluginsManage}}); e != rbac.ErrForbidden {
+			t.Fatal(method, e)
+		}
+	}
+	c := requestCtx("POST", "/api/plugins", `{"name":"otel"}`)
+	if e := checkPluginMutation(c, rbac.Access{Permissions: []rbac.Permission{rbac.SettingsManage}}); e != rbac.ErrForbidden {
+		t.Fatal(e)
+	}
+}
+
+func TestClientFieldsAreExhaustivelyClassified(t *testing.T) {
+	typ := reflect.TypeOf(configstore.ClientConfig{})
+	count := 0
+	for i := 0; i < typ.NumField(); i++ {
+		name := strings.Split(typ.Field(i).Tag.Get("json"), ",")[0]
+		if name == "-" {
+			continue
+		}
+		count++
+		if _, ok := clientPermissions[name]; !ok {
+			t.Errorf("unclassified %s", name)
+		}
+	}
+	if count != len(clientPermissions) {
+		t.Fatal("stale client field table")
 	}
 }

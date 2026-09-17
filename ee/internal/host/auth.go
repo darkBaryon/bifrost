@@ -46,9 +46,8 @@ type identityRoutes interface {
 	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
 }
 
-// ConsoleAccess 检查已接入角色授权的接口，并返回本次请求的处理包装；其余接口仍使用初始化管理员限制。
+// ConsoleAccess 检查已有管理接口的角色权限，并返回本次请求需要执行的前后处理。
 type ConsoleAccess interface {
-	Manages(method, path string) bool
 	Prepare(context.Context, *fasthttp.RequestCtx, identity.Principal) (schemas.BifrostHTTPMiddleware, error)
 }
 
@@ -314,7 +313,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			}
 			var wrapper schemas.BifrostHTTPMiddleware
 			if err == nil {
-				if a.access != nil && a.access.Manages(method, path) {
+				if a.access != nil {
 					wrapper, err = a.access.Prepare(ctx, c, p)
 					if err == nil && wrapper == nil {
 						err = identity.ErrUnavailable

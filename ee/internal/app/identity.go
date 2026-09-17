@@ -83,7 +83,7 @@ func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer
 		return nil, nil, err
 	}
 	routes := rbachttp.NewHandler(permissions, svc.Session, handler)
-	permissionsAdapter := rbachost.NewAdapter(permissions, log)
+	permissionsAdapter := rbachost.NewAdapter(permissions, host.Config, log)
 	adapter := eehost.NewAuthAdapter(host, svc.Session, handler, eehost.WithAdditionalRoutes(routes), eehost.WithRecoveryAnchor(svc.Account.RecoveryAnchor), eehost.WithConsoleAccess(permissionsAdapter))
 	return adapter, permissionsAdapter, nil
 }

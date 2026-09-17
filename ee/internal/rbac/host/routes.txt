@@ -1,34 +1,23 @@
-# 本期路由规则；一组规则下逐行列出请求方法和完整路径。
-# @ 类别 权限（逗号分隔，-表示无） 请求检查 响应处理
-# legacy-admin仍使用初始化管理员限制；其他非managed类别由原有接口自行验证。
+# 每组：@ 接口归属 权限（逗号分隔，-表示无） 请求检查 响应处理
+# 组内每行列出方法和完整路径；同一路径的多个方法用逗号分隔。
 
-@ static - none protocol
-GET /
-GET /robots.txt
-GET /{filepath:*}
-
-@ public - none protocol
-GET /.well-known/jwks.json
-GET /.well-known/oauth-authorization-server
-GET /.well-known/oauth-authorization-server/{path:*}
-GET /.well-known/oauth-protected-resource
-GET /.well-known/oauth-protected-resource/{path:*}
-GET /api/branding/assets/{slot}/{hash}
-POST /api/branding/get
-GET /api/oauth/callback
-GET /api/skills/serve/all/download.zip
-GET /api/skills/serve/claude-code/.claude-plugin/marketplace.json
-POST /api/skills/serve/claude-code/plugins/{skill-name}/git-upload-pack
-GET /api/skills/serve/claude-code/plugins/{skill-name}/info/refs
-GET /api/skills/serve/codex/.agents/plugins/marketplace.json
-POST /api/skills/serve/codex/git-upload-pack
-GET /api/skills/serve/codex/info/refs
-POST /api/skills/serve/codex/plugins/{skill-name}/git-upload-pack
-GET /api/skills/serve/codex/plugins/{skill-name}/info/refs
-GET /api/skills/serve/{skill-name}/download.zip
-GET /api/skills/serve/{skill-name}/files/{filepath:*}
-GET /api/version
-GET /health
+@ identity-service - none protocol
+POST /api/accounts/create
+POST /api/accounts/list
+POST /api/accounts/reset-password
+POST /api/accounts/set-status
+POST /api/identity/change-password
+POST /api/identity/initialize
+POST /api/identity/login
+POST /api/identity/logout
+POST /api/identity/me
+POST /api/identity/password-events
+POST /api/identity/status
+POST /api/identity/ws-ticket
+GET /api/session/is-auth-enabled
+POST /api/session/login
+POST /api/session/logout
+POST /api/session/ws-ticket
 
 @ inference - none protocol
 POST /anthropic/v1/complete
@@ -461,47 +450,39 @@ DELETE,GET /v1/videos/{video_id}
 GET /v1/videos/{video_id}/content
 POST /v1/videos/{video_id}/remix
 
-@ identity-service - none protocol
-POST /api/accounts/create
-POST /api/accounts/list
-POST /api/accounts/reset-password
-POST /api/accounts/set-status
-POST /api/identity/change-password
-POST /api/identity/initialize
-POST /api/identity/login
-POST /api/identity/logout
-POST /api/identity/me
-POST /api/identity/password-events
-POST /api/identity/status
-POST /api/identity/ws-ticket
-GET /api/session/is-auth-enabled
-POST /api/session/login
-POST /api/session/logout
-POST /api/session/ws-ticket
+@ managed Governance.Manage none governance-nested-vk
+POST /api/governance/customers
+DELETE,PUT /api/governance/customers/{customer_id}
+POST /api/governance/model-configs
+DELETE,PUT /api/governance/model-configs/{mc_id}
+POST /api/governance/pricing-overrides
+DELETE,PUT /api/governance/pricing-overrides/{id}
+DELETE,PUT /api/governance/providers/{provider_name}
+POST /api/governance/teams
+DELETE,PUT /api/governance/teams/{team_id}
 
-@ rbac-service - none protocol
-POST /api/accounts/get-roles
-POST /api/accounts/set-roles
-POST /api/permissions/list
-POST /api/permissions/me
-POST /api/roles/create
-POST /api/roles/delete
-POST /api/roles/get
-POST /api/roles/list
-POST /api/roles/update
+@ managed Governance.View none governance-nested-vk
+GET /api/governance/budgets
+GET /api/governance/customers
+GET /api/governance/customers/{customer_id}
+GET /api/governance/model-configs
+GET /api/governance/model-configs/{mc_id}
+GET /api/governance/pricing-overrides
+GET /api/governance/providers
+GET /api/governance/rate-limits
+GET /api/governance/teams
+GET /api/governance/teams/{team_id}
 
-@ legacy-admin - none protocol
-POST /api/branding/reset
-POST /api/branding/update
-DELETE /api/cache/clear-by-key/{cacheKey}
-DELETE /api/cache/clear/{cacheId}
-GET,PUT /api/config
-POST /api/config/metadata
-GET /api/dev/pprof
-GET /api/dev/pprof/goroutines
-GET /api/feature-flags
-PUT /api/feature-flags/{id}
-DELETE,GET /api/logs
+@ managed Logs.Manage none logs-content
+DELETE /api/logs
+POST /api/logs/recalculate-cost
+POST /api/logs/recalculate-cost/cancel
+POST /api/logs/user-agent-mappings
+DELETE,PUT /api/logs/user-agent-mappings/{id}
+DELETE /api/mcp-logs
+
+@ managed Logs.View logs-query logs-content
+GET /api/logs
 GET /api/logs/dashboard
 GET /api/logs/dropped
 GET /api/logs/filterdata
@@ -520,99 +501,22 @@ GET /api/logs/histogram/tokens/by-dimension
 GET /api/logs/histogram/tokens/by-provider
 GET /api/logs/rankings
 GET /api/logs/rankings/by-dimension
-POST /api/logs/recalculate-cost
-POST /api/logs/recalculate-cost/cancel
 GET /api/logs/recalculate-cost/status
 GET /api/logs/sessions/{session_id}
 GET /api/logs/sessions/{session_id}/summary
 GET /api/logs/stats
-GET,POST /api/logs/user-agent-mappings
-DELETE,PUT /api/logs/user-agent-mappings/{id}
+GET /api/logs/user-agent-mappings
 GET /api/logs/{id}
-DELETE,GET /api/mcp-logs
+GET /api/mcp-logs
 GET /api/mcp-logs/filterdata
 GET /api/mcp-logs/histogram
 GET /api/mcp-logs/histogram/cost
 GET /api/mcp-logs/histogram/top-tools
 GET /api/mcp-logs/stats
 GET /api/mcp-logs/{id}
-GET,POST /api/notifications
-GET,POST /api/plugins
-GET /api/plugins/builtins
-GET /api/plugins/loaded
-DELETE,GET,PUT /api/plugins/{name}
-POST /api/pricing/force-sync
-GET,PUT /api/proxy-config
-GET,POST /api/webhooks
-GET /api/webhooks/deliveries
-POST /api/webhooks/deliveries/{id}/redeliver
-DELETE,GET,PUT /api/webhooks/{id}
-GET /api/webhooks/{id}/deliveries
-POST /api/webhooks/{id}/rotate-secret
-POST /api/webhooks/{id}/test
+
+@ managed Logs.View none ordinary
 GET /metrics
-GET /ws
-
-@ managed Governance.View none governance-nested-vk
-GET /api/governance/budgets
-GET /api/governance/customers
-GET /api/governance/customers/{customer_id}
-GET /api/governance/model-configs
-GET /api/governance/model-configs/{mc_id}
-GET /api/governance/pricing-overrides
-GET /api/governance/providers
-GET /api/governance/rate-limits
-GET /api/governance/teams
-GET /api/governance/teams/{team_id}
-
-@ managed RoutingRules.View none routing-safe
-GET /api/governance/complexity-analyzer-config
-GET /api/governance/routing-rules
-GET /api/governance/routing-rules/{rule_id}
-GET /api/routing/complexity-analyzer-config
-GET /api/routing/complexity-analyzer-generations
-GET /api/routing/complexity-analyzer-status
-GET /api/routing/rules
-GET /api/routing/rules/{rule_id}
-
-@ managed RoutingRules.Manage none routing-safe
-PUT /api/governance/complexity-analyzer-config
-POST /api/governance/complexity-analyzer-config/reset
-POST /api/governance/routing-rules
-DELETE,PUT /api/governance/routing-rules/{rule_id}
-PUT /api/routing/complexity-analyzer-config
-POST /api/routing/complexity-analyzer-config/reset
-DELETE /api/routing/complexity-analyzer-generations/{namespace}
-POST /api/routing/rules
-DELETE,PUT /api/routing/rules/{rule_id}
-
-@ managed Governance.Manage none governance-nested-vk
-POST /api/governance/customers
-DELETE,PUT /api/governance/customers/{customer_id}
-POST /api/governance/model-configs
-DELETE,PUT /api/governance/model-configs/{mc_id}
-POST /api/governance/pricing-overrides
-DELETE,PUT /api/governance/pricing-overrides/{id}
-DELETE,PUT /api/governance/providers/{provider_name}
-POST /api/governance/teams
-DELETE,PUT /api/governance/teams/{team_id}
-
-@ managed VirtualKeys.View vk-export vk-values
-GET /api/governance/virtual-keys
-GET /api/governance/virtual-keys/{vk_id}
-
-@ managed VirtualKeys.Manage none vk-values
-POST /api/governance/virtual-keys
-POST /api/governance/virtual-keys/rotate
-DELETE,PUT /api/governance/virtual-keys/{vk_id}
-DELETE,PUT /api/governance/virtual-keys/{vk_id}/budgets/{budget_id}/override
-POST /api/governance/virtual-keys/{vk_id}/rotate
-
-@ vk-self - none protocol
-GET /api/governance/virtual-keys/quota
-
-@ managed ModelProvider.View none key-metadata
-GET /api/keys
 
 @ managed MCPGateway.Manage none mcp-safe
 POST /api/mcp/client
@@ -632,6 +536,11 @@ POST /api/mcp/sessions/{id}/reauth
 DELETE /api/oauth/config/{id}
 DELETE /api/oauth2/sessions/{id}
 
+@ managed MCPGateway.Manage none protocol-scoped
+PUT /api/mcp/per-user-headers/flows/{id}
+GET /api/oauth/per-user/flows/{id}/start
+PUT /api/oauth2/consent/flows/{id}
+
 @ managed MCPGateway.View none mcp-safe
 GET /api/mcp/clients
 GET /api/mcp/library
@@ -645,10 +554,17 @@ GET /api/mcp/per-user-headers/flows/{id}
 GET /api/oauth/per-user/flows/{id}
 GET /api/oauth2/consent/flows/{id}
 
-@ managed MCPGateway.Manage none protocol-scoped
-PUT /api/mcp/per-user-headers/flows/{id}
-GET /api/oauth/per-user/flows/{id}/start
-PUT /api/oauth2/consent/flows/{id}
+@ managed ModelProvider.Manage provider-input provider-safe
+PUT /api/models/catalog
+POST /api/providers
+DELETE,PUT /api/providers/{provider}
+POST /api/providers/{provider}/keys
+DELETE,PUT /api/providers/{provider}/keys/{key_id}
+POST /api/providers/{provider}/keys/{key_id}/refresh-models
+POST /api/providers/{provider}/refresh-models
+
+@ managed ModelProvider.View none key-metadata
+GET /api/keys
 
 @ managed ModelProvider.View none provider-safe
 GET /api/models
@@ -660,24 +576,37 @@ GET /api/providers/{provider}
 GET /api/providers/{provider}/keys
 GET /api/providers/{provider}/keys/{key_id}
 
-@ managed ModelProvider.Manage provider-input provider-safe
-PUT /api/models/catalog
-POST /api/providers
-DELETE,PUT /api/providers/{provider}
-POST /api/providers/{provider}/keys
-DELETE,PUT /api/providers/{provider}/keys/{key_id}
-POST /api/providers/{provider}/keys/{key_id}/refresh-models
-POST /api/providers/{provider}/refresh-models
+@ managed Notifications.Manage notification-policy notification-policy
+POST /api/notifications
 
-@ managed PromptRepository.View none prompt-content
-GET /api/prompt-repo/folders
-GET /api/prompt-repo/folders/{id}
-GET /api/prompt-repo/prompts
-GET /api/prompt-repo/prompts/{id}
-GET /api/prompt-repo/prompts/{id}/sessions
-GET /api/prompt-repo/prompts/{id}/versions
-GET /api/prompt-repo/sessions/{id}
-GET /api/prompt-repo/versions/{id}
+@ managed Notifications.Manage webhook-input webhook-safe
+POST /api/webhooks
+POST /api/webhooks/deliveries/{id}/redeliver
+DELETE,PUT /api/webhooks/{id}
+POST /api/webhooks/{id}/rotate-secret
+POST /api/webhooks/{id}/test
+
+@ managed Notifications.View none webhook-safe
+GET /api/webhooks
+GET /api/webhooks/deliveries
+GET /api/webhooks/{id}
+GET /api/webhooks/{id}/deliveries
+
+@ managed Notifications.View notification-policy notification-policy
+GET /api/notifications
+
+@ managed Notifications.View websocket message-filter
+GET /ws
+
+@ managed Plugins.Manage plugin-mutation plugin-safe
+POST /api/plugins
+DELETE,PUT /api/plugins/{name}
+
+@ managed Plugins.View none plugin-safe
+GET /api/plugins
+GET /api/plugins/builtins
+GET /api/plugins/loaded
+GET /api/plugins/{name}
 
 @ managed PromptRepository.Manage none prompt-content
 POST /api/prompt-repo/folders
@@ -691,12 +620,6 @@ POST /api/prompt-repo/sessions/{id}/commit
 PUT /api/prompt-repo/sessions/{id}/rename
 DELETE /api/prompt-repo/versions/{id}
 
-@ managed PromptRepository.View none skill-content
-GET /api/skills
-GET /api/skills/all/version
-GET /api/skills/{id}
-GET /api/skills/{id}/versions
-
 @ managed PromptRepository.Manage none skill-content
 POST /api/skills
 PUT /api/skills/all/version
@@ -705,7 +628,121 @@ POST /api/skills/files/upload
 DELETE,PUT /api/skills/{id}
 POST /api/skills/{id}/shift-version
 
+@ managed PromptRepository.View none prompt-content
+GET /api/prompt-repo/folders
+GET /api/prompt-repo/folders/{id}
+GET /api/prompt-repo/prompts
+GET /api/prompt-repo/prompts/{id}
+GET /api/prompt-repo/prompts/{id}/sessions
+GET /api/prompt-repo/prompts/{id}/versions
+GET /api/prompt-repo/sessions/{id}
+GET /api/prompt-repo/versions/{id}
+
+@ managed PromptRepository.View none skill-content
+GET /api/skills
+GET /api/skills/all/version
+GET /api/skills/{id}
+GET /api/skills/{id}/versions
+
+@ managed RoutingRules.Manage none routing-safe
+PUT /api/governance/complexity-analyzer-config
+POST /api/governance/complexity-analyzer-config/reset
+POST /api/governance/routing-rules
+DELETE,PUT /api/governance/routing-rules/{rule_id}
+PUT /api/routing/complexity-analyzer-config
+POST /api/routing/complexity-analyzer-config/reset
+DELETE /api/routing/complexity-analyzer-generations/{namespace}
+POST /api/routing/rules
+DELETE,PUT /api/routing/rules/{rule_id}
+
+@ managed RoutingRules.View none routing-safe
+GET /api/governance/complexity-analyzer-config
+GET /api/governance/routing-rules
+GET /api/governance/routing-rules/{rule_id}
+GET /api/routing/complexity-analyzer-config
+GET /api/routing/complexity-analyzer-generations
+GET /api/routing/complexity-analyzer-status
+GET /api/routing/rules
+GET /api/routing/rules/{rule_id}
+
+@ managed Settings.Manage branding-service branding-safe
+POST /api/branding/reset
+POST /api/branding/update
+
+@ managed Settings.Manage none ordinary
+DELETE /api/cache/clear-by-key/{cacheKey}
+DELETE /api/cache/clear/{cacheId}
+
+@ managed Settings.Manage settings-input settings-safe
+PUT /api/config
+POST /api/config/metadata
+PUT /api/feature-flags/{id}
+POST /api/pricing/force-sync
+PUT /api/proxy-config
+
+@ managed Settings.Manage,Logs.RevealContent none debug-explicit
+GET /api/dev/pprof
+GET /api/dev/pprof/goroutines
+
+@ managed Settings.View none settings-safe
+GET /api/config
+GET /api/feature-flags
+GET /api/proxy-config
+
+@ managed VirtualKeys.Manage none vk-values
+POST /api/governance/virtual-keys
+POST /api/governance/virtual-keys/rotate
+DELETE,PUT /api/governance/virtual-keys/{vk_id}
+DELETE,PUT /api/governance/virtual-keys/{vk_id}/budgets/{budget_id}/override
+POST /api/governance/virtual-keys/{vk_id}/rotate
+
+@ managed VirtualKeys.View vk-export vk-values
+GET /api/governance/virtual-keys
+GET /api/governance/virtual-keys/{vk_id}
+
 @ oauth-protocol - none protocol
 GET /oauth2/authorize
 POST /oauth2/register
 POST /oauth2/token
+
+@ public - none protocol
+GET /.well-known/jwks.json
+GET /.well-known/oauth-authorization-server
+GET /.well-known/oauth-authorization-server/{path:*}
+GET /.well-known/oauth-protected-resource
+GET /.well-known/oauth-protected-resource/{path:*}
+GET /api/branding/assets/{slot}/{hash}
+POST /api/branding/get
+GET /api/oauth/callback
+GET /api/skills/serve/all/download.zip
+GET /api/skills/serve/claude-code/.claude-plugin/marketplace.json
+POST /api/skills/serve/claude-code/plugins/{skill-name}/git-upload-pack
+GET /api/skills/serve/claude-code/plugins/{skill-name}/info/refs
+GET /api/skills/serve/codex/.agents/plugins/marketplace.json
+POST /api/skills/serve/codex/git-upload-pack
+GET /api/skills/serve/codex/info/refs
+POST /api/skills/serve/codex/plugins/{skill-name}/git-upload-pack
+GET /api/skills/serve/codex/plugins/{skill-name}/info/refs
+GET /api/skills/serve/{skill-name}/download.zip
+GET /api/skills/serve/{skill-name}/files/{filepath:*}
+GET /api/version
+GET /health
+
+@ rbac-service - none protocol
+POST /api/accounts/get-roles
+POST /api/accounts/set-roles
+POST /api/permissions/list
+POST /api/permissions/me
+POST /api/roles/create
+POST /api/roles/delete
+POST /api/roles/get
+POST /api/roles/list
+POST /api/roles/update
+
+@ static - none protocol
+GET /
+GET /robots.txt
+GET /{filepath:*}
+
+@ vk-self - none protocol
+GET /api/governance/virtual-keys/quota
