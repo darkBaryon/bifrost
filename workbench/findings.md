@@ -167,8 +167,8 @@ convert_when: "第三个模块需要同样的 busy 重试，或两份策略出�
 ```yaml
 id: FIND-018
 status: 观察中
-triggered_by: [账号认证]
-evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账；身份模块整理 期1 的 FIND-020 清理在同一 state 写锁事务内新增一次无索引 DELETE，代码评审1 定向复核实测：稳态 SQLite 0.13ms/PG 0.35ms，1 万行积压 3.5ms/2.2ms，10 万行 303ms/25ms，100 万行 7.1s/1.55s（一次性，升级后首登），量级上不叠加"
+triggered_by: [账号认证, 角色权限后端]
+evidence: "ee/internal/identity/persistence/store.go:262 的 ReserveLogin 复用 s.transaction，每次登录尝试（含将被限流拒绝的那次）都 UPDATE state.revision 抢全局写锁，未认证流量可与账号管理事务争锁，SQLite 下等于串行化整个身份子系统；方案 §256 已把容量问题后置，三个冒烟含双节点 PG 未出现失败；来源:代码评审5 挂账；身份模块整理 期1 的 FIND-020 清理在同一 state 写锁事务内新增一次无索引 DELETE，代码评审1 定向复核实测：稳态 SQLite 0.13ms/PG 0.35ms，1 万行积压 3.5ms/2.2ms，10 万行 303ms/25ms，100 万行 7.1s/1.55s（一次性，升级后首登），量级上不叠加；角色权限后端追加LastLoginAt后，成功登录在原事务内增加一次按主键更新账号，失败密码不进入该写入；代码评审4核实无新增锁顺序或扫描，未做容量基准，仍按既定阈值观察"
 convert_when: "出现真实登录并发容量问题，或把限流桶挪出 state 锁时一并处理"
 ```
 

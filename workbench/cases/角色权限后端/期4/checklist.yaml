@@ -2,7 +2,7 @@
   版本: 1
   批次: 四期后端整体验收
   已定稿: true
-  评审状态: 独立正式复核待执行
+  评审状态: 代码评审9通过，收敛评审9无碍，后端已验收
 必过命令:
 - name: final-acceptance-scope
   run: "python3 - <<'CHECK'\nfrom pathlib import Path\nimport subprocess\nbase='4420d1b12'\nreview_fixes={'ee/internal/rbac/persistence/store.go','ee/internal/identity/persistence/store.go','ee/internal/identity/persistence/rows.go','ee/internal/identity/persistence/migration.go','ee/internal/rbac/http/handler.go','ee/internal/rbac/http/protocol.go','ee/internal/rbac/http/matrix.go'}\n\
