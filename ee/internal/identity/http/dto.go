@@ -49,13 +49,12 @@ func pageLimit(v *int) int {
 
 // statusResponse 同时服务新旧登录页：has_valid_token 与 is_auth_enabled 是旧字段。
 type statusResponse struct {
-	Initialized        bool       `json:"initialized"`
-	AuthType           string     `json:"auth_type"`
-	IsAuthEnabled      bool       `json:"is_auth_enabled"`
-	HasValidToken      bool       `json:"has_valid_token"`
-	HasValidSession    bool       `json:"has_valid_session"`
-	MustChangePassword bool       `json:"must_change_password"`
-	LastLoginAt        *time.Time `json:"last_login_at"`
+	Initialized        bool   `json:"initialized"`
+	AuthType           string `json:"auth_type"`
+	IsAuthEnabled      bool   `json:"is_auth_enabled"`
+	HasValidToken      bool   `json:"has_valid_token"`
+	HasValidSession    bool   `json:"has_valid_session"`
+	MustChangePassword bool   `json:"must_change_password"`
 }
 
 type loginResponse struct {
@@ -124,6 +123,11 @@ type setStatusRequest struct {
 	Status    string `json:"status"`
 }
 
+// deleteAccountRequest 只接收账号编号；删除权限及保护规则由服务检查。
+type deleteAccountRequest struct {
+	AccountID string `json:"account_id"`
+}
+
 // ---- 密码线 ----
 
 type eventDTO struct {
@@ -171,9 +175,4 @@ type eventsRequest struct {
 	TargetID string `json:"target_id"`
 	Cursor   string `json:"cursor"`
 	Limit    *int   `json:"limit"`
-}
-
-// deleteAccountRequest 只接收账号编号；删除权限及保护规则由服务检查。
-type deleteAccountRequest struct {
-	AccountID string `json:"account_id"`
 }

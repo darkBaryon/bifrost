@@ -167,12 +167,12 @@ func (s *AccountService) ListAccounts(ctx context.Context, p Principal, cursor s
 // DeleteAccount 删除账号及其会话和票据；角色策略在同一事务内检查并清理关联。
 // 不允许删除自己或固定恢复账号；历史密码事件保留，重复删除返回ErrNotFound。
 func (s *AccountService) DeleteAccount(ctx context.Context, p Principal, id string) error {
+	if !ValidAccountID(id) {
+		return ErrInvalid
+	}
 	return SafeError(s.repo.Transaction(ctx, func(tx Tx) error {
 		if _, err := s.actor(ctx, tx, p, DeleteAccounts, id); err != nil {
 			return err
-		}
-		if !ValidAccountID(id) {
-			return ErrInvalid
 		}
 		if id == p.AccountID || id == tx.State().ChiefAccountID {
 			return ErrForbidden

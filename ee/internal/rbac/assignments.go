@@ -1,4 +1,4 @@
-// 本文件给账号分配角色，防止移除最后一个启用的主管理员，并为初始化和离线恢复补上主管理员角色。
+// 本文件给账号分配角色，防止移除最后一个启用的主管理员，删除账号时清理角色，并为初始化和离线恢复补上主管理员角色。
 package rbac
 
 import (
@@ -27,7 +27,7 @@ func roleIDs(ids []RoleID) ([]RoleID, error) {
 	return out, nil
 }
 
-// remainingChief 检查目标是不是最后一个启用的主管理员；如果是，就不允许停用它或移除它的主管理员角色。
+// remainingChief 检查目标是不是最后一个启用的主管理员；如果是，就不允许停用、删除它或移除它的主管理员角色。
 func remainingChief(queries Queries, target string) error {
 	roles, e := queries.AccountRoles(target)
 	if e != nil {
@@ -112,6 +112,20 @@ func (s *Service) BeforeDisable(ctx context.Context, p Subject, target string) e
 	})
 }
 
+// BeforeDelete 供身份模块在同一删除事务内检查最后管理员并清空角色关联。
+// 必须绑定身份当前事务；后续账号删除失败时，角色解绑也要回滚。
+func (s *Service) BeforeDelete(ctx context.Context, p Subject, target string) error {
+	return s.write(ctx, func(tx Tx) error {
+		if err := checkPermission(tx, p, UsersManage); err != nil {
+			return err
+		}
+		if err := remainingChief(tx, target); err != nil {
+			return err
+		}
+		return tx.ReplaceAccountRoles(target, nil)
+	})
+}
+
 func (s *Service) bindChief(ctx context.Context, id string) error {
 	return s.write(ctx, func(tx Tx) error {
 		state := tx.State()
@@ -130,17 +144,3 @@ func (s *Service) BindInitialChief(ctx context.Context, id string) error { retur
 
 // RestoreChief 仅在离线恢复事务中使用，给固定的恢复账号补上主管理员角色，保留它已有的其他角色。
 func (s *Service) RestoreChief(ctx context.Context, id string) error { return s.bindChief(ctx, id) }
-
-// BeforeDelete 供身份模块在同一删除事务内检查最后管理员并清空角色关联。
-// 必须绑定身份当前事务；后续账号删除失败时，角色解绑也要回滚。
-func (s *Service) BeforeDelete(ctx context.Context, p Subject, target string) error {
-	return s.write(ctx, func(tx Tx) error {
-		if err := checkPermission(tx, p, UsersManage); err != nil {
-			return err
-		}
-		if err := remainingChief(tx, target); err != nil {
-			return err
-		}
-		return tx.ReplaceAccountRoles(target, nil)
-	})
-}

@@ -27,3 +27,24 @@ func TestAccountDTOKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestStatusResponseKeys 保持匿名状态接口只返回登录状态，不混入账号资料。
+func TestStatusResponseKeys(t *testing.T) {
+	data, err := json.Marshal(statusResponse{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"initialized", "auth_type", "is_auth_enabled", "has_valid_token", "has_valid_session", "must_change_password"}
+	if len(fields) != len(want) {
+		t.Fatalf("unexpected status fields: %s", data)
+	}
+	for _, name := range want {
+		if _, ok := fields[name]; !ok {
+			t.Fatal("missing status field", name)
+		}
+	}
+}

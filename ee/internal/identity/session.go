@@ -7,6 +7,9 @@ import (
 	"time"
 )
 
+// lastLoginPrecision 让最近登录时间按微秒保存和返回，保证两种数据库与响应一致。
+const lastLoginPrecision = time.Microsecond
+
 // Authenticate 用 Cookie 中的原始 token 换取身份；形状不对的 token 不查库。
 func (s *SessionService) Authenticate(ctx context.Context, raw string) (Principal, error) {
 	if len(raw) != tokenLength {
@@ -60,7 +63,7 @@ func (s *SessionService) Login(ctx context.Context, username, password, peerIP s
 	raw := randomToken()
 	var out IssuedSession
 	err = s.repo.Transaction(ctx, func(tx Tx) error {
-		// 比较密码期间可能发生重置或停用：签发前重读，版本或哈希变化则拒绝。
+		// 比较密码期间可能发生重置、停用或删除：签发前重读，版本或哈希变化则拒绝。
 		latest, err := tx.Account(c.ID)
 		if errors.Is(err, ErrNotFound) {
 			return ErrUnauthorized
@@ -80,8 +83,7 @@ func (s *SessionService) Login(ctx context.Context, username, password, peerIP s
 		if err != nil {
 			return err
 		}
-		// PostgreSQL时间精度为微秒，响应与持久化值保持一致。
-		loggedAt := v.CreatedAt.Truncate(time.Microsecond)
+		loggedAt := v.CreatedAt.Truncate(lastLoginPrecision)
 		latest.LastLoginAt = &loggedAt
 		latest.UpdatedAt = v.CreatedAt
 		if err = tx.SaveAccount(latest); err != nil {

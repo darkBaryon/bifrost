@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/valyala/fasthttp"
 	"reflect"
 	"testing"
 
@@ -15,6 +14,7 @@ import (
 	"github.com/maximhq/bifrost/framework/configstore/tables"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
+	"github.com/valyala/fasthttp"
 )
 
 func credentialAccess() rbac.Access {
@@ -107,6 +107,39 @@ func TestProviderKeyCredentialDestination(t *testing.T) {
 			t.Fatal(field, err)
 		}
 	}
+	t.Run("alias names", func(t *testing.T) {
+		for _, name := range []string{"value", "client_secret", "endpoint", "aliases"} {
+			var old, next schemas.Key
+			decode := func(endpoint string, key *schemas.Key) {
+				if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"`+name+`":{"model_id":"model","endpoint":"`+endpoint+`"}}}`), key); err != nil {
+					t.Fatal(err)
+				}
+			}
+			decode("https://old.invalid", &old)
+			decode("https://new.invalid", &next)
+			if err := providerKeyDestination(&configstore.ProviderConfig{}, &old, &next, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
+				t.Fatal(name, err)
+			}
+			if err := providerKeyDestination(&configstore.ProviderConfig{}, &old, &next, credentialAccess()); err != nil {
+				t.Fatal(name, err)
+			}
+		}
+	})
+	t.Run("alias inference profile", func(t *testing.T) {
+		var before, after schemas.Key
+		if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"model":{"model_id":"model","inference_profile_arn":"old-profile"}}}`), &before); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"model":{"model_id":"model","inference_profile_arn":"new-profile"}}}`), &after); err != nil {
+			t.Fatal(err)
+		}
+		if err := providerKeyDestination(&configstore.ProviderConfig{}, &before, &after, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
+			t.Fatal(err)
+		}
+		if err := providerKeyDestination(&configstore.ProviderConfig{}, &before, &after, credentialAccess()); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 type credentialProxyStore struct {
@@ -125,7 +158,7 @@ func TestProxyCredentialDestination(t *testing.T) {
 	next.Password = redacted
 	err := a.proxyUpdate(context.Background(), &next, rbac.Access{})
 	var denial *handlers.ConsolePolicyError
-	if !errors.As(err, &denial) || denial.Status != 403 {
+	if !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
 		t.Fatal(err)
 	}
 	if err = a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
@@ -138,6 +171,36 @@ func TestProxyCredentialDestination(t *testing.T) {
 	if store.proxy.URL != "https://old.invalid" {
 		t.Fatal("current mutated")
 	}
+	t.Run("proxy TLS", func(t *testing.T) {
+		store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: "https://old.invalid", Password: "fixture"}}
+		a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
+		next := *store.proxy
+		next.Password, next.SkipTLSVerify = redacted, true
+		var denial *handlers.ConsolePolicyError
+		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
+			t.Fatal("TLS change must require permission", err)
+		}
+		if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
+			t.Fatal(err)
+		}
+		next.SkipTLSVerify, next.Timeout = false, 60
+		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); err != nil {
+			t.Fatal("ordinary update", err)
+		}
+	})
+	t.Run("URL authentication and TLS", func(t *testing.T) {
+		store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: "https://fixture:synthetic@proxy.invalid"}}
+		a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
+		next := *store.proxy
+		next.URL, next.SkipTLSVerify = redacted, true
+		var denial *handlers.ConsolePolicyError
+		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
+			t.Fatal(err)
+		}
+		if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestWebhookCredentialDestination(t *testing.T) {
@@ -150,7 +213,7 @@ func TestWebhookCredentialDestination(t *testing.T) {
 	next.URL = "https://new.invalid"
 	err := a.webhookUpdate(context.Background(), rbac.Subject{}, handlers.ConsoleWebhookUpdate, &next)
 	var denial *handlers.ConsolePolicyError
-	if !errors.As(err, &denial) || denial.Status != 403 {
+	if !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
 		t.Fatal(err)
 	}
 	repo.codes = append(repo.codes, rbac.SecurityChangeCredentialDestination)
@@ -215,44 +278,6 @@ func TestPluginCredentialDestination(t *testing.T) {
 	if err := pluginDestination("otel", multi, multi, rbac.Access{}); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func TestCredentialDestinationReviewBoundaries(t *testing.T) {
-	t.Run("proxy TLS", func(t *testing.T) {
-		store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: "https://old.invalid", Password: "fixture"}}
-		a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
-		next := *store.proxy
-		next.Password, next.SkipTLSVerify = redacted, true
-		var denial *handlers.ConsolePolicyError
-		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
-			t.Fatal("TLS change must require permission", err)
-		}
-		if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
-			t.Fatal(err)
-		}
-		next.SkipTLSVerify, next.Timeout = false, 60
-		if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); err != nil {
-			t.Fatal("ordinary update", err)
-		}
-	})
-	t.Run("alias names", func(t *testing.T) {
-		for _, name := range []string{"value", "client_secret", "endpoint", "aliases"} {
-			var old, next schemas.Key
-			decode := func(endpoint string, key *schemas.Key) {
-				if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"`+name+`":{"model_id":"model","endpoint":"`+endpoint+`"}}}`), key); err != nil {
-					t.Fatal(err)
-				}
-			}
-			decode("https://old.invalid", &old)
-			decode("https://new.invalid", &next)
-			if err := providerKeyDestination(&configstore.ProviderConfig{}, &old, &next, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
-				t.Fatal(name, err)
-			}
-			if err := providerKeyDestination(&configstore.ProviderConfig{}, &old, &next, credentialAccess()); err != nil {
-				t.Fatal(name, err)
-			}
-		}
-	})
 	t.Run("OTEL header targets", func(t *testing.T) {
 		var old, next any
 		if err := json.Unmarshal([]byte(`{"profiles":[{"collector_url":"https://traces.invalid","metrics_endpoint":"https://metrics.invalid","headers":{"Authorization":"fixture"},"metrics_headers":{"Authorization":"metrics-fixture"}}]}`), &old); err != nil {
@@ -284,7 +309,7 @@ func (s *credentialPluginStore) GetPlugin(context.Context, string) (*tables.Tabl
 	return s.plugin, nil
 }
 
-func TestPluginPartialCredentialDestinationUpdate(t *testing.T) {
+func TestPluginCredentialDestinationUpdate(t *testing.T) {
 	var current map[string]any
 	if err := json.Unmarshal([]byte(`{"profiles":[{"collector_url":"https://old.invalid","protocol":"http","headers":{"Authorization":"fixture"}}]}`), &current); err != nil {
 		t.Fatal(err)
@@ -314,45 +339,20 @@ func TestPluginPartialCredentialDestinationUpdate(t *testing.T) {
 			t.Fatal("current config mutated")
 		}
 	}
-}
-
-func TestAdditionalCredentialDestinationBoundaries(t *testing.T) {
-	store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: "https://fixture:synthetic@proxy.invalid"}}
-	a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
-	next := *store.proxy
-	next.URL, next.SkipTLSVerify = redacted, true
-	var denial *handlers.ConsolePolicyError
-	if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
-		t.Fatal(err)
-	}
-	if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
-		t.Fatal(err)
-	}
-	var before, after schemas.Key
-	if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"model":{"model_id":"model","inference_profile_arn":"old-profile"}}}`), &before); err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"model":{"model_id":"model","inference_profile_arn":"new-profile"}}}`), &after); err != nil {
-		t.Fatal(err)
-	}
-	if err := providerKeyDestination(&configstore.ProviderConfig{}, &before, &after, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
-		t.Fatal(err)
-	}
-	if err := providerKeyDestination(&configstore.ProviderConfig{}, &before, &after, credentialAccess()); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"otel", "telemetry"} {
-		a := NewAdapter(nil, &lib.Config{ConfigStore: &credentialPluginStore{}}, nil)
-		var c fasthttp.RequestCtx
-		c.Request.Header.SetMethod(fasthttp.MethodPut)
-		c.SetUserValue("name", name)
-		c.Request.SetBodyString(`{"config":{}}`)
-		if err := a.preparePluginUpdate(&c, rbac.Access{}); err != nil {
-			t.Fatal("first PUT", name, err)
+	t.Run("first PUT", func(t *testing.T) {
+		for _, name := range []string{"otel", "telemetry"} {
+			a := NewAdapter(nil, &lib.Config{ConfigStore: &credentialPluginStore{}}, nil)
+			var c fasthttp.RequestCtx
+			c.Request.Header.SetMethod(fasthttp.MethodPut)
+			c.SetUserValue("name", name)
+			c.Request.SetBodyString(`{"config":{}}`)
+			if err := a.preparePluginUpdate(&c, rbac.Access{}); err != nil {
+				t.Fatal("first PUT", name, err)
+			}
+			c.Request.SetBodyString(`{"config":{"header":"<REDACTED>"}}`)
+			if err := a.preparePluginUpdate(&c, rbac.Access{}); !errors.Is(err, rbac.ErrInvalid) {
+				t.Fatal("first PUT marker", name, err)
+			}
 		}
-		c.Request.SetBodyString(`{"config":{"header":"<REDACTED>"}}`)
-		if err := a.preparePluginUpdate(&c, rbac.Access{}); !errors.Is(err, rbac.ErrInvalid) {
-			t.Fatal("first PUT marker", name, err)
-		}
-	}
+	})
 }

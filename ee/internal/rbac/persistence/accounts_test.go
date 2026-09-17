@@ -3,11 +3,11 @@ package persistence
 
 import (
 	"errors"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"testing"
 	"time"
 
 	auth "github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
 	"gorm.io/gorm"
@@ -87,6 +87,7 @@ func TestDeleteAccountRollback(t *testing.T) {
 	}
 }
 
+// TestLastLoginAtomicity 验证装配RBAC事务策略后，登录时间和新会话仍一起提交或回滚。
 func TestLastLoginAtomicity(t *testing.T) {
 	f := setup(t)
 	account, err := f.auth.Account.CreateAccount(ctx, f.admin.Principal, "fresh", "")

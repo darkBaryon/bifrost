@@ -165,7 +165,7 @@ type IssuedSession struct {
 	ExpiresAt time.Time
 }
 
-// PasswordEvent 是密码操作记录；账号名是操作时的快照，记录不随账号停用删除。
+// PasswordEvent 是密码操作记录；账号名是操作时的快照，记录不随账号停用或删除而移除。
 type PasswordEvent struct {
 	ID          string
 	OperationID string // 重置由调用方提供的 UUID，其他事件由服务生成
