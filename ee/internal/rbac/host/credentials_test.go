@@ -95,6 +95,7 @@ func TestProviderProxyCredentialDestination(t *testing.T) {
 		{"partial override", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@new.invalid"), Username: schemas.NewSecretVar("other")}, true},
 		{"unresolved override", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:synthetic@new.invalid"), Username: schemas.NewSecretVar("env.RBAC_TEST_PROXY_USERNAME"), Password: schemas.NewSecretVar("env.RBAC_TEST_PROXY_PASSWORD")}, true},
 		{"proxy type", &schemas.ProxyConfig{Type: schemas.HTTPProxy, URL: schemas.NewSecretVar("http://fixture:synthetic@proxy.invalid")}, &schemas.ProxyConfig{Type: schemas.Socks5Proxy, URL: schemas.NewSecretVar("http://fixture:synthetic@proxy.invalid")}, true},
+		{"unused independent username", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://old.invalid"), Username: schemas.NewSecretVar("fixture")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture@new.invalid")}, false},
 		{"no authentication", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://new.invalid")}, false},
 		{"invalid old URL", &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://fixture:%zz@old.invalid")}, &schemas.ProxyConfig{URL: schemas.NewSecretVar("http://new.invalid")}, true},
 	} {

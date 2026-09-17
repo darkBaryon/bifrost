@@ -143,10 +143,9 @@ func proxyCredentials(p *schemas.ProxyConfig) ([]string, error) {
 		// 环境代理可能携带部署凭据；配置中的其他旧凭据也可能在切换代理类型后启用。
 		credentials = append(credentials, "ambient:proxy")
 	}
+	// 独立字段只计入已保存密码；用户名不能单独用于认证，与全局代理一致。
 	if password := schemas.SecretVarAsString(p.Password); password != "" {
 		credentials = append(credentials, password)
-	} else {
-		credentials = append(credentials, schemas.SecretVarAsString(p.Username))
 	}
 	raw := schemas.SecretVarAsString(p.URL)
 	if p.URL != nil && p.URL.IsFromSecret() {
