@@ -1,7 +1,8 @@
 # 使用仓库现有固定工具链；兼容 Jenkins 的传统 Docker 构建方式。
-FROM golang:1.27.0-alpine3.24@sha256:4c9fe60190a2a3350ddc51de80d0224b8a6698d12bdfc999fee45ea9d6c46dbc AS go-toolchain
+FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/golang:1.27.0-alpine3.24-amd64 AS go-toolchain
 
-FROM node:25-alpine3.23@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS builder
+FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/node:25-alpine3.23-amd64 AS builder
+
 ENV GOPROXY=https://goproxy.cn
 COPY --from=go-toolchain /usr/local/go /usr/local/go
 ENV PATH="/usr/local/go/bin:${PATH}" CGO_ENABLED=1
@@ -28,7 +29,7 @@ RUN case "$VERSION" in \
     && test -s ee/cmd/bifrost-http/ui/index.html \
     && test -x ee/tmp/bifrost-http
 
-FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/alpine:3.23.5-amd64
 WORKDIR /app
 RUN apk add --no-cache musl libgcc ca-certificates zlib \
     && adduser -D -u 1000 -s /bin/sh appuser \
