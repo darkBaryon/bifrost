@@ -1,0 +1,21 @@
+# 专用 AMD64 构建环境；构建时指定 --platform linux/amd64。
+FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/golang:1.27.0-alpine3.24-amd64 AS go-toolchain
+FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/node:25-alpine3.23-amd64
+
+COPY --from=go-toolchain /usr/local/go /usr/local/go
+ENV PATH="/usr/local/go/bin:${PATH}" \
+    CGO_ENABLED=1 \
+    GOPROXY=https://goproxy.cn
+WORKDIR /build
+RUN apk add --no-cache bash make gcc musl-dev git ca-certificates \
+    && go version \
+    && node --version \
+    && npm --version \
+    && make --version \
+    && gcc --version
+
+LABEL org.opencontainers.image.title="ai-gateway 构建环境" \
+      org.opencontainers.image.version="go1.27-node25-v1-amd64"
+# 清除 Node 基础镜像的入口，构建环境默认进入 shell。
+ENTRYPOINT []
+CMD ["/bin/sh"]
