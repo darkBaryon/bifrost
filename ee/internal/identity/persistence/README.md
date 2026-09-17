@@ -29,3 +29,5 @@ bcrypt 在 [hasher](../hasher/README.md)；业务规则在 [identity](../README.
 | [accounts_page_test.go](accounts_page_test.go) / [cleanup_test.go](cleanup_test.go) / [diagnostics_test.go](diagnostics_test.go) | 分页、过期清理、诊断 |
 
 测试默认用临时 SQLite；设置 `IDENTITY_TEST_POSTGRES_DSN` 后在专用 PostgreSQL 库的独立 schema 里跑，结束只清理自己的 schema。
+
+增量迁移ee_identity_v2_last_login为账号增加可空last_login_at；旧记录不回填。store.go删除账号时同事务清理票据和会话，保留密码事件。rbac/persistence/accounts_test.go验证跨模块删除回滚及登录时间原子更新。

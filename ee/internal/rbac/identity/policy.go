@@ -64,7 +64,7 @@ func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Princip
 	switch action {
 	case auth.ReadAccounts:
 		permission = rbac.UsersView
-	case auth.CreateAccounts, auth.ChangeAccountStatus, auth.ResetAccountPassword, auth.ReadAllPasswordEvents:
+	case auth.CreateAccounts, auth.DeleteAccounts, auth.ChangeAccountStatus, auth.ResetAccountPassword, auth.ReadAllPasswordEvents:
 		permission = rbac.UsersManage
 	case auth.OpenConsoleStream:
 		permission = rbac.NotificationsView
@@ -102,3 +102,11 @@ func (p *Policy) AfterRecover(ctx context.Context, state auth.State) error {
 }
 
 var _ auth.AccountPolicy = (*Policy)(nil)
+
+// BeforeDelete 在删除账号的同一事务中保护最后管理员并移除角色关联。
+func (p *Policy) BeforeDelete(ctx context.Context, _ auth.State, actor auth.Principal, target auth.Account) error {
+	if p == nil || p.service == nil {
+		return auth.ErrUnavailable
+	}
+	return IdentityError(p.service.BeforeDelete(ctx, Subject(actor), target.ID))
+}

@@ -278,6 +278,9 @@ type credentialPluginStore struct {
 }
 
 func (s *credentialPluginStore) GetPlugin(context.Context, string) (*tables.TablePlugin, error) {
+	if s.plugin == nil {
+		return nil, configstore.ErrNotFound
+	}
 	return s.plugin, nil
 }
 
@@ -309,6 +312,47 @@ func TestPluginPartialCredentialDestinationUpdate(t *testing.T) {
 		}
 		if current["profiles"].([]any)[0].(map[string]any)["headers"].(map[string]any)["Authorization"] != "fixture" {
 			t.Fatal("current config mutated")
+		}
+	}
+}
+
+func TestAdditionalCredentialDestinationBoundaries(t *testing.T) {
+	store := &credentialProxyStore{proxy: &tables.GlobalProxyConfig{URL: "https://fixture:synthetic@proxy.invalid"}}
+	a := NewAdapter(nil, &lib.Config{ConfigStore: store}, nil)
+	next := *store.proxy
+	next.URL, next.SkipTLSVerify = redacted, true
+	var denial *handlers.ConsolePolicyError
+	if err := a.proxyUpdate(context.Background(), &next, rbac.Access{}); !errors.As(err, &denial) || denial.Status != fasthttp.StatusForbidden {
+		t.Fatal(err)
+	}
+	if err := a.proxyUpdate(context.Background(), &next, credentialAccess()); err != nil {
+		t.Fatal(err)
+	}
+	var before, after schemas.Key
+	if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"model":{"model_id":"model","inference_profile_arn":"old-profile"}}}`), &before); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal([]byte(`{"value":"fixture","aliases":{"model":{"model_id":"model","inference_profile_arn":"new-profile"}}}`), &after); err != nil {
+		t.Fatal(err)
+	}
+	if err := providerKeyDestination(&configstore.ProviderConfig{}, &before, &after, rbac.Access{}); !errors.Is(err, rbac.ErrForbidden) {
+		t.Fatal(err)
+	}
+	if err := providerKeyDestination(&configstore.ProviderConfig{}, &before, &after, credentialAccess()); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"otel", "telemetry"} {
+		a := NewAdapter(nil, &lib.Config{ConfigStore: &credentialPluginStore{}}, nil)
+		var c fasthttp.RequestCtx
+		c.Request.Header.SetMethod(fasthttp.MethodPut)
+		c.SetUserValue("name", name)
+		c.Request.SetBodyString(`{"config":{}}`)
+		if err := a.preparePluginUpdate(&c, rbac.Access{}); err != nil {
+			t.Fatal("first PUT", name, err)
+		}
+		c.Request.SetBodyString(`{"config":{"header":"<REDACTED>"}}`)
+		if err := a.preparePluginUpdate(&c, rbac.Access{}); !errors.Is(err, rbac.ErrInvalid) {
+			t.Fatal("first PUT marker", name, err)
 		}
 	}
 }

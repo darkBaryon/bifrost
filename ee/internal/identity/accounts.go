@@ -1,4 +1,4 @@
-// 本文件实现账号操作：旧账号导入、初始化、建号、启停与分页列表。
+// 本文件实现账号操作：旧账号导入、初始化、建号、启停、删除与分页列表。
 package identity
 
 import (
@@ -162,4 +162,28 @@ func (s *AccountService) ListAccounts(ctx context.Context, p Principal, cursor s
 	}
 	out.Items = append(out.Items, rows...)
 	return out, nil
+}
+
+// DeleteAccount 删除账号及其会话和票据；角色策略在同一事务内检查并清理关联。
+// 不允许删除自己或固定恢复账号；历史密码事件保留，重复删除返回ErrNotFound。
+func (s *AccountService) DeleteAccount(ctx context.Context, p Principal, id string) error {
+	return SafeError(s.repo.Transaction(ctx, func(tx Tx) error {
+		if _, err := s.actor(ctx, tx, p, DeleteAccounts, id); err != nil {
+			return err
+		}
+		if !ValidAccountID(id) {
+			return ErrInvalid
+		}
+		if id == p.AccountID || id == tx.State().ChiefAccountID {
+			return ErrForbidden
+		}
+		account, err := tx.Account(id)
+		if err != nil {
+			return err
+		}
+		if err = s.accessPolicy(tx).BeforeDelete(ctx, tx.State(), p, account.Account); err != nil {
+			return err
+		}
+		return tx.DeleteAccount(id)
+	}))
 }

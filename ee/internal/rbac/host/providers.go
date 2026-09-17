@@ -189,7 +189,7 @@ func keyConnection(key *schemas.Key) (map[string]string, []string, error) {
 				if flag, ok := child.(bool); ok {
 					targets[field] = strconv.FormatBool(flag)
 				}
-			case "endpoint", "url", "workspace_url", "github_domain", "region", "arn", "role_arn", "project_id", "project_number", "runtime", "control_plane", "mantle", "agent_runtime", "s3":
+			case "endpoint", "url", "workspace_url", "github_domain", "region", "arn", "inference_profile_arn", "role_arn", "project_id", "project_number", "runtime", "control_plane", "mantle", "agent_runtime", "s3":
 				text, err := configSecretText(child)
 				if err != nil {
 					return err

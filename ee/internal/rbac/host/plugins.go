@@ -321,7 +321,11 @@ func (a *Adapter) preparePluginUpdate(c *fasthttp.RequestCtx, access rbac.Access
 	stored, e := a.config.ConfigStore.GetPlugin(c, name)
 	if e != nil {
 		if errors.Is(e, configstore.ErrNotFound) {
-			return rbac.ErrInvalid
+			// 上游PUT允许首次配置插件；没有旧行时只能提交自己的完整配置。
+			if hasMarker(config) {
+				return rbac.ErrInvalid
+			}
+			return nil
 		}
 		return rbac.ErrUnavailable
 	}

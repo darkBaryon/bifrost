@@ -130,3 +130,17 @@ func (s *Service) BindInitialChief(ctx context.Context, id string) error { retur
 
 // RestoreChief 仅在离线恢复事务中使用，给固定的恢复账号补上主管理员角色，保留它已有的其他角色。
 func (s *Service) RestoreChief(ctx context.Context, id string) error { return s.bindChief(ctx, id) }
+
+// BeforeDelete 供身份模块在同一删除事务内检查最后管理员并清空角色关联。
+// 必须绑定身份当前事务；后续账号删除失败时，角色解绑也要回滚。
+func (s *Service) BeforeDelete(ctx context.Context, p Subject, target string) error {
+	return s.write(ctx, func(tx Tx) error {
+		if err := checkPermission(tx, p, UsersManage); err != nil {
+			return err
+		}
+		if err := remainingChief(tx, target); err != nil {
+			return err
+		}
+		return tx.ReplaceAccountRoles(target, nil)
+	})
+}

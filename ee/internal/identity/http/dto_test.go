@@ -17,7 +17,7 @@ func TestAccountDTOKeys(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"id", "username", "display_name", "status", "must_change_password"}
+	want := []string{"id", "username", "display_name", "status", "must_change_password", "last_login_at"}
 	if len(got) != len(want) {
 		t.Fatalf("account DTO has %d keys, want %d: %s", len(got), len(want), b)
 	}

@@ -1,4 +1,4 @@
-// 本文件是账号线端点：初始化、建号、列表与启停。
+// 本文件是账号线端点：初始化、建号、列表、启停与删除。
 package identityhttp
 
 import (
@@ -52,4 +52,15 @@ func (h *Handler) setStatus(r request) (int, any, error) {
 		return 0, nil, err
 	}
 	return fasthttp.StatusOK, accountResponse{Account: toAccountDTO(a)}, nil
+}
+
+func (h *Handler) deleteAccount(r request) (int, any, error) {
+	var q deleteAccountRequest
+	if err := r.decode(&q); err != nil {
+		return 0, nil, err
+	}
+	if err := h.svc.Account.DeleteAccount(r.ctx, r.principal, q.AccountID); err != nil {
+		return 0, nil, err
+	}
+	return fasthttp.StatusOK, struct{}{}, nil
 }

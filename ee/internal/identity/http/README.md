@@ -23,3 +23,5 @@
 | [protocol.go](protocol.go) | origin 校验、同源检查、Cookie、严格 JSON、错误映射 |
 | [dto.go](dto.go) | 请求/响应结构与转换，按 共同/会话/账号/密码 四段 |
 | [handler_test.go](handler_test.go) / [dto_test.go](dto_test.go) | 错误映射与 JSON 限制契约；账号响应键集合 |
+
+账号HTTP增加POST /api/accounts/delete，删除保护由服务处理；dto.go在账号响应中输出可空last_login_at，表示最近成功登录时间。

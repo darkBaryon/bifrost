@@ -13,6 +13,9 @@ import (
 // identityMigrationID 已写入版本表，不能改变。
 const identityMigrationID = "ee_identity_v1"
 
+// lastLoginMigrationID 为旧账号增加可空的最近登录时间，不推断历史值。
+const lastLoginMigrationID = "ee_identity_v2_last_login"
+
 // identityMigrationLock 协调 PostgreSQL 多节点的身份迁移；须保持稳定，并与品牌迁移锁键 8342761901 及
 // 上游 framework/configstore/migrations.go 的锁键不同。
 const identityMigrationLock int64 = 8342761902
@@ -37,7 +40,7 @@ func migrateIdentityOnce(ctx context.Context, db *gorm.DB) error {
 		}
 		opts := *migrator.DefaultOptions
 		opts.UseTransaction = false
-		return upstream.RunSingleMigration(ctx, &opts, tx, nil, &migrator.Migration{ID: identityMigrationID, Migrate: func(tx *gorm.DB) error {
+		if err := upstream.RunSingleMigration(ctx, &opts, tx, nil, &migrator.Migration{ID: identityMigrationID, Migrate: func(tx *gorm.DB) error {
 			for _, model := range []any{&accountRow{}, &stateRow{}, &sessionRow{}, &eventRow{}, &ticketRow{}, &limitRow{}} {
 				if e := tx.Migrator().CreateTable(model); e != nil {
 					return e
@@ -57,6 +60,14 @@ func migrateIdentityOnce(ctx context.Context, db *gorm.DB) error {
 				}
 			}
 			return tx.Create(&stateRow{ID: 1}).Error
+		}}); err != nil {
+			return err
+		}
+		return upstream.RunSingleMigration(ctx, &opts, tx, nil, &migrator.Migration{ID: lastLoginMigrationID, Migrate: func(tx *gorm.DB) error {
+			if tx.Migrator().HasColumn(&accountRow{}, "LastLoginAt") {
+				return nil
+			}
+			return tx.Migrator().AddColumn(&accountRow{}, "LastLoginAt")
 		}})
 	})
 }

@@ -52,12 +52,16 @@ def exercise(nodes):
         a.expect(400, '/api/roles/get', raw=raw, token=admin)
     account, _ = a.expect(201, '/api/accounts/create', {'username': 'member', 'display_name': 'Member'}, token=admin)
     member_id = account['account']['id']
+    assert account['account']['last_login_at'] is None
     member = a.login('member', '123456')
     a.expect(403, '/api/permissions/me', {}, token=member)
     a.expect(200, '/api/identity/change-password', {'old_password': '123456', 'new_password': 'Member-password-1'}, token=member)
     member = a.login('member', 'Member-password-1')
     empty, _ = b.expect(200, '/api/permissions/me', {}, token=member)
     assert empty['roles'] == [] and empty['permissions'] == []
+    b.expect(403, '/api/accounts/delete', {'account_id': own_id}, token=member)
+    me_account, _ = b.expect(200, '/api/identity/me', {}, token=member)
+    assert me_account['account']['last_login_at'] is not None
     b.expect(403, '/api/roles/get', {'role_id': 999999}, token=member)
     reader, _ = a.expect(201, '/api/roles/create', {'name': ' reader ', 'permission_codes': ['Users.View', 'Notifications.View', 'Users.View']}, token=admin)
     role = reader['role']
@@ -96,6 +100,21 @@ def exercise(nodes):
     a.expect(404, '/api/not-registered', {}, token=admin)
     a.expect(405, '/api/roles/list', method='GET', token=admin)
     sensitive(a, admin, member, member_id, psql)
+    a.expect(403, '/api/accounts/delete', {'account_id': own_id}, token=admin)
+    a.expect(400, '/api/accounts/delete', {}, token=admin)
+    a.expect(400, '/api/accounts/delete', {'account_id': None}, token=admin)
+    a.expect(200, '/api/accounts/set-roles', {'account_id': member_id, 'role_ids': [3]}, token=admin)
+    ticket, _ = b.expect(200, '/api/identity/ws-ticket', {}, token=member)
+    with contextlib.closing(auth['websocket'](b, ticket['ticket'])) as ws:
+        a.expect(200, '/api/accounts/delete', {'account_id': member_id}, token=admin)
+        b.expect(401, '/api/identity/me', {}, token=member)
+        b.expect(404, '/api/accounts/get-roles', {'account_id': member_id}, token=admin)
+        b.expect(201, '/api/notifications', {'title': 'after-delete', 'message': 'all audience', 'severity': 'info', 'audience': 'all'}, token=admin)
+        message = auth['frame'](ws)
+        assert message is None or message[0] == 8, 'deleted account received a notification'
+    a.expect(404, '/api/accounts/delete', {'account_id': member_id}, token=admin)
+    replacement, _ = a.expect(201, '/api/accounts/create', {'username': 'member'}, token=admin)
+    assert replacement['account']['id'] != member_id and replacement['account']['last_login_at'] is None
     print('RBAC HTTP/WS passed: strict API, current permissions, assignment protection, audience and revocation')
 
 
@@ -153,6 +172,8 @@ def upgrade(nodes, baseline, candidate):
     a.expect(200, '/api/identity/change-password', {'old_password': '123456', 'new_password': 'Successor-password-1'}, token=successor)
     successor = a.login('successor', 'Successor-password-1')
     switch(nodes, candidate)
+    upgraded, _ = a.expect(200, '/api/identity/me', {}, token=old_admin)
+    assert upgraded['account']['last_login_at'] is None, 'migration invented a past login time'
     chief_has_no_permission_rows(a)
     a.expect(200, '/api/permissions/list', {}, token=old_admin)
     a.expect(200, '/api/accounts/set-roles', {'account_id': successor_id, 'role_ids': [1]}, token=old_admin)

@@ -3,6 +3,7 @@
 
 @ identity-service - none protocol
 POST /api/accounts/create
+POST /api/accounts/delete
 POST /api/accounts/list
 POST /api/accounts/reset-password
 POST /api/accounts/set-status

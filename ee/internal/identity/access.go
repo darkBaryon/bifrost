@@ -12,6 +12,7 @@ type AccountAction string
 const (
 	ReadAccounts          AccountAction = "accounts.read"
 	CreateAccounts        AccountAction = "accounts.create"
+	DeleteAccounts        AccountAction = "accounts.delete"
 	ChangeAccountStatus   AccountAction = "accounts.status"
 	ResetAccountPassword  AccountAction = "accounts.reset_password"
 	ReadAllPasswordEvents AccountAction = "password_events.read_all"
@@ -22,6 +23,8 @@ const (
 type AccountPolicy interface {
 	Authorize(context.Context, State, Principal, AccountAction, string) error
 	BeforeStatusChange(context.Context, State, Principal, Account, AccountStatus) error
+	// BeforeDelete 在删除账号的同一事务内检查保护规则并清理外部模块关联。
+	BeforeDelete(context.Context, State, Principal, Account) error
 	AfterInitialize(context.Context, State) error
 	AfterRecover(context.Context, State) error
 }
@@ -44,7 +47,7 @@ type ChiefPolicy struct{}
 // Authorize 未注入角色策略时，仅允许初始化管理员执行已知管理操作。
 func (ChiefPolicy) Authorize(_ context.Context, state State, p Principal, action AccountAction, _ string) error {
 	switch action {
-	case ReadAccounts, CreateAccounts, ChangeAccountStatus, ResetAccountPassword, ReadAllPasswordEvents, OpenConsoleStream:
+	case ReadAccounts, CreateAccounts, DeleteAccounts, ChangeAccountStatus, ResetAccountPassword, ReadAllPasswordEvents, OpenConsoleStream:
 	default:
 		return ErrForbidden
 	}
@@ -63,6 +66,9 @@ func requireChief(state State, p Principal) error {
 func (ChiefPolicy) BeforeStatusChange(context.Context, State, Principal, Account, AccountStatus) error {
 	return nil
 }
+
+// BeforeDelete 独立身份模块没有角色关系需要清理；固定恢复账号由账号服务保护。
+func (ChiefPolicy) BeforeDelete(context.Context, State, Principal, Account) error { return nil }
 
 // AfterInitialize 默认策略没有需要补写的角色数据。
 func (ChiefPolicy) AfterInitialize(context.Context, State) error { return nil }

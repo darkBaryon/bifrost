@@ -49,12 +49,13 @@ func pageLimit(v *int) int {
 
 // statusResponse 同时服务新旧登录页：has_valid_token 与 is_auth_enabled 是旧字段。
 type statusResponse struct {
-	Initialized        bool   `json:"initialized"`
-	AuthType           string `json:"auth_type"`
-	IsAuthEnabled      bool   `json:"is_auth_enabled"`
-	HasValidToken      bool   `json:"has_valid_token"`
-	HasValidSession    bool   `json:"has_valid_session"`
-	MustChangePassword bool   `json:"must_change_password"`
+	Initialized        bool       `json:"initialized"`
+	AuthType           string     `json:"auth_type"`
+	IsAuthEnabled      bool       `json:"is_auth_enabled"`
+	HasValidToken      bool       `json:"has_valid_token"`
+	HasValidSession    bool       `json:"has_valid_session"`
+	MustChangePassword bool       `json:"must_change_password"`
+	LastLoginAt        *time.Time `json:"last_login_at"`
 }
 
 type loginResponse struct {
@@ -78,15 +79,16 @@ type loginRequest struct {
 
 // accountDTO 是账号的对外字段，不含密码、哈希或版本。
 type accountDTO struct {
-	ID                 string `json:"id"`
-	Username           string `json:"username"`
-	DisplayName        string `json:"display_name"`
-	Status             string `json:"status"`
-	MustChangePassword bool   `json:"must_change_password"`
+	ID                 string     `json:"id"`
+	Username           string     `json:"username"`
+	DisplayName        string     `json:"display_name"`
+	Status             string     `json:"status"`
+	MustChangePassword bool       `json:"must_change_password"`
+	LastLoginAt        *time.Time `json:"last_login_at"`
 }
 
 func toAccountDTO(a identity.Account) accountDTO {
-	return accountDTO{ID: a.ID, Username: a.Username, DisplayName: a.DisplayName, Status: string(a.Status), MustChangePassword: a.MustChangePassword}
+	return accountDTO{ID: a.ID, Username: a.Username, DisplayName: a.DisplayName, Status: string(a.Status), MustChangePassword: a.MustChangePassword, LastLoginAt: a.LastLoginAt}
 }
 
 type accountResponse struct {
@@ -169,4 +171,9 @@ type eventsRequest struct {
 	TargetID string `json:"target_id"`
 	Cursor   string `json:"cursor"`
 	Limit    *int   `json:"limit"`
+}
+
+// deleteAccountRequest 只接收账号编号；删除权限及保护规则由服务检查。
+type deleteAccountRequest struct {
+	AccountID string `json:"account_id"`
 }

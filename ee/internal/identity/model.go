@@ -122,7 +122,8 @@ type Account struct {
 	DisplayName        string
 	Status             AccountStatus
 	MustChangePassword bool
-	CreatedAt          time.Time // 建号时间；账号列表按它与 ID 倒序分页
+	CreatedAt          time.Time  // 建号时间；账号列表按它与 ID 倒序分页
+	LastLoginAt        *time.Time // 最近一次成功登录时间；从未登录或旧记录为nil
 }
 
 // AccountRecord 是账号的完整记录，只在服务与存储之间传递。
@@ -242,6 +243,8 @@ type Tx interface {
 	// InsertAccount 与 InsertEvent 在唯一键冲突时返回 ErrConflict。
 	InsertAccount(AccountRecord) error
 	SaveAccount(AccountRecord) error
+	// DeleteAccount 删除账号及其会话、票据，保留密码事件；不存在返回ErrNotFound。
+	DeleteAccount(string) error
 	AuthByID(string) (AuthRecord, error)
 	InsertSession(Session) error
 	RevokeSession(string, time.Time) error

@@ -4,6 +4,7 @@ package host
 import (
 	"context"
 	"errors"
+	"net/url"
 	"reflect"
 	"strings"
 
@@ -162,6 +163,12 @@ func (a *Adapter) proxyUpdate(ctx context.Context, desired *tables.GlobalProxyCo
 	}
 	// 即使本次先停用，保存的新地址也不能为以后重新启用留下绕过。
 	retained := current.Password != "" && password == current.Password
+	// URL也能自带代理认证信息；独立Password为空不代表没有凭据。
+	if oldURL, err := url.Parse(current.URL); err == nil && oldURL.User != nil {
+		if nextURL, err := url.Parse(desired.URL); err == nil && nextURL.User != nil {
+			retained = retained || oldURL.User.String() == nextURL.User.String()
+		}
+	}
 	target := func(p *tables.GlobalProxyConfig) any {
 		return struct {
 			Type, URL     string

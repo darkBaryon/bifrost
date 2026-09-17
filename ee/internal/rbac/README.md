@@ -49,3 +49,7 @@
 存储集成测试在 `persistence/*_test.go`，默认使用临时SQLite；设置 `RBAC_TEST_POSTGRES_DSN` 后使用独立PostgreSQL schema。
 九个自有接口的输入、返回值和权限见[角色权限接口](../../docs/角色权限接口.md)。
 接口及管理功能的接入边界见[开发蓝图](../../../workbench/cases/角色权限后端/开发蓝图.md)。
+
+身份删除账号时，assignments.go的BeforeDelete在同一事务保护最后主管理员并清空角色分配；不直接删除身份表。
+
+账号删除通过identity/policy.go映射到BeforeDelete，共用身份事务；persistence/accounts_test.go验证跨模块删除、失败回滚和最近登录时间的原子更新。

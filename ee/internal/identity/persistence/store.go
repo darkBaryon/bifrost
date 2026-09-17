@@ -157,6 +157,26 @@ func (t *transaction) SaveAccount(c identity.AccountRecord) error {
 	return t.db.Save(&r).Error
 }
 
+// DeleteAccount 先清理票据和会话，再删账号；调用方事务保证整组操作回滚。
+func (t *transaction) DeleteAccount(id string) error {
+	t.stage = "account.delete"
+	sessions := t.db.Model(&sessionRow{}).Select("id").Where("account_id = ?", id)
+	if err := t.db.Where("session_id IN (?)", sessions).Delete(&ticketRow{}).Error; err != nil {
+		return err
+	}
+	if err := t.db.Where("account_id = ?", id).Delete(&sessionRow{}).Error; err != nil {
+		return err
+	}
+	result := t.db.Where("id = ?", id).Delete(&accountRow{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return identity.ErrNotFound
+	}
+	return nil
+}
+
 func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
 	t.stage = "session.read"
 	return authRecord(t.db, "s.id", id)
