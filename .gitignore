@@ -259,3 +259,6 @@ ui/app/routeTree.gen.ts
 bifrost-migration-cli
 
 tests/e2e/clis/reports
+
+# Jenkins 编译产物，只进入镜像构建上下文。
+/.jenkins-artifacts/

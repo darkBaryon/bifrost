@@ -1,0 +1,281 @@
+// EE 测试环境流水线：builder 编译前后端，NAS 缓存依赖，Dockerfile 只封装产物。
+// 参数由 Jenkins 任务维护：branch 必填，majorver 默认 0.1，deploy 默认关闭。
+// 首次先准备 K8s 资源；任务须禁用并发，且该 Deployment 只使用一个发布入口。
+def agentLabel = "ai-gateway-${UUID.randomUUID().toString()}"
+
+podTemplate(label: agentLabel, yaml: '''
+apiVersion: v1
+kind: Pod
+spec:
+  nodeSelector:
+    kubernetes.io/hostname: node2
+  hostAliases:
+    - hostnames:
+        - gitlab.zxiaowo.com
+      ip: 172.18.240.134
+  containers:
+    - name: jnlp
+      image: jenkins/inbound-agent:4.3-4
+      imagePullPolicy: IfNotPresent
+    # 私有基础镜像须预先拉到 node2，或配置 develop 中有效的 imagePullSecrets。
+    - name: builder
+      image: registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway:buildbase-go1.27-node25-v1-amd64
+      imagePullPolicy: IfNotPresent
+      command: ['cat']
+      tty: true
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+      env:
+        - name: HOME
+          value: /tmp
+        - name: GOMODCACHE
+          value: /cache/golib/ai-gateway
+        - name: GOCACHE
+          value: /tmp/go-build
+        - name: npm_config_cache
+          value: /cache/golib/ai-gateway-npm
+      resources:
+        requests:
+          cpu: 250m
+          memory: 512Mi
+        limits:
+          cpu: '2'
+          memory: 4Gi
+      volumeMounts:
+        - name: golib
+          mountPath: /cache/golib
+    - name: docker
+      image: docker:18.06.3-ce
+      imagePullPolicy: IfNotPresent
+      command: ['cat']
+      tty: true
+      volumeMounts:
+        - name: dockersock
+          mountPath: /var/run/docker.sock
+        - name: dockerconf
+          mountPath: /root/.docker
+    - name: kubectl
+      image: roffe/kubectl:latest
+      imagePullPolicy: IfNotPresent
+      command: ['cat']
+      tty: true
+      volumeMounts:
+        - name: kubeconf
+          mountPath: /root/.kube
+  volumes:
+    - name: golib
+      nfs:
+        server: 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com
+        path: /golib
+    - name: dockersock
+      hostPath:
+        path: /var/run/docker.sock
+    - name: dockerconf
+      nfs:
+        server: 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com
+        path: /dockerconf
+    - name: kubeconf
+      nfs:
+        server: 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com
+        path: /kubeconf
+''') {
+    node(agentLabel) {
+        timeout(time: 40, unit: 'MINUTES') {
+            def buildBranch = params.branch?.trim()
+            def repositoryUrl = 'ssh://git@gitlab.zxiaowo.com:10022/ai-tool/ai-gateway.git'
+            if (!buildBranch) {
+                error('请在 Jenkins 任务配置中设置 branch 参数。')
+            }
+            def branchSpec = buildBranch.startsWith('*/') || buildBranch.startsWith('origin/') || buildBranch.startsWith('refs/') ? buildBranch : "*/${buildBranch}"
+            def versionPrefix = params.majorver?.trim() ?: '0.1'
+            env.IMAGE_TAG = "${versionPrefix}.${env.BUILD_NUMBER}"
+            // EE 启动横幅对版本长度有限制，校验最终版本而非仅校验前缀。
+            if (!(env.IMAGE_TAG ==~ /[A-Za-z0-9_][A-Za-z0-9_.-]{0,49}/)) {
+                error('最终镜像版本须为 1–50 个字母、数字、下划线、点或连字符，且不能以点或连字符开头。')
+            }
+            env.IMAGE_REPOSITORY = 'registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway'
+            env.IMAGE_REF = "${env.IMAGE_REPOSITORY}:${env.IMAGE_TAG}"
+            env.K8S_NAMESPACE = 'ai-tool'
+            env.K8S_DEPLOYMENT = 'ai-gateway'
+            env.K8S_CONTAINER = 'ai-gateway'
+            env.BUILD_CLEANUP_ID = UUID.randomUUID().toString()
+
+            stage('Checkout') {
+                container('jnlp') {
+                    // 沿用现有 SSH 凭据和检出设置；私钥不进入源码子目录。
+                    env.GIT_SSH_COMMAND = ''
+                    withCredentials([sshUserPrivateKey(
+                        credentialsId: 'd2b955b4-01ac-49e2-bfb7-d4c170e1c44a',
+                        keyFileVariable: 'SSH_KEY_FILE'
+                    )]) {
+                        sh '''
+                            set +x
+                            set -eu
+                            mkdir -p ~/.ssh
+                            chmod 700 ~/.ssh
+                            cp "$SSH_KEY_FILE" ~/.ssh/id_rsa
+                            chmod 600 ~/.ssh/id_rsa
+                            cat > ~/.ssh/config <<'EOF'
+Host gitlab.zxiaowo.com
+    StrictHostKeyChecking no
+    UserKnownHostsFile /dev/null
+    PubkeyAcceptedKeyTypes +ssh-rsa
+EOF
+                            chmod 600 ~/.ssh/config
+                        '''
+                    }
+                    dir('ai-gateway') {
+                        checkout([
+                            $class: 'GitSCM',
+                            branches: [[name: branchSpec]],
+                            userRemoteConfigs: [[url: repositoryUrl]]
+                        ])
+                        env.GIT_COMMIT_SHA = sh(returnStdout: true, script: 'git rev-parse HEAD').trim()
+                        sh 'git log -1 --format="%h %s"'
+                    }
+                }
+            }
+            currentBuild.description = "${buildBranch} | ${env.IMAGE_TAG} | ${env.GIT_COMMIT_SHA.take(12)}"
+
+            def pushed = false
+            try {
+                stage('编译前后端') {
+                    container('builder') {
+                        dir('ai-gateway') {
+                            sh '''
+                                set -eu
+                                test "$(go env GOOS)/$(go env GOARCH)" = linux/amd64
+                                # 写入小文件检查 NAS 权限，失败时不继续构建。
+                                for cache_dir in "$GOMODCACHE" "$npm_config_cache"; do
+                                    mkdir -p "$cache_dir"
+                                    probe_file="$cache_dir/.write-check-$BUILD_CLEANUP_ID"
+                                    (set -C; : > "$probe_file")
+                                    rm "$probe_file"
+                                done
+                                mkdir -p "$GOCACHE"
+                                go version
+                                go env GOMODCACHE GOCACHE
+                                node --version
+                                (cd ui && npm ci --prefer-offline)
+                                mkdir -p ee/cmd/bifrost-http/ui
+                                make -C ee build VERSION="$IMAGE_TAG"
+                                test -s ee/cmd/bifrost-http/ui/index.html
+                                test -x ee/tmp/bifrost-http
+                                mkdir -p .jenkins-artifacts
+                                cp ee/tmp/bifrost-http .jenkins-artifacts/main
+                                cp transports/docker-entrypoint.sh .jenkins-artifacts/docker-entrypoint.sh
+                                chmod 755 .jenkins-artifacts/main .jenkins-artifacts/docker-entrypoint.sh
+                            '''
+                        }
+                    }
+                }
+                stage('Docker build') {
+                    container('docker') {
+                        dir('ai-gateway') {
+                            sh '''
+                                set -eu
+                                test -f Dockerfile
+                                test -s .jenkins-artifacts/main
+                                test -x .jenkins-artifacts/main
+                                test -s .jenkins-artifacts/docker-entrypoint.sh
+                                test -x .jenkins-artifacts/docker-entrypoint.sh
+                                docker version
+                                # 为各阶段加本次 UUID 标记；临时文件在源码目录之外。
+                                awk -v build_id="$BUILD_CLEANUP_ID" '
+                                    { print }
+                                    toupper($1) == "FROM" {
+                                        print "LABEL com.zxiaowo.jenkins.build-id=" build_id
+                                    }
+                                ' Dockerfile > "$WORKSPACE/Dockerfile.ai-gateway.$BUILD_CLEANUP_ID"
+                                DOCKER_BUILDKIT=0 docker build --force-rm \
+                                    -f "$WORKSPACE/Dockerfile.ai-gateway.$BUILD_CLEANUP_ID" \
+                                    --build-arg VERSION="$IMAGE_TAG" \
+                                    --build-arg VCS_REF="$GIT_COMMIT_SHA" \
+                                    -t "$IMAGE_REF" .
+                                test "$(docker image inspect --format '{{.Os}}/{{.Architecture}}' "$IMAGE_REF")" = linux/amd64
+                                docker image inspect --format '{{.Os}}/{{.Architecture}} {{.Id}}' "$IMAGE_REF"
+                            '''
+                        }
+                    }
+                }
+                stage('Docker push') {
+                    container('docker') {
+                        sh '''
+                            set -eu
+                            docker push "$IMAGE_REF"
+                        '''
+                    }
+                    pushed = true
+                    echo "镜像已推送：${env.IMAGE_REF}；提交：${env.GIT_COMMIT_SHA}"
+                }
+            } finally {
+                // 清理自身失败不掩盖正在传播的构建、推送或中断异常。
+                try {
+                    stage('清理本次构建镜像') {
+                        container('docker') {
+                            def cleanupStatus = sh(returnStatus: true, script: '''
+                                set -eu
+                                rm -f "$WORKSPACE/Dockerfile.ai-gateway.$BUILD_CLEANUP_ID"
+                                image_ids=$(docker images -aq --filter "label=com.zxiaowo.jenkins.build-id=$BUILD_CLEANUP_ID")
+                                cleanup_failed=0
+                                for image_id in $image_ids; do
+                                    if docker image inspect "$image_id" >/dev/null 2>&1; then
+                                        if ! docker rmi "$image_id"; then
+                                            cleanup_failed=1
+                                        fi
+                                    fi
+                                done
+                                exit "$cleanup_failed"
+                            ''')
+                            if (cleanupStatus != 0) {
+                                echo '本次镜像清理未全部成功；未执行强制删除或全局清理。'
+                                if (pushed) {
+                                    currentBuild.result = 'UNSTABLE'
+                                }
+                            }
+                        }
+                    }
+                } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException interrupted) {
+                    throw interrupted
+                } catch (Exception cleanupError) {
+                    echo '清理阶段无法完成，请检查 agent 与 Docker 连接；原构建结果保留。'
+                    if (pushed) {
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+
+            stage('Deploy') {
+                if (params.deploy?.toString() == 'true') {
+                    container('kubectl') {
+                        // 沿用已确认的挂载上下文；只修改已有工作负载的指定容器。
+                        sh '''
+                            set -eu
+                            kubectl config current-context
+                            container_names=$(kubectl -n "$K8S_NAMESPACE" get deployment "$K8S_DEPLOYMENT" \
+                                -o jsonpath='{.spec.template.spec.containers[*].name}')
+                            found=false
+                            for container_name in $container_names; do
+                                if [ "$container_name" = "$K8S_CONTAINER" ]; then
+                                    found=true
+                                fi
+                            done
+                            if [ "$found" != true ]; then
+                                echo "目标 Deployment 中不存在容器：$K8S_CONTAINER" >&2
+                                exit 1
+                            fi
+                            kubectl -n "$K8S_NAMESPACE" set image \
+                                "deployment/$K8S_DEPLOYMENT" "$K8S_CONTAINER=$IMAGE_REF"
+                            kubectl -n "$K8S_NAMESPACE" rollout status \
+                                "deployment/$K8S_DEPLOYMENT" --timeout=180s
+                        '''
+                    }
+                } else {
+                    echo '本次仅构建并推送镜像，未执行部署。'
+                }
+            }
+            echo "本次镜像：${env.IMAGE_REF}"
+        }
+    }
+}
