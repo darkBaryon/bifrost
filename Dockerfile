@@ -1,27 +1,4 @@
-# 复用预装 Go、Node 和编译工具的 AMD64 镜像，制作方式见 deploy/Dockerfile.buildbase。
-FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway:buildbase-go1.27-node25-v1-amd64@sha256:291a045df1c1d656583d3b2717bd74a05992183d3cbdca0d56d9355025105e20 AS builder
-WORKDIR /build
-
-# 先安装锁定依赖，源码变动时可复用依赖层。
-COPY ui/package.json ui/package-lock.json ./ui/
-RUN cd ui && npm ci
-COPY ui/ ./ui/
-COPY ee/ ./ee/
-COPY core/ ./core/
-COPY framework/ ./framework/
-COPY plugins/ ./plugins/
-COPY transports/ ./transports/
-
-ARG VERSION=dev
-RUN case "$VERSION" in \
-      ''|[!A-Za-z0-9_]*|*[!A-Za-z0-9_.-]*) echo '版本号格式不合法' >&2; exit 1 ;; \
-    esac \
-    && test "${#VERSION}" -le 50 \
-    && mkdir -p ee/cmd/bifrost-http/ui \
-    && make -C ee build VERSION="$VERSION" \
-    && test -s ee/cmd/bifrost-http/ui/index.html \
-    && test -x ee/tmp/bifrost-http
-
+# 前后端由 deploy/Jenkinsfile 编译；此文件只封装运行镜像。
 FROM registry.cn-hangzhou.aliyuncs.com/yxdocker/alpine:3.23.5-amd64
 WORKDIR /app
 RUN apk add --no-cache musl libgcc ca-certificates zlib \
@@ -29,9 +6,9 @@ RUN apk add --no-cache musl libgcc ca-certificates zlib \
     && mkdir -p /app/data/logs \
     && chown -R 1000:0 /app/data \
     && chmod -R g=rwX /app/data
-COPY --from=builder /build/ee/tmp/bifrost-http /app/main
-COPY --from=builder /build/transports/docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN chmod 755 /app/main /app/docker-entrypoint.sh
+# Jenkins 在复制前设置 755 权限，避免传统构建器 chmod 再生成完整二进制层。
+COPY .jenkins-artifacts/main /app/main
+COPY .jenkins-artifacts/docker-entrypoint.sh /app/docker-entrypoint.sh
 
 ARG VERSION=dev
 ARG VCS_REF=unknown

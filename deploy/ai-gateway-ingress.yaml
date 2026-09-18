@@ -1,24 +1,26 @@
-# 可选：已有外部 HTTPS 反代时不需要应用本文件。
-# 替换域名和 IngressClass，在 ai-tool 中准备对应域名的 ai-gateway-tls 证书 Secret。
-apiVersion: networking.k8s.io/v1
+# 适配当前 Kubernetes 1.14.2 和 nginx-ingress-controller 0.24.1。
+# 先在 ai-tool 中准备 ai-gateway-tls，见部署步骤；已有外部反代时可不应用。
+apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: ai-gateway
   namespace: ai-tool
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
 spec:
-  ingressClassName: replace-ingress-class
   tls:
     - hosts:
         - bifrost.zxiaowo.com
-      secretName: ai-gateway-tls
+      secretName: zxiaowo
   rules:
     - host: bifrost.zxiaowo.com
       http:
         paths:
           - path: /
-            pathType: Prefix
             backend:
-              service:
-                name: ai-gateway
-                port:
-                  number: 8080
+              serviceName: ai-gateway
+              servicePort: 8080
