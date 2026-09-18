@@ -17,6 +17,13 @@ spec:
     - name: jnlp
       image: jenkins/inbound-agent:4.3-4
       imagePullPolicy: IfNotPresent
+      # 沿用 root 拥有的旧 Go 缓存；与 builder 统一身份，避免工作区权限冲突。
+      securityContext:
+        runAsUser: 0
+        runAsGroup: 0
+      env:
+        - name: HOME
+          value: /root
     # 私有基础镜像须预先拉到 node2，或配置 develop 中有效的 imagePullSecrets。
     - name: builder
       image: registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway:buildbase-go1.27-node25-v1-amd64
@@ -24,13 +31,13 @@ spec:
       command: ['cat']
       tty: true
       securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
+        runAsUser: 0
+        runAsGroup: 0
       env:
         - name: HOME
           value: /tmp
         - name: GOMODCACHE
-          value: /cache/golib/ai-gateway
+          value: /cache/golib/pkg/mod
         - name: GOCACHE
           value: /tmp/go-build
         - name: npm_config_cache
@@ -231,15 +238,19 @@ EOF
                                 set -eu
                                 rm -f "$WORKSPACE/Dockerfile.ai-gateway.$BUILD_CLEANUP_ID"
                                 image_ids=$(docker images -aq --filter "label=com.zxiaowo.jenkins.build-id=$BUILD_CLEANUP_ID")
-                                cleanup_failed=0
                                 for image_id in $image_ids; do
                                     if docker image inspect "$image_id" >/dev/null 2>&1; then
                                         if ! docker rmi "$image_id"; then
-                                            cleanup_failed=1
+                                            echo "镜像 $image_id 暂未删除，清理结束后复查。"
                                         fi
                                     fi
                                 done
-                                exit "$cleanup_failed"
+                                # 删除子镜像可能连带清理父层，以最终残留为准。
+                                remaining_ids=$(docker images -aq --filter "label=com.zxiaowo.jenkins.build-id=$BUILD_CLEANUP_ID")
+                                if [ -n "$remaining_ids" ]; then
+                                    echo "本次构建仍有镜像残留：$remaining_ids" >&2
+                                    exit 1
+                                fi
                             ''')
                             if (cleanupStatus != 0) {
                                 echo '本次镜像清理未全部成功；未执行强制删除或全局清理。'
@@ -280,8 +291,6 @@ EOF
                             fi
                             kubectl -n "$K8S_NAMESPACE" set image \
                                 "deployment/$K8S_DEPLOYMENT" "$K8S_CONTAINER=$IMAGE_REF"
-                            kubectl -n "$K8S_NAMESPACE" rollout status \
-                                "deployment/$K8S_DEPLOYMENT" --timeout=180s
                         '''
                     }
                 } else {

@@ -20,21 +20,22 @@ sudo docker image inspect registry.cn-hangzhou.aliyuncs.com/yxdocker/ai-gateway:
 
 ## NAS 目录及权限
 
-NAS 服务器为 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com，Go 与 npm 分别挂载 /golib 和 /npmlib。builder 以 1000:1000 运行，与 jnlp 的工作区用户对齐。
+NAS 服务器为 2f2de4a311-mgj14.cn-shenzhen.nas.aliyuncs.com，Go 与 npm 分别挂载 /golib 和 /npmlib。旧 /golib 为完整 GOPATH，实际模块目录 /golib/pkg/mod 属于 root。jnlp 与 builder 统一以 0:0 运行以沿用该目录，不递归修改共享缓存权限；jnlp HOME=/root。
 
 | 缓存 | 容器路径 | NAS 路径 |
 |---|---|---|
-| Go 模块下载 | /cache/golib/ai-gateway | /golib/ai-gateway |
+| Go 模块下载 | /cache/golib/pkg/mod | /golib/pkg/mod |
 | npm 下载包 | /cache/npmlib/ai-gateway | /npmlib/ai-gateway |
 | Go 编译缓存 | /tmp/go-build | 不保存到 NAS，随 Pod 删除 |
 
-在已确认 /mnt 挂载该 NAS 根目录的 node1 上，仅准备这两个专用目录：
+在已确认 /mnt 挂载该 NAS 根目录的 node1 上，确认旧 Go 缓存存在，并准备独立 npm 缓存目录：
 
 ```bash
 findmnt -T /mnt
-sudo mkdir -p /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
-sudo chown 1000:1000 /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
-sudo chmod 0770 /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
+sudo ls -ldn /mnt/golib/pkg/mod
+sudo mkdir -p /mnt/npmlib/ai-gateway
+sudo chown 1000:1000 /mnt/npmlib/ai-gateway
+sudo chmod 0770 /mnt/npmlib/ai-gateway
 ```
 
 首次运行前必须先创建 /npmlib，否则 Pod 会挂载失败。旧 /golib/ai-gateway-npm 缓存不再使用，本次不迁移或删除，npm 会在新目录重新填充缓存。不要递归更改已有 /golib 或 /npmlib 的权限。若已有专用目录内部文件属于其他用户，需单独确认迁移权限；流水线在编译前进行实际写入探测。npm 使用 --prefer-offline，命中缓存仍重新安装 node_modules，缺少的包仍需联网。Go 也会下载新增依赖，不保证完全离线。下载缓存可由同一可信任务的并行构建复用，缓存探测文件按构建 UUID 区分；禁止构建期间清空缓存。源码、node_modules 和 Go 编译缓存按 Pod 隔离。不同任务若推送同一镜像仓库，应使用不同 majorver 前缀，避免 BUILD_NUMBER 相同造成标签覆盖。
@@ -47,7 +48,7 @@ sudo chmod 0770 /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
 
 镜像版本仍为 majorver.BUILD_NUMBER，默认前缀 0.1。最终镜像校验 linux/amd64；清理仅针对本次 UUID 标签，不清理基础镜像或 NAS 缓存。最终 Alpine 运行镜像仍需安装少量运行库，本次未制作独立运行基础镜像。
 
-部署目标仍为 ai-tool 命名空间中的 ai-gateway Deployment 和同名容器。deploy=true 只更新已有 Deployment，不创建资源。部署清单已适配 Kubernetes 1.14.2；首次创建资源和准备 Secret 见 K8s部署步骤.md。
+部署目标仍为 ai-tool 命名空间中的 ai-gateway Deployment 和同名容器。deploy=true 只更新已有 Deployment，不创建资源，也不等待 Pod 就绪；流水线成功仅表示镜像更新命令执行成功，不代表新版本已启动完成。部署清单已适配 Kubernetes 1.14.2；首次创建资源和准备 Secret 见 K8s部署步骤.md。
 
 ## 验证边界
 
@@ -58,3 +59,5 @@ sudo chmod 0770 /mnt/golib/ai-gateway /mnt/npmlib/ai-gateway
 回滚时同时恢复旧流水线、Dockerfile 和 .dockerignore，即可回到 Docker 内编译。NAS 缓存保留，不涉及数据库变更。
 
 本次调整：移除固定 NAS 源码缓存方案，采用独立 Pod 工作区浅克隆；未修改 Jenkins 任务实际的并发开关，NAS 依赖缓存保留。
+
+身份说明：两个容器必须保持同一用户。当前统一为 root 以复用旧 /golib/pkg/mod；不再使用之前的 1000:1000 方案。首次编译仍会实际写入探测，若 NAS 配置 root_squash 或额外 ACL 导致拒绝，应按存储权限排查，不要递归 chmod 共享缓存。新配置仅对新建 Pod 生效。
