@@ -120,7 +120,7 @@ func TestJudgeModelErrorPolicy(t *testing.T) {
 	// 上游 key 池没有支持判官模型的 key 时：IsBifrostError 为 false、无状态码、消息由网关自造——最常见的配置错误，必须可诊断。
 	noKey := &fakeClient{err: &schemas.BifrostError{Error: &schemas.ErrorField{Message: "no keys found that support model: m"}}}
 	_, err = host.NewJudgeModel(noKey, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || !strings.Contains(err.Error(), "category=gateway") || !strings.Contains(err.Error(), "no keys found that support model") {
+	if err == nil || !strings.Contains(err.Error(), "category=gateway_internal") || !strings.Contains(err.Error(), "no keys found that support model") {
 		t.Fatalf("gateway-generated message lost: %v", err)
 	}
 	// 上游真实取消形状：IsBifrostError 为 true 且带 499。
@@ -128,23 +128,24 @@ func TestJudgeModelErrorPolicy(t *testing.T) {
 	long := strings.Repeat("模", 100)
 	cancelled := &fakeClient{err: &schemas.BifrostError{IsBifrostError: true, StatusCode: &cancelStatus, Error: &schemas.ErrorField{Type: schemas.Ptr("request_cancelled"), Message: long}}}
 	_, err = host.NewJudgeModel(cancelled, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || !strings.Contains(err.Error(), "category=gateway") || !strings.Contains(err.Error(), "type=request_cancelled") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
+	if err == nil || !strings.Contains(err.Error(), "category=gateway_internal") || !strings.Contains(err.Error(), "type=request_cancelled") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
 		t.Fatalf("gateway message not kept, not truncated or broke UTF-8: %v", err)
 	}
-	// 网关合成的 502/503（连不上 provider、判官 key 全部失效或全被过滤）：只输出本地固定类别。
+	// 网关合成的错误（连不上 provider 502、判官 key 全部失效 502、全被过滤 503）：只附加比对命中的常量名。
 	// Error.Type 由 provider 正文可控，同名类型带回显时 code/message 也不得进入错误链。
-	bad := 502
-	for kind, category := range map[string]string{schemas.ProviderConnectionFailed: "gateway_connection_failed", "upstream_credentials_exhausted": "gateway_credentials_exhausted", "no_eligible_keys": "gateway_no_eligible_keys"} {
-		spoofed := &fakeClient{err: &schemas.BifrostError{StatusCode: &bad, Error: &schemas.ErrorField{Type: schemas.Ptr(kind), Code: schemas.Ptr("code " + echo), Message: "msg " + echo}}}
+	for kind, status := range map[string]int{schemas.ProviderConnectionFailed: 502, "upstream_credentials_exhausted": 502, "no_eligible_keys": 503} {
+		code := status
+		spoofed := &fakeClient{err: &schemas.BifrostError{StatusCode: &code, Error: &schemas.ErrorField{Type: schemas.Ptr(kind), Code: schemas.Ptr("code " + echo), Message: "msg " + echo}}}
 		_, err = host.NewJudgeModel(spoofed, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-		if err == nil || !strings.Contains(err.Error(), "category="+category) || strings.Contains(err.Error(), echo) || strings.Contains(log.joined(), echo) {
-			t.Fatalf("%s: diagnostics category missing or fields leaked: %v", kind, err)
+		if err == nil || !strings.Contains(err.Error(), "category=provider_unavailable") || !strings.Contains(err.Error(), "known_type="+kind) || strings.Contains(err.Error(), echo) || strings.Contains(log.joined(), echo) {
+			t.Fatalf("%s: known type missing or fields leaked: %v", kind, err)
 		}
 	}
+	bad := 502
 	// 同样是 502，但类型来自 provider 正文：只按状态码归类。
 	body := &fakeClient{err: &schemas.BifrostError{StatusCode: &bad, Error: &schemas.ErrorField{Type: schemas.Ptr("server_error " + echo), Message: echo}}}
 	_, err = host.NewJudgeModel(body, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || strings.Contains(err.Error(), echo) || !strings.Contains(err.Error(), "category=provider_unavailable") {
+	if err == nil || strings.Contains(err.Error(), echo) || strings.Contains(log.joined(), echo) || !strings.Contains(err.Error(), "category=provider_unavailable") || strings.Contains(err.Error(), "known_type") {
 		t.Fatalf("provider 502 leaked: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
