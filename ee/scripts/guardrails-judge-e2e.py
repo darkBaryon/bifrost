@@ -67,11 +67,11 @@ def main():
     cfg['providers']['deepseek'] = {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': ['deepseek-v4-flash']}], 'network_config': {'max_retries': 0}}
     node = identity_smoke.Node(str(REPO / 'ee/tmp/bifrost-http'), root / 'node', cfg, '')
     results = []
-    outcome = {'error': None}
+    error = None
 
     def persist():
-        # 逐条结果与中途异常都落盘，异常中断也保留已完成部分。
-        (root / 'results.json').write_text(json.dumps({'results': results, 'error': outcome['error']}, ensure_ascii=False, indent=1))
+        # 逐条结果与中途异常都落盘，异常中断也保留已完成部分；error 由 main 的 except 写入，闭包读到最新值。
+        (root / 'results.json').write_text(json.dumps({'results': results, 'error': error}, ensure_ascii=False, indent=1))
 
     try:
         node.start()
@@ -90,7 +90,7 @@ def main():
                 print(f"{s['id']:4} {stage:6} expect={s['expect']:5} got={got:8} {code:35} {ms:6.0f}ms", flush=True)
         node.expect(200, '/api/guardrails/reset')
     except Exception as exc:  # noqa: BLE001 - 记录现场后按失败退出
-        outcome['error'] = f'{type(exc).__name__}: {exc}'
+        error = f'{type(exc).__name__}: {exc}'
     finally:
         node.stop()
         model.shutdown()
@@ -107,9 +107,9 @@ def main():
             print('MISMATCH' if r['got'] != 'failure' else 'FAILURE', r)
     print('log:', root / 'node' / 'server.log')
     print('results:', root / 'results.json')
-    if outcome['error']:
-        print('ABORTED', outcome['error'], f'({len(results)} results kept)')
-    if outcome['error'] or len(ok) != len(results) or failures:
+    if error:
+        print('ABORTED', error, f'({len(results)} results kept)')
+    if error or len(ok) != len(results) or failures:
         sys.exit(1)
 
 

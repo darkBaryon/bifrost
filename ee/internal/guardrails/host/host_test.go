@@ -107,7 +107,7 @@ func TestJudgeModelRequest(t *testing.T) {
 	}
 }
 
-// provider 错误的 type/code/message 都可能回显送检内容，一律不进日志与错误链；网关自身错误保留截断后的消息用于排障。
+// provider 响应的 type/code/message 都可能回显送检内容，一律不进日志与错误链；网关自造的错误保留截断后的消息用于排障。
 func TestJudgeModelErrorPolicy(t *testing.T) {
 	status := 429
 	echo := "私密回显"
@@ -117,10 +117,16 @@ func TestJudgeModelErrorPolicy(t *testing.T) {
 	if err == nil || strings.Contains(err.Error(), echo) || strings.Contains(log.joined(), echo) || !strings.Contains(err.Error(), "status=429") || !strings.Contains(err.Error(), "category=provider_rate_limited") {
 		t.Fatalf("provider fields leaked or category missing: err=%v logs=%s", err, log.joined())
 	}
-	long := "no keys found that support model: " + strings.Repeat("模", 100)
-	gateway := &fakeClient{err: &schemas.BifrostError{IsBifrostError: true, Error: &schemas.ErrorField{Type: schemas.Ptr("request_cancelled"), Message: long}}}
-	_, err = host.NewJudgeModel(gateway, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || !strings.Contains(err.Error(), "no keys found") || !strings.Contains(err.Error(), "type=request_cancelled") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
+	// 上游 key 池没有支持判官模型的 key 时：IsBifrostError 为 false、无状态码、消息由网关自造——最常见的配置错误，必须可诊断。
+	noKey := &fakeClient{err: &schemas.BifrostError{Error: &schemas.ErrorField{Message: "no keys found that support model: m"}}}
+	_, err = host.NewJudgeModel(noKey, "deepseek", "m", log).Complete(context.Background(), "s", "u")
+	if err == nil || !strings.Contains(err.Error(), "category=gateway") || !strings.Contains(err.Error(), "no keys found that support model") {
+		t.Fatalf("gateway-generated message lost: %v", err)
+	}
+	long := strings.Repeat("模", 100)
+	cancelled := &fakeClient{err: &schemas.BifrostError{IsBifrostError: true, Error: &schemas.ErrorField{Type: schemas.Ptr("request_cancelled"), Message: long}}}
+	_, err = host.NewJudgeModel(cancelled, "deepseek", "m", log).Complete(context.Background(), "s", "u")
+	if err == nil || !strings.Contains(err.Error(), "type=request_cancelled") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
 		t.Fatalf("gateway message not kept, not truncated or broke UTF-8: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())

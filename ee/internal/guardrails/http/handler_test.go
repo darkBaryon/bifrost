@@ -36,14 +36,16 @@ type fakeSwapper struct {
 	mu      sync.Mutex
 	swaps   []*guardrails.Checker
 	options []safetyplugin.Options
-	// gate 非 nil 时，Swap 先发出 entered 再等待 gate，用来把"已写库、未发布"这一刻固定住。
+	// gate 非 nil 时，只有第一次 Swap 先发出 entered 再等待 gate，把"已写库、未发布"这一刻固定住；之后的 Swap 不阻塞。
 	entered chan struct{}
 	gate    chan struct{}
+	gated   bool
 	fail    error
 }
 
 func (s *fakeSwapper) Swap(c *guardrails.Checker, o safetyplugin.Options) error {
-	if s.gate != nil {
+	if s.gate != nil && !s.gated {
+		s.gated = true
 		s.entered <- struct{}{}
 		<-s.gate
 	}
@@ -95,8 +97,8 @@ func setup(t *testing.T, builder Builder, locked Locked) (*router.Router, *fakeS
 	return r, swapper, log
 }
 
-func call(t *testing.T, r *router.Router, path, body string) (int, map[string]any) {
-	t.Helper()
+// tryCall 发一次请求并解析 JSON；不调用 t.Fatalf，可在工作 goroutine 中使用。
+func tryCall(r *router.Router, path, body string) (int, map[string]any, error) {
 	ctx := &fasthttp.RequestCtx{}
 	ctx.Init(&fasthttp.Request{}, nil, nil)
 	ctx.Request.Header.SetMethod("POST")
@@ -107,10 +109,19 @@ func call(t *testing.T, r *router.Router, path, body string) (int, map[string]an
 	var out map[string]any
 	if len(ctx.Response.Body()) > 0 {
 		if err := json.Unmarshal(ctx.Response.Body(), &out); err != nil {
-			t.Fatalf("body %s", ctx.Response.Body())
+			return ctx.Response.StatusCode(), nil, fmt.Errorf("body %s: %w", ctx.Response.Body(), err)
 		}
 	}
-	return ctx.Response.StatusCode(), out
+	return ctx.Response.StatusCode(), out, nil
+}
+
+func call(t *testing.T, r *router.Router, path, body string) (int, map[string]any) {
+	t.Helper()
+	status, out, err := tryCall(r, path, body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return status, out
 }
 
 func TestLifecycle(t *testing.T) {
@@ -214,53 +225,68 @@ func TestResetSwapFailureIsReported(t *testing.T) {
 	}
 }
 
-// update 与 reset 从写库到发布共用一把锁：一方停在"已写库、未发布"时，另一方必须等它发布完；最终库中状态与最后一次发布一致。
+type outcome struct {
+	status int
+	err    error
+}
+
+// update 与 reset 从写库到发布共用一把锁：第一方停在"已写库、未发布"时，第二方不得已经改动库；
+// 第一方发布后第二方才执行，最终库中状态与最后一次发布一致。去掉 Handler 的锁，第二方会在第一方阻塞期间写库，本用例失败。
 func TestUpdateAndResetAreSerialized(t *testing.T) {
+	const wait = 200 * time.Millisecond
+	updateBody := `{"config":` + validConfig + `,"version":0}`
 	for _, first := range []string{"update", "reset"} {
 		t.Run(first+" first", func(t *testing.T) {
 			r, swapper, _ := setup(t, fakeBuilder{}, nil)
-			if first == "reset" { // 让 reset 有东西可删
-				if status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`); status != 200 {
+			second, secondPath, secondBody := "reset", "/api/guardrails/reset", ""
+			if first == "reset" { // 让 reset 有东西可删；第二方是 update
+				if status, _ := call(t, r, "/api/guardrails/update", updateBody); status != 200 {
 					t.Fatal("seed update failed")
 				}
+				second, secondPath, secondBody = "update", "/api/guardrails/update", updateBody
 			}
 			swapper.entered, swapper.gate = make(chan struct{}, 1), make(chan struct{})
-			firstDone := make(chan int, 1)
-			go func() {
-				if first == "update" {
-					status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`)
-					firstDone <- status
-				} else {
-					status, _ := call(t, r, "/api/guardrails/reset", "")
-					firstDone <- status
-				}
-			}()
-			<-swapper.entered // 第一方已写库，停在发布前
-			secondDone := make(chan int, 1)
-			go func() {
-				if first == "update" {
-					status, _ := call(t, r, "/api/guardrails/reset", "")
-					secondDone <- status
-				} else {
-					status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`)
-					secondDone <- status
-				}
-			}()
+			firstPath, firstBody := "/api/guardrails/update", updateBody
+			if first == "reset" {
+				firstPath, firstBody = "/api/guardrails/reset", ""
+			}
+			run := func(path, body string) chan outcome {
+				done := make(chan outcome, 1)
+				go func() {
+					status, _, err := tryCall(r, path, body)
+					done <- outcome{status, err}
+				}()
+				return done
+			}
+			firstDone := run(firstPath, firstBody)
 			select {
-			case <-secondDone:
-				t.Fatal("second request completed while the first held the persist-and-publish lock")
-			case <-time.After(100 * time.Millisecond):
+			case <-swapper.entered: // 第一方已写库，停在发布前
+			case <-time.After(5 * time.Second):
+				t.Fatal("first request never reached publish")
+			}
+			secondDone := run(secondPath, secondBody)
+			select {
+			case o := <-secondDone:
+				t.Fatalf("second request (%s) completed while the first held the persist-and-publish lock: %+v", second, o)
+			case <-time.After(wait):
+			}
+			// 第一方仍持锁：库里必须还是第一方写入后的状态，第二方不得已经写库。
+			_, body := call(t, r, "/api/guardrails/get", "")
+			if configured := body["config"] != nil; configured != (first == "update") {
+				t.Fatalf("second request (%s) wrote to the store while the first held the lock: %v", second, body)
 			}
 			swapper.gate <- struct{}{} // 放行第一方发布
-			if status := <-firstDone; status != 200 {
-				t.Fatalf("first %s status %d", first, status)
+			for _, done := range []chan outcome{firstDone, secondDone} {
+				select {
+				case o := <-done:
+					if o.err != nil || o.status != 200 {
+						t.Fatalf("request outcome %+v", o)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("request did not finish after the lock was released")
+				}
 			}
-			<-swapper.entered // 第二方轮到发布
-			swapper.gate <- struct{}{}
-			if status := <-secondDone; status != 200 {
-				t.Fatalf("second request status %d", status)
-			}
-			_, body := call(t, r, "/api/guardrails/get", "")
+			_, body = call(t, r, "/api/guardrails/get", "")
 			swapper.mu.Lock()
 			defer swapper.mu.Unlock()
 			last := swapper.swaps[len(swapper.swaps)-1]

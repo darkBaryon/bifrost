@@ -11,6 +11,7 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
+// testOptions 是本包测试夹具统一使用的拒绝策略，newPlugin 与断言共用。
 var testOptions = safety.Options{StatusCode: 400, DenyMessage: "请求已拦截"}
 
 func outputChecker(t *testing.T) *guardrails.Checker {
@@ -127,7 +128,7 @@ func TestSwapReplacesDenyOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	got, bErr, _ := p.PostLLMHook(inflight, response("unsafe"), nil)
-	if got != nil || bErr == nil || *bErr.StatusCode != 400 || bErr.Error.Message != "请求已拦截" {
+	if got != nil || bErr == nil || *bErr.StatusCode != testOptions.StatusCode || bErr.Error.Message != testOptions.DenyMessage {
 		t.Fatalf("in-flight request did not keep its deny options: %+v", bErr)
 	}
 	got, bErr, _ = p.PostLLMHook(primed(t, p, testContext()), response("unsafe"), nil)

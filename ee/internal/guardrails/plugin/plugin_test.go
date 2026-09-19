@@ -48,7 +48,7 @@ func newPlugin(t *testing.T, rules []guardrails.Rule, d detectorFunc) (*safety.P
 		t.Fatal(err)
 	}
 	log := &testLogger{}
-	p, err := safety.New(e, safety.Options{StatusCode: 400, DenyMessage: "请求已拦截"}, log)
+	p, err := safety.New(e, testOptions, log)
 	if err != nil {
 		t.Fatal(err)
 	}
