@@ -101,7 +101,8 @@ var synthesizedGatewayTypes = map[string]bool{
 	"no_eligible_keys":               true,
 }
 
-// judgeError 把网关错误转成不含送检内容的普通 error。类别名只陈述可验证的事实，不断言来源：
+// judgeError 把网关错误转成不含送检内容的普通 error。类别名只陈述可验证的事实：来源只在能从网关自己的标记推出时才写
+// （gateway_internal），按状态码派生的类别不断言来源：
 //   - IsBifrostError 为 true 或没有状态码：文本由网关或传输层生成（取消、超时、key 池没有支持判官模型的 key），
 //     provider 正文无法影响这些字段，记 category=gateway_internal 并保留类型、代码与截断后的消息；
 //   - 带状态码：只按状态码归入 http_* 类别（状态码可能来自 provider 响应，也可能是网关合成的 502/503）；
@@ -136,17 +137,17 @@ func judgeError(bErr *schemas.BifrostError) error {
 
 // statusCategory 只按 HTTP 状态码给出固定类别，不看状态码由谁产生，也不引用任何自由文本。
 // 数字是 HTTP 状态码；本包不引入 HTTP 框架，故不用命名常量。
-func statusCategory(code int) string {
+func statusCategory(status int) string {
 	switch {
-	case code == 401 || code == 403:
+	case status == 401 || status == 403:
 		return "http_auth"
-	case code == 429:
+	case status == 429:
 		return "http_rate_limited"
-	case code == 499:
+	case status == 499:
 		return "http_cancelled"
-	case code >= 500:
+	case status >= 500:
 		return "http_unavailable"
-	case code >= 400:
+	case status >= 400:
 		return "http_rejected"
 	}
 	return "http_other"
