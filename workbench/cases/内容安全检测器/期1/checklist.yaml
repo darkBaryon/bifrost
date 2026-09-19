@@ -24,19 +24,23 @@
   - ee/internal/guardrails/detectors/secrets/data/NOTICE
   - ee/internal/guardrails/detectors/judge/detector.go
   - ee/internal/guardrails/detectors/judge/prompts
+  - ee/internal/guardrails/host/judge.go
   - ee/internal/app/guardrails.go
+  - ee/scripts/secrets-rules-convert.py
 必含符号:
   - {grep: 'func New', in: ee/internal/guardrails/detectors/secrets}
   - {grep: 'func New', in: ee/internal/guardrails/detectors/judge}
   - {grep: 'sk-bf-', in: ee/internal/guardrails/detectors/secrets}
-  - {grep: 'BifrostContextKeySkipPluginPipeline', in: ee/internal/app}
+  - {grep: 'Blocking', in: ee/internal/guardrails}
+  - {grep: 'PrepareContextForInternalRequest', in: ee/internal/guardrails/host}
 收敛评审:
   风险等级: L2
-  基线: fae2fe855
+  基线: c05dba215
   开发指南:
     - ee/internal/guardrails/README.md
 禁留标记:
   - {grep: 'net/http', in: ee/internal/guardrails}
   - {grep: 'fasthttp', in: ee/internal/guardrails}
   - {grep: 'core/schemas', in: ee/internal/guardrails/detectors}
+  - {grep: 'SkipPluginPipeline', in: ee/internal/app}
   - {grep: 'gitleaks/v8', in: ee/go.mod}
