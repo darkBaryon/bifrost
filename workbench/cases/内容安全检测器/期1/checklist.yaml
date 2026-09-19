@@ -11,6 +11,9 @@
   - name: guardrails-file-size
     run: find ee/internal/guardrails ee/internal/app -name '*.go' -exec awk 'END{if(NR>500)print FILENAME}' {} \;
     expect_empty: true
+  - name: guardrails-root-stdlib
+    run: find ee/internal/guardrails -maxdepth 1 -name '*.go' -exec grep -l 'fasthttp\|core/schemas\|net/http' {} \;
+    expect_empty: true
   - name: diff-check
     run: git diff --check
   - name: workbench-views
@@ -49,7 +52,8 @@
   - {grep: 'net/http', in: ee/internal/guardrails}
   - {grep: 'fasthttp', in: ee/internal/guardrails/detectors}
   - {grep: 'fasthttp', in: ee/internal/guardrails/config}
-  - {grep: 'fasthttp', in: ee/internal/guardrails/checker.go}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/persistence}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/host}
   - {grep: 'core/schemas', in: ee/internal/guardrails/detectors}
   - {grep: 'core/schemas', in: ee/internal/guardrails/config}
   - {grep: 'SkipPluginPipeline', in: ee/internal/app}
