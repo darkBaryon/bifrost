@@ -32,10 +32,11 @@
   - {grep: 'func New', in: ee/internal/guardrails/detectors/judge}
   - {grep: 'sk-bf-', in: ee/internal/guardrails/detectors/secrets}
   - {grep: 'Blocking', in: ee/internal/guardrails}
+  - {grep: 'TextTooLarge', in: ee/internal/guardrails}
   - {grep: 'PrepareContextForInternalRequest', in: ee/internal/guardrails/host}
 收敛评审:
   风险等级: L2
-  基线: c05dba215
+  基线: dba55b14b
   开发指南:
     - ee/internal/guardrails/README.md
 禁留标记:
