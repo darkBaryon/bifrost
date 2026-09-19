@@ -16,6 +16,29 @@ const (
 	High   Level = 3
 )
 
+// 等级在配置、规则数据和判官输出里的字符串名；只在这里定义，各处经 ParseLevel 解析。
+const (
+	LevelNameLow    = "low"
+	LevelNameMedium = "medium"
+	LevelNameHigh   = "high"
+)
+
+// ParseLevel 把等级名解析为 Level；未知名称返回 false。
+func ParseLevel(name string) (Level, bool) {
+	switch name {
+	case LevelNameLow:
+		return Low, true
+	case LevelNameMedium:
+		return Medium, true
+	case LevelNameHigh:
+		return High, true
+	}
+	return 0, false
+}
+
+// 拦截时返回给客户端的 HTTP 状态码范围；配置校验与插件构造共用同一对边界。
+const MinDenyStatus, MaxDenyStatus = 400, 599
+
 // Finding 只携带风险等级，不保留命中原文。
 type Finding struct{ Level Level }
 

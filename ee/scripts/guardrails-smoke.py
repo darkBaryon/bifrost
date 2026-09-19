@@ -15,7 +15,7 @@ identity_smoke = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(identity_smoke)
 
 MARKER = '[guardrails-test]'
-# 判官替身：系统提示词含此字样即视为判官调用，待审文本含 JUDGE_HIGH 时返回 high，否则 none。
+# 判官替身：系统提示词含此字样即视为判官调用（与 detectors/judge/prompts/*.md 首句耦合），待审文本含 JUDGE_HIGH 时返回 high，否则 none。
 JUDGE_PROMPT_HINT = '审核器'
 JUDGE_HIGH = '[judge-high]'
 MODEL = 'guardrails-test-model'
@@ -94,6 +94,19 @@ def check_response(node, model, text, *, code=None, calls=1, stream=False, judge
         assert body['choices'][0]['message']['content'] == '本地模型替身：' + text, body
 
 
+def node_config(root, base, username, password):
+    """隔离 EE 实例的配置：临时 SQLite、本地替身模型；判官 e2e 脚本在此基础上追加真实 provider。"""
+    return {
+        'client': {'enable_logging': False},
+        'framework': {'pricing': {'pricing_url': base + '/pricing', 'model_parameters_url': base + '/parameters',
+                                  'mcp_library_url': base + '/mcp', 'mcp_library_sync_interval': 0}},
+        'config_store': {'enabled': True, 'type': 'sqlite', 'config': {'path': str(root / 'config.db')}},
+        'governance': {'auth_config': {'admin_username': username, 'admin_password': password, 'is_enabled': True}},
+        'providers': {'openai': {'keys': [{'name': 'local-test', 'value': 'sk-local-fake', 'weight': 1, 'models': [MODEL]}],
+                                 'network_config': {'base_url': base + '/v1', 'max_retries': 0}}},
+    }
+
+
 def login_if_needed(node, password):
     """会话存在库里，重启后仍有效；只在会话失效时重新登录，避免触发登录频率限制。"""
     if node.call('/api/guardrails/get')[0] != 200:
@@ -129,16 +142,22 @@ def check_production(node, model, password):
     check_response(node, model, JUDGE_HIGH + ' 危险内容', code='content_safety_blocked', calls=0)
     check_response(node, model, '普通测试消息', stream=True, code='content_safety_output_stream_unsupported', calls=0, judge_calls=0)
     node.expect(409, '/api/guardrails/update', {'config': guardrails_config(), 'version': 0})
-    state, _ = node.expect(200, '/api/guardrails/update', {'config': guardrails_config(harmful_output=False), 'version': 1})
+    custom = guardrails_config(harmful_output=False)
+    custom['deny'] = {'status': 451, 'message': '自定义拒绝文案'}
+    state, _ = node.expect(200, '/api/guardrails/update', {'config': custom, 'version': 1})
     assert state['version'] == 2, state
     check_response(node, model, '普通测试消息', stream=True, judge_calls=3)
+    # 拒绝策略随配置热更新，不需要重启。
+    status, body, _ = completion(node, JUDGE_HIGH + ' 危险内容')
+    assert status == 451 and body['error']['message'] == '自定义拒绝文案', (status, body)
     node.expect(400, '/api/guardrails/update', {'config': {**guardrails_config(), 'judge': {'provider': 'missing', 'model': MODEL}}, 'version': 2})
     node.stop()
     # 重启后从库加载版本 2 的配置。
     node.start()
     login_if_needed(node, password)
     assert 'configuration version 2 loaded' in (node.root / 'server.log').read_text()
-    check_response(node, model, JUDGE_HIGH + ' 危险内容', code='content_safety_blocked', calls=0)
+    status, body, _ = completion(node, JUDGE_HIGH + ' 危险内容')
+    assert status == 451 and body['error']['code'] == 'content_safety_blocked', (status, body)
     state, _ = node.expect(200, '/api/guardrails/reset')
     assert state == {'config': None, 'version': 0}, state
     check_response(node, model, JUDGE_HIGH + ' 现在不再检测', judge_calls=0)
@@ -178,16 +197,7 @@ def main():
     threading.Thread(target=model.serve_forever, daemon=True).start()
     base = f'http://127.0.0.1:{model.server_port}'
     password = secrets.token_urlsafe(24)
-    config = {
-        'client': {'enable_logging': False},
-        'framework': {'pricing': {'pricing_url': base + '/pricing', 'model_parameters_url': base + '/parameters',
-                                  'mcp_library_url': base + '/mcp', 'mcp_library_sync_interval': 0}},
-        'config_store': {'enabled': True, 'type': 'sqlite', 'config': {'path': str(root / 'config.db')}},
-        'governance': {'auth_config': {'admin_username': 'guardrails-dev', 'admin_password': password, 'is_enabled': True}},
-        'providers': {'openai': {'keys': [{'name': 'local-test', 'value': 'sk-local-fake', 'weight': 1, 'models': [MODEL]}],
-                                 'network_config': {'base_url': base + '/v1', 'max_retries': 0}}},
-    }
-    node = identity_smoke.Node(args.binary, root / 'node', config, '')
+    node = identity_smoke.Node(args.binary, root / 'node', node_config(root, base, 'guardrails-dev', password), '')
     try:
         if args.serve:
             node.start(extra_env={'EE_GUARDRAILS_FAKE': args.serve})

@@ -51,7 +51,7 @@ ee/
 └── Makefile
 ```
 
-现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`、`internal/rbac/`、`internal/pricing/`、`internal/guardrails/`及`internal/host/`；audit 等仍为布局示例，按需建立。`pricing` 只在启动期运行一次，没有 HTTP、插件或 Worker 入口，是「按调用来源决定入口」的一个实例：它写上游既有的定价覆盖表并更新内存目录，不新建表、不改上游代码。`guardrails` 已有本地规则框架和 Chat Hook，真实检测器尚未接入。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
+现有代码已落在 `cmd/bifrost-http/`、`internal/app/`、`internal/branding/`、`internal/identity/`、`internal/rbac/`、`internal/pricing/`、`internal/guardrails/`及`internal/host/`；audit 等仍为布局示例，按需建立。`pricing` 只在启动期运行一次，没有 HTTP、插件或 Worker 入口，是「按调用来源决定入口」的一个实例：它写上游既有的定价覆盖表并更新内存目录，不新建表、不改上游代码。`guardrails` 有本地规则框架、Chat Hook、密钥规则检测器与模型判官检测器，配置存 `ee_guardrails` 表并经 `guardrails/http/` 热更新，判官经 `guardrails/host/` 以内部子请求调用网关。前端继续放在 `ee/ui/`，本次保留上游 UI 覆盖机制，构建产物嵌入 `cmd/bifrost-http/ui/`。
 
 ## 4. 模块内部的职责
 

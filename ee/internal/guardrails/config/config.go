@@ -15,13 +15,12 @@ import (
 
 // 配置数值边界与默认值；产品裁决见 workbench 方案 v5 §4.5。
 const (
-	MinDenyStatus, MaxDenyStatus = 400, 599
-	DefaultMaxTextBytes          = 64 * 1024
-	DefaultJudgeTimeoutMS        = 10_000
-	DefaultSecretsTimeoutMS      = 500
-	DefaultJudgeRetries          = 3
-	MinJudgeRetries              = 3
-	MaxJudgeRetries              = 5
+	DefaultMaxTextBytes     = 64 * 1024
+	DefaultJudgeRetries     = 3
+	defaultJudgeTimeoutMS   = 10_000
+	defaultSecretsTimeoutMS = 500
+	minJudgeRetries         = 3
+	maxJudgeRetries         = 5
 )
 
 // ErrInvalid 标记配置校验失败；错误文本说明具体字段。
@@ -88,7 +87,7 @@ func Parse(data []byte) (Config, error) {
 		return Config{}, fmt.Errorf("%w: trailing data", ErrInvalid)
 	}
 	c.applyDefaults()
-	if err := c.Validate(); err != nil {
+	if err := c.validate(); err != nil {
 		return Config{}, err
 	}
 	return c, nil
@@ -102,20 +101,20 @@ func (c *Config) applyDefaults() {
 		c.Judge.Retries = DefaultJudgeRetries
 	}
 	if c.Judge.TimeoutMS == 0 {
-		c.Judge.TimeoutMS = DefaultJudgeTimeoutMS
+		c.Judge.TimeoutMS = defaultJudgeTimeoutMS
 	}
 	if c.Judge.MaxTextBytes == 0 {
 		c.Judge.MaxTextBytes = c.MaxTextBytes
 	}
 	if c.Secrets.TimeoutMS == 0 {
-		c.Secrets.TimeoutMS = DefaultSecretsTimeoutMS
+		c.Secrets.TimeoutMS = defaultSecretsTimeoutMS
 	}
 }
 
-// Validate 检查全部字段；已启用的判官项目要求 judge 配置完整。
-func (c Config) Validate() error {
-	if c.Deny.Status < MinDenyStatus || c.Deny.Status > MaxDenyStatus || strings.TrimSpace(c.Deny.Message) == "" {
-		return fmt.Errorf("%w: deny.status must be %d–%d and deny.message non-empty", ErrInvalid, MinDenyStatus, MaxDenyStatus)
+// validate 检查全部字段；已启用的判官项目要求 judge 配置完整。错误信息按固定顺序给出第一处问题。
+func (c Config) validate() error {
+	if c.Deny.Status < guardrails.MinDenyStatus || c.Deny.Status > guardrails.MaxDenyStatus || strings.TrimSpace(c.Deny.Message) == "" {
+		return fmt.Errorf("%w: deny.status must be %d–%d and deny.message non-empty", ErrInvalid, guardrails.MinDenyStatus, guardrails.MaxDenyStatus)
 	}
 	if c.MaxTextBytes <= 0 || c.Judge.MaxTextBytes <= 0 || c.Judge.TimeoutMS <= 0 || c.Secrets.TimeoutMS <= 0 {
 		return fmt.Errorf("%w: byte limits and timeouts must be positive", ErrInvalid)
@@ -123,16 +122,20 @@ func (c Config) Validate() error {
 	if c.Judge.MaxTextBytes > c.MaxTextBytes {
 		return fmt.Errorf("%w: judge.max_text_bytes exceeds max_text_bytes", ErrInvalid)
 	}
-	if c.Judge.Retries < MinJudgeRetries || c.Judge.Retries > MaxJudgeRetries {
-		return fmt.Errorf("%w: judge.retries must be %d–%d", ErrInvalid, MinJudgeRetries, MaxJudgeRetries)
+	if c.Judge.Retries < minJudgeRetries || c.Judge.Retries > maxJudgeRetries {
+		return fmt.Errorf("%w: judge.retries must be %d–%d", ErrInvalid, minJudgeRetries, maxJudgeRetries)
 	}
 	enabled := 0
-	for name, item := range map[string]Item{"secrets": c.Secrets.Item, "harmful": c.Harmful, "prompt_attack": c.PromptAttack} {
-		if !item.Enabled {
+	// 顺序与 Expand 一致，同一份坏配置总是报同一个字段。
+	for _, entry := range []struct {
+		name string
+		item Item
+	}{{itemSecrets, c.Secrets.Item}, {ItemHarmful, c.Harmful}, {ItemPromptAttack, c.PromptAttack}} {
+		if !entry.item.Enabled {
 			continue
 		}
 		enabled++
-		if err := item.validate(name); err != nil {
+		if err := entry.item.validate(entry.name); err != nil {
 			return err
 		}
 	}
@@ -174,7 +177,7 @@ func (i Item) validate(name string) error {
 		}
 		seen[s] = true
 	}
-	if _, ok := parseLevel(i.Threshold); !ok {
+	if _, ok := guardrails.ParseLevel(i.Threshold); !ok {
 		return fmt.Errorf("%w: %s.threshold must be low, medium or high", ErrInvalid, name)
 	}
 	if i.OnMatch != string(guardrails.Block) && i.OnMatch != string(guardrails.Observe) {
@@ -205,16 +208,4 @@ func (c Config) JudgeTimeout() time.Duration {
 }
 func (c Config) SecretsTimeout() time.Duration {
 	return time.Duration(c.Secrets.TimeoutMS) * time.Millisecond
-}
-
-func parseLevel(s string) (guardrails.Level, bool) {
-	switch s {
-	case "low":
-		return guardrails.Low, true
-	case "medium":
-		return guardrails.Medium, true
-	case "high":
-		return guardrails.High, true
-	}
-	return 0, false
 }

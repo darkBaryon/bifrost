@@ -11,10 +11,6 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
 )
 
-func blockingDetector(context.Context, string) ([]guardrails.Finding, error) {
-	return []guardrails.Finding{{Level: guardrails.High}}, nil
-}
-
 // 一条规则拦截后，仍在等待的规则被取消且不出现在结果里；Blocking 指向该规则。
 func TestBlockCancelsPendingRules(t *testing.T) {
 	started, released := make(chan struct{}), make(chan struct{})

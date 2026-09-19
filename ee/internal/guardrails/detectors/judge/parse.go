@@ -14,6 +14,9 @@ import (
 // ErrInvalidVerdict 表示判官返回不是约定的 JSON 或等级未知；算一次失败，可重试。
 var ErrInvalidVerdict = errors.New("judge: invalid verdict")
 
+// noRiskName 是判官表示无风险的等级名；其余等级名由根包定义。
+const noRiskName = "none"
+
 type verdict struct {
 	RiskLevel string `json:"risk_level"`
 }
@@ -37,15 +40,12 @@ func parseLevel(content string) (guardrails.Level, error) {
 	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &v); err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrInvalidVerdict, err)
 	}
-	switch strings.ToLower(strings.TrimSpace(v.RiskLevel)) {
-	case "none":
+	name := strings.ToLower(strings.TrimSpace(v.RiskLevel))
+	if name == noRiskName {
 		return 0, nil
-	case "low":
-		return guardrails.Low, nil
-	case "medium":
-		return guardrails.Medium, nil
-	case "high":
-		return guardrails.High, nil
+	}
+	if level, ok := guardrails.ParseLevel(name); ok {
+		return level, nil
 	}
 	return 0, fmt.Errorf("%w: unknown risk level", ErrInvalidVerdict)
 }

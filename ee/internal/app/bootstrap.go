@@ -14,7 +14,7 @@ import (
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
 
-// Bootstrap 启动前先告诉Bifrost如何创建身份和角色服务，再完成Bifrost自身的准备，最后接入开发护栏、品牌和定价，并核对所有接口的权限规则。
+// Bootstrap 启动前先告诉Bifrost如何创建身份和角色服务，再完成Bifrost自身的准备，最后接入内容安全、品牌和定价，并核对所有接口的权限规则。
 // log 由程序入口传入，所有EE日志都使用这份配置。
 func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log schemas.Logger) error {
 	var auth *eehost.AuthAdapter
@@ -47,7 +47,7 @@ func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log sche
 	return nil
 }
 
-// attach 给Bifrost接入开发护栏、品牌接口和定价；此时还没开始接收请求。
+// attach 给Bifrost接入内容安全（配置表、插件与接口）、品牌接口和定价；此时还没开始接收请求。
 func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schemas.BifrostHTTPMiddleware, log schemas.Logger) error {
 	if s.Config == nil || s.Config.ConfigStore == nil {
 		return errors.New("ee requires the config store (database mode); config_store.enabled=false is not supported")

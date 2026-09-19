@@ -7,8 +7,11 @@ import (
 	"testing"
 
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
+	safety "github.com/darkBaryon/bifrost/ee/internal/guardrails/plugin"
 	"github.com/maximhq/bifrost/core/schemas"
 )
+
+var testOptions = safety.Options{StatusCode: 400, DenyMessage: "请求已拦截"}
 
 func outputChecker(t *testing.T) *guardrails.Checker {
 	t.Helper()
@@ -23,7 +26,7 @@ func outputChecker(t *testing.T) *guardrails.Checker {
 func TestSwapAfterPreKeepsSnapshot(t *testing.T) {
 	p, _ := newPlugin(t, nil, nil)
 	ctx := primed(t, p, testContext())
-	p.Swap(outputChecker(t))
+	p.Swap(outputChecker(t), testOptions)
 	resp := response("unsafe")
 	if got, bErr, err := p.PostLLMHook(ctx, resp, nil); got != resp || bErr != nil || err != nil {
 		t.Fatal("in-flight request was re-judged by the swapped checker")
@@ -44,7 +47,7 @@ func TestNilSnapshotStaysPassThroughAfterSwap(t *testing.T) {
 	if _, short, err := p.PreLLMHook(ctx, req); err != nil || short != nil {
 		t.Fatal("disabled plugin rejected a stream")
 	}
-	p.Swap(outputChecker(t))
+	p.Swap(outputChecker(t), testOptions)
 	chunk := &schemas.BifrostResponse{ChatResponse: &schemas.BifrostChatResponse{Object: "chat.completion.chunk"}}
 	if got, bErr, err := p.PostLLMHook(ctx, chunk, nil); got != chunk || bErr != nil || err != nil {
 		t.Fatal("stream admitted without output rules was inspected after swap")
@@ -64,7 +67,7 @@ func TestPostWithoutSnapshotPassesThrough(t *testing.T) {
 func TestFallbackRerunKeepsFirstSnapshot(t *testing.T) {
 	p, _ := newPlugin(t, nil, nil)
 	ctx := primed(t, p, testContext())
-	p.Swap(outputChecker(t))
+	p.Swap(outputChecker(t), testOptions)
 	primed(t, p, ctx)
 	resp := response("unsafe")
 	if got, bErr, err := p.PostLLMHook(ctx, resp, nil); got != resp || bErr != nil || err != nil {
@@ -106,7 +109,7 @@ func TestSwapUnderConcurrentRequests(t *testing.T) {
 		go func(swap bool) {
 			defer wg.Done()
 			if swap {
-				p.Swap(checker)
+				p.Swap(checker, testOptions)
 				return
 			}
 			ctx := primed(t, p, testContext())
@@ -114,4 +117,25 @@ func TestSwapUnderConcurrentRequests(t *testing.T) {
 		}(i%4 == 0)
 	}
 	wg.Wait()
+}
+
+// 拒绝策略与检查器一起热替换：Swap 后新请求用新状态码与文案，进行中的请求仍用旧快照；非法选项不替换。
+func TestSwapReplacesDenyOptions(t *testing.T) {
+	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
+	inflight := primed(t, p, testContext())
+	if err := p.Swap(outputChecker(t), safety.Options{StatusCode: 451, DenyMessage: "新文案"}); err != nil {
+		t.Fatal(err)
+	}
+	_, _, _ = inflight, p, t
+	fresh := primed(t, p, testContext())
+	got, bErr, _ := p.PostLLMHook(fresh, response("unsafe"), nil)
+	if got != nil || bErr == nil || *bErr.StatusCode != 451 || bErr.Error.Message != "新文案" {
+		t.Fatalf("new options not applied: %+v", bErr)
+	}
+	if err := p.Swap(outputChecker(t), safety.Options{StatusCode: 200, DenyMessage: "x"}); err == nil {
+		t.Fatal("invalid options accepted by Swap")
+	}
+	if _, bErr, _ := p.PostLLMHook(primed(t, p, testContext()), response("unsafe"), nil); bErr == nil || *bErr.StatusCode != 451 {
+		t.Fatal("failed swap changed the running options")
+	}
 }

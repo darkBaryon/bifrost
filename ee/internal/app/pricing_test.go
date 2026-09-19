@@ -74,6 +74,9 @@ func (s pricingAttachStore) DB() *gorm.DB { return s.db }
 func (s pricingAttachStore) RunMigration(ctx context.Context, fn func(context.Context, *gorm.DB) error) error {
 	return fn(ctx, s.db)
 }
+func (s pricingAttachStore) GetProviderConfig(context.Context, schemas.ModelProvider) (*configstore.ProviderConfig, error) {
+	return nil, configstore.ErrNotFound
+}
 func (s pricingAttachStore) GetProvidersConfig(context.Context) (map[schemas.ModelProvider]configstore.ProviderConfig, error) {
 	if s.providerError != nil {
 		return nil, s.providerError

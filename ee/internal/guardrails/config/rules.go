@@ -9,14 +9,14 @@ import (
 
 // 检测项目名，作为规则 ID 与判官实例 ID 的前缀。
 const (
-	ItemSecrets      = "secrets"
+	itemSecrets      = "secrets"
 	ItemHarmful      = "harmful"
 	ItemPromptAttack = "prompt_attack"
 	ItemBusinessRule = "business_rule"
 	// SecretsDetectorID 是密钥检测器的固定注册 ID。
 	SecretsDetectorID = "secrets"
-	// JudgeDetectorPrefix 拼出判官实例 ID：judge:<项目>[:<规则 ID>]:<阶段>。
-	JudgeDetectorPrefix = "judge:"
+	// judgeDetectorPrefix 拼出判官实例 ID：judge:<项目>[:<规则 ID>]:<阶段>。
+	judgeDetectorPrefix = "judge:"
 )
 
 // JudgeSpec 描述装配方需要创建的一个判官实例。
@@ -42,7 +42,7 @@ func (c Config) Expand() Plan {
 	if c.Secrets.Enabled {
 		p.NeedsSecrets = true
 		for _, stage := range c.Secrets.Stages {
-			p.Rules = append(p.Rules, rule(ItemSecrets+":"+stage, SecretsDetectorID, guardrails.Credentials, stage, c.Secrets.Item, c.SecretsTimeout()))
+			p.Rules = append(p.Rules, rule(itemSecrets+":"+stage, SecretsDetectorID, guardrails.Credentials, stage, c.Secrets.Item, c.SecretsTimeout()))
 		}
 	}
 	addJudge := func(item, ruleID, ruleText string, category guardrails.Category, it Item) {
@@ -51,7 +51,7 @@ func (c Config) Expand() Plan {
 			if ruleID != "" {
 				id += ":" + ruleID
 			}
-			detectorID := JudgeDetectorPrefix + id + ":" + stage
+			detectorID := judgeDetectorPrefix + id + ":" + stage
 			p.Judges = append(p.Judges, JudgeSpec{DetectorID: detectorID, Item: item, RuleID: ruleID, RuleText: ruleText, Stage: guardrails.Stage(stage)})
 			p.Rules = append(p.Rules, rule(id+":"+stage, detectorID, category, stage, it, c.JudgeTimeout()))
 		}
@@ -71,7 +71,7 @@ func (c Config) Expand() Plan {
 }
 
 func rule(id, detectorID string, category guardrails.Category, stage string, it Item, timeout time.Duration) guardrails.Rule {
-	threshold, _ := parseLevel(it.Threshold)
+	threshold, _ := guardrails.ParseLevel(it.Threshold)
 	return guardrails.Rule{
 		ID: id, DetectorID: detectorID, Category: category, Stage: guardrails.Stage(stage),
 		Threshold: threshold, OnMatch: guardrails.Action(it.OnMatch), OnError: guardrails.Action(it.OnError), Timeout: timeout,

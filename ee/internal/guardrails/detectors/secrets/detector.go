@@ -35,7 +35,7 @@ func New(opts Options) (*Detector, error) {
 	return &Detector{rules: rules, global: global, ignoredKeywords: normalizeKeywords(opts.IgnoredKeywords)}, nil
 }
 
-// RuleCount 返回已加载的规则数，供装配与测试核对数据文件。
+// RuleCount 返回已加载的规则数；测试用它锚定数据文件版本，规则数变化时须同步更新断言。
 func (d *Detector) RuleCount() int { return len(d.rules) }
 
 // Detect 返回每个命中一条 Finding，只携带等级；不返回命中值与位置。被取消时返回 ctx.Err()。

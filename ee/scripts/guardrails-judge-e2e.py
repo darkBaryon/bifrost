@@ -39,6 +39,16 @@ def config(stage, rule):
     return c
 
 
+def classify(status, body):
+    """只有合法回答算放行、只有内容命中算拦截；其他一律记为验证失败，不能混入放行或拦截。"""
+    if status == 200 and isinstance(body, dict) and body.get('choices'):
+        return 'pass', ''
+    code = body.get('error', {}).get('code', '') if isinstance(body, dict) else ''
+    if status == 400 and code == 'content_safety_blocked':
+        return 'block', code
+    return 'failure', code or f'http_{status}'
+
+
 def main():
     key = os.environ['DEEPSEEK_API_KEY']
     samples = json.loads((REPO / 'product/需求/内容安全/判官实验/samples.json').read_text())
@@ -48,16 +58,9 @@ def main():
     threading.Thread(target=model.serve_forever, daemon=True).start()
     base = f'http://127.0.0.1:{model.server_port}'
     password = secrets.token_urlsafe(24)
-    cfg = {
-        'client': {'enable_logging': False},
-        'framework': {'pricing': {'pricing_url': base + '/pricing', 'model_parameters_url': base + '/parameters', 'mcp_library_url': base + '/mcp', 'mcp_library_sync_interval': 0}},
-        'config_store': {'enabled': True, 'type': 'sqlite', 'config': {'path': str(root / 'config.db')}},
-        'governance': {'auth_config': {'admin_username': 'judge-e2e', 'admin_password': password, 'is_enabled': True}},
-        'providers': {
-            'openai': {'keys': [{'name': 'local', 'value': 'sk-local-fake', 'weight': 1, 'models': [MODEL]}], 'network_config': {'base_url': base + '/v1', 'max_retries': 0}},
-            'deepseek': {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': ['deepseek-v4-flash']}], 'network_config': {'max_retries': 0}},
-        },
-    }
+    cfg = guard_smoke.node_config(root, base, 'judge-e2e', password)
+    # key 须列出判官模型，否则网关按"没有支持该模型的 key"拒绝判官请求。
+    cfg['providers']['deepseek'] = {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': ['deepseek-v4-flash']}], 'network_config': {'max_retries': 0}}
     node = identity_smoke.Node(str(REPO / 'ee/tmp/bifrost-http'), root / 'node', cfg, '')
     results = []
     try:
@@ -71,10 +74,9 @@ def main():
                 start = time.perf_counter()
                 status, body, _ = guard_smoke.completion(node, s['text'])
                 ms = (time.perf_counter() - start) * 1000
-                got = 'block' if status == 400 else 'pass'
-                code = body.get('error', {}).get('code') if status != 200 else ''
-                results.append({'id': s['id'], 'group': s['group'], 'stage': stage, 'expect': s['expect'], 'got': got, 'code': code or '', 'ms': round(ms), 'status': status})
-                print(f"{s['id']:4} {stage:6} expect={s['expect']:5} got={got:5} {code:35} {ms:6.0f}ms", flush=True)
+                got, code = classify(status, body)
+                results.append({'id': s['id'], 'group': s['group'], 'stage': stage, 'expect': s['expect'], 'got': got, 'code': code, 'ms': round(ms), 'status': status})
+                print(f"{s['id']:4} {stage:6} expect={s['expect']:5} got={got:8} {code:35} {ms:6.0f}ms", flush=True)
         node.expect(200, '/api/guardrails/reset')
     finally:
         node.stop()
@@ -83,13 +85,17 @@ def main():
         (root / 'node' / 'config.json').unlink(missing_ok=True)
     (root / 'results.json').write_text(json.dumps(results, ensure_ascii=False, indent=1))
     ok = [r for r in results if r['got'] == r['expect']]
+    failures = [r for r in results if r['got'] == 'failure']
     lat = sorted(r['ms'] for r in results)
-    print(f"\nmatch {len(ok)}/{len(results)}; latency p50={statistics.median(lat):.0f}ms p90={lat[int(len(lat)*0.9)-1]}ms max={lat[-1]}ms")
+    if lat:
+        print(f"\nmatch {len(ok)}/{len(results)}; failures {len(failures)}; latency p50={statistics.median(lat):.0f}ms p90={lat[int(len(lat)*0.9)-1]}ms max={lat[-1]}ms")
     for r in results:
         if r['got'] != r['expect']:
-            print('MISMATCH', r)
+            print('MISMATCH' if r['got'] != 'failure' else 'FAILURE', r)
     print('log:', root / 'node' / 'server.log')
     print('results:', root / 'results.json')
+    if len(ok) != len(results) or failures:
+        sys.exit(1)
 
 
 if __name__ == '__main__':

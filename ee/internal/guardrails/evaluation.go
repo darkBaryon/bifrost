@@ -40,7 +40,7 @@ type RuleEvaluation struct {
 	HighestLevel Level
 }
 
-// evaluationState 区分规则已完成、因其他规则拦截被取消，以及父请求取消。
+// evaluationState 区分规则已完成与因其他规则拦截被取消而丢弃；父请求取消不是状态，由 evaluateRule 的 error 返回值表达。
 type evaluationState uint8
 
 const (

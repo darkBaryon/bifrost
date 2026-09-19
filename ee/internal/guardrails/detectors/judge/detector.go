@@ -32,12 +32,12 @@ const (
 
 // 应用层重试次数范围（用户裁决 3–5 次）与退避基数；总时长受规则 Timeout 约束。
 const (
-	MinRetries     = 3
-	MaxRetries     = 5
+	minRetries     = 3
+	maxRetries     = 5
 	DefaultRetries = 3
 	retryBackoff   = 200 * time.Millisecond
-	// DefaultMaxBytes 是送检文本的默认上限，与框架默认总上限一致；超过按 ErrDetectorTextTooLarge 处理。
-	DefaultMaxBytes = 64 * 1024
+	// defaultMaxBytes 是未注入上限时的送检上限；装配方总会传入 config 的判官上限，这里只需与 config.DefaultMaxTextBytes 同步。
+	defaultMaxBytes = 64 * 1024
 	// rulePlaceholder 是业务规则模板中的替换位。
 	rulePlaceholder = "{{rule}}"
 )
@@ -48,8 +48,8 @@ type Options struct {
 	Kind     Kind
 	Rule     string           // Kind 为 BusinessRule 时必填，其余必须为空
 	Stage    guardrails.Stage // 写入送检 JSON 的 stage 字段
-	Retries  int              // 0 表示 DefaultRetries；否则须在 MinRetries–MaxRetries 之间
-	MaxBytes int              // 0 表示 DefaultMaxBytes
+	Retries  int              // 0 表示 DefaultRetries；否则须在 minRetries–maxRetries 之间
+	MaxBytes int              // 0 表示 defaultMaxBytes
 }
 
 // Detector 是一个判官实例；无状态、可并发调用。
@@ -61,6 +61,8 @@ type Detector struct {
 	maxBytes int
 }
 
+// 提示词首句含"审核器"字样；冒烟脚本的模型替身靠它识别判官请求（见 ee/scripts/guardrails-smoke.py），改写开头时同步。
+//
 //go:embed prompts/*.md
 var promptFiles embed.FS
 
@@ -80,12 +82,12 @@ func New(opts Options) (*Detector, error) {
 	if retries == 0 {
 		retries = DefaultRetries
 	}
-	if retries < MinRetries || retries > MaxRetries {
-		return nil, fmt.Errorf("judge: retries must be between %d and %d", MinRetries, MaxRetries)
+	if retries < minRetries || retries > maxRetries {
+		return nil, fmt.Errorf("judge: retries must be between %d and %d", minRetries, maxRetries)
 	}
 	maxBytes := opts.MaxBytes
 	if maxBytes == 0 {
-		maxBytes = DefaultMaxBytes
+		maxBytes = defaultMaxBytes
 	}
 	if maxBytes < 0 {
 		return nil, errors.New("judge: max bytes must be positive")

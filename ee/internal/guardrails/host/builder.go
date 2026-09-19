@@ -3,6 +3,7 @@ package host
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
@@ -64,8 +65,13 @@ func (b *Builder) Build(ctx context.Context, cfg config.Config) (*guardrails.Che
 	return guardrails.New(plan.Rules, detectors, cfg.MaxTextBytes)
 }
 
+// checkProvider 区分"provider 未配置"与"查询失败"：前者是配置错误，后者要留下原因。
 func (b *Builder) checkProvider(ctx context.Context, j config.Judge) error {
 	pc, err := b.providers.GetProviderConfig(ctx, schemas.ModelProvider(j.Provider))
+	if err != nil && !errors.Is(err, configstore.ErrNotFound) {
+		b.log.Warn("content safety judge provider %s lookup failed: %v", j.Provider, err)
+		return fmt.Errorf("guardrails host: judge provider %q lookup failed: %w", j.Provider, err)
+	}
 	if err != nil || pc == nil {
 		return fmt.Errorf("guardrails host: judge provider %q is not configured", j.Provider)
 	}

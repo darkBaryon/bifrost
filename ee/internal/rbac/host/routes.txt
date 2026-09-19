@@ -671,10 +671,10 @@ POST /api/branding/reset
 POST /api/branding/update
 
 @ managed Settings.Manage none ordinary
-POST /api/guardrails/reset
-POST /api/guardrails/update
 DELETE /api/cache/clear-by-key/{cacheKey}
 DELETE /api/cache/clear/{cacheId}
+POST /api/guardrails/reset
+POST /api/guardrails/update
 
 @ managed Settings.Manage settings-input settings-safe
 PUT /api/config

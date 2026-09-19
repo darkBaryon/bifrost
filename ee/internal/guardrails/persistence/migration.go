@@ -1,13 +1,11 @@
 // Package persistence 在 Bifrost 配置数据库中保存内容安全配置（单例行，JSON 正文）。
-// 本文件执行版本化迁移和多节点迁移锁，做法与品牌模块一致。
+// 本文件执行版本化迁移和多节点迁移锁，做法与品牌、角色权限模块一致。
 package persistence
 
 import (
 	"context"
-	"errors"
-	"time"
 
-	"github.com/mattn/go-sqlite3"
+	authstore "github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	upstream "github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/migrator"
 	"gorm.io/gorm"
@@ -16,34 +14,14 @@ import (
 // 迁移 ID 已用于版本表，移动文件不能改变它。
 const guardrailsMigrationID = "ee_guardrails_v1"
 
-// guardrailsAdvisoryLockKey 协调 PostgreSQL 多节点的本功能迁移；必须稳定，且不与上游及其他 EE 模块的锁键相同。
-const guardrailsAdvisoryLockKey = 8342761903
-
-// SQLite 锁冲突最多整笔重试 busyRetries 次，间隔按次数递增；与品牌、身份模块是同一条驱动兼容规则，改动时须同步。
-const (
-	busyRetries   = 3
-	busyRetryStep = 20 * time.Millisecond
-)
+// guardrailsAdvisoryLockKey 协调 PostgreSQL 多节点的本功能迁移；须保持稳定，且不与上游
+// framework/configstore/migrations.go 及 EE 已占用的锁键相同：品牌 8342761901、身份 8342761902、角色权限 8342761903。
+const guardrailsAdvisoryLockKey = 8342761904
 
 // Migrate 使用 ConfigStore.RunMigration 提供的连接建表；只建表不插行，无行即"未配置"。
+// SQLite busy/locked 整笔重试复用身份模块导出的规则，与角色权限迁移一致。
 func Migrate(ctx context.Context, db *gorm.DB) error {
-	var err error
-	for attempt := 0; attempt < busyRetries; attempt++ {
-		if err = migrateOnce(ctx, db); !sqliteBusy(err) {
-			return err
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Duration(attempt+1) * busyRetryStep):
-		}
-	}
-	return err
-}
-
-func sqliteBusy(err error) bool {
-	var busy sqlite3.Error
-	return errors.As(err, &busy) && (busy.Code == sqlite3.ErrBusy || busy.Code == sqlite3.ErrLocked)
+	return authstore.RetrySQLiteBusy(ctx, func() error { return migrateOnce(ctx, db) })
 }
 
 func migrateOnce(ctx context.Context, db *gorm.DB) error {

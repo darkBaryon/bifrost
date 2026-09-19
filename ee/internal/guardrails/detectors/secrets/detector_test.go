@@ -83,6 +83,13 @@ func TestVendorKeysAreHigh(t *testing.T) {
 		"feishu webhook":   "https://open.feishu.cn/open-apis/bot/v2/hook/" + fake(24, 36, alnum),
 		"wecom webhook":    "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=" + fake(25, 8, hex) + "-" + fake(26, 4, hex) + "-" + fake(27, 4, hex) + "-" + fake(28, 4, hex) + "-" + fake(29, 12, hex),
 		"private key":      "-----BEGIN RSA PRIVATE KEY-----\n" + fake(30, 96, alnum+"+/") + "\n-----END RSA PRIVATE KEY-----",
+		"azure cask":       fake(31, 52, alnum) + "JQQJ99" + fake(32, 1, alnum) + "B" + fake(33, 12, alnum) + "AAAB" + "ACOG" + fake(34, 4, alnum),
+		"alibaba cais":     "SecurityToken=CAIS" + fake(35, 80, alnum+"+/="),
+		"xai token":        "xai-token-" + fake(36, 80, alnum),
+		"baidu altak":      "AccessKey: ALTAK" + fake(37, 21, alnum),
+		"volcengine temp":  "AKTP" + fake(38, 43, alnum+"+/"),
+		"minimax plan":     "sk-cp-" + fake(39, 40, alnum),
+		"lark webhook":     "https://open.larksuite.com/open-apis/bot/v2/hook/" + fake(45, 36, alnum),
 	} {
 		t.Run(name, func(t *testing.T) {
 			got := levels(t, d, "配置如下：\n"+text+"\n谢谢")
@@ -135,6 +142,19 @@ func TestNoFalsePositives(t *testing.T) {
 		"plain chinese":      "请帮我把这段会议纪要整理成三条待办：周五前完成网络设备采购，客服团队扩招两人。",
 		"code":               "func main() { key := os.Getenv(\"API_KEY\"); fmt.Println(len(key)) }",
 		"env reference":      "api_key = ${OPENAI_API_KEY}",
+		// 新增规则的边界反例：前缀对但长度不足、字符集不对或缺关键标记。
+		"gemini short":       "AQ.Ab8R" + fake(61, 20, alnum),
+		"groq short":         "gsk_" + fake(62, 30, alnum),
+		"openrouter short":   "sk-or-v1-" + fake(63, 20, hex),
+		"replicate short":    "r8_" + fake(64, 20, alnum),
+		"azure no marker":    fake(65, 84, alnum),
+		"tencent short":      "AKID" + fake(66, 10, alnum),
+		"volcengine short":   "AKLT" + fake(67, 12, alnum),
+		"zhipu wrong shape":  fake(68, 20, hex) + "." + fake(69, 16, alnum),
+		"dingtalk other url": "https://oapi.dingtalk.com/robot/other?access_token=" + fake(70, 32, hex),
+		"wecom bad key":      "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=short",
+		"sk generic short":   "sk-" + fake(71, 12, hex),
+		"sts short":          "STS." + fake(72, 4, alnum),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got := levels(t, d, text); len(got) != 0 {

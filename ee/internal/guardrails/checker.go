@@ -88,13 +88,16 @@ func (c *Checker) Check(ctx context.Context, stage Stage, text string) (CheckRes
 func (c *Checker) runStage(parent context.Context, stage Stage, text string) (CheckResult, error) {
 	blockCtx, cancel := context.WithCancel(parent)
 	defer cancel()
-	slots := make([]slot, 0, len(c.rules))
-	var wg sync.WaitGroup
+	var staged []Rule
 	for _, rule := range c.rules {
-		if rule.Stage != stage {
-			continue
+		if rule.Stage == stage {
+			staged = append(staged, rule)
 		}
-		slots = append(slots, slot{})
+	}
+	// 先定长分配再按下标取址，goroutine 写入的位置在整个执行期间固定。
+	slots := make([]slot, len(staged))
+	var wg sync.WaitGroup
+	for i, rule := range staged {
 		wg.Add(1)
 		go func(rule Rule, s *slot) {
 			defer wg.Done()
@@ -102,7 +105,7 @@ func (c *Checker) runStage(parent context.Context, stage Stage, text string) (Ch
 			if s.state == completed && s.evaluation.Action == Block {
 				cancel()
 			}
-		}(rule, &slots[len(slots)-1])
+		}(rule, &slots[i])
 	}
 	wg.Wait()
 	checkResult := CheckResult{Action: Allow}

@@ -1,4 +1,4 @@
-// 本文件装配内容安全：从配置库构建检查器并注册插件与接口；显式开发开关下改用假检测器。
+// 本文件装配内容安全：建表、从配置库构建检查器、注册插件与三条管理接口；显式开发开关下改用假检测器。
 package app
 
 import (
@@ -29,13 +29,13 @@ const (
 	fakeOutputBlock   = "output-block"
 	// 以下为开发夹具的固定配置，不代表生产防护策略。
 	fakeDetectorID   = "dev-fake"
-	fakeMaxTextBytes = 64 * 1024
+	fakeMaxTextBytes = config.DefaultMaxTextBytes
 	fakeTimeout      = time.Second
 	fakeDenyStatus   = fasthttp.StatusBadRequest
 	fakeDenyMessage  = "开发测试：内容命中假检测器，已拦截"
 	// 在内置插件之前执行，覆盖可能提前返回的缓存等响应。
 	guardrailsPluginOrder = math.MinInt
-	// 生产拒绝文案来自配置；插件构造需要一个非空占位，未配置时插件透传，不会用到它。
+	// 未配置时插件透传，拒绝策略不会用到；插件构造仍要求一份合法值。
 	placeholderDenyMessage = "内容未通过安全检查"
 )
 
@@ -70,21 +70,19 @@ func assembleGuardrails(ctx context.Context, host *bifrostServer.BifrostHTTPServ
 	options := safetyplugin.Options{StatusCode: fasthttp.StatusBadRequest, DenyMessage: placeholderDenyMessage}
 	switch {
 	case mode != "":
-		checker, err = fakeChecker(mode)
+		if checker, err = fakeChecker(mode); err != nil {
+			return err
+		}
 		options = safetyplugin.Options{StatusCode: fakeDenyStatus, DenyMessage: fakeDenyMessage}
 	case configured:
 		cfg, parseErr := config.Parse([]byte(row.Config))
 		if parseErr != nil {
 			return fmt.Errorf("ee: stored guardrails configuration is invalid (fix it or delete the ee_guardrails row): %w", parseErr)
 		}
-		checker, err = builder.Build(ctx, cfg)
-		if err != nil {
+		if checker, err = builder.Build(ctx, cfg); err != nil {
 			return fmt.Errorf("ee: build guardrails from stored configuration (fix the judge provider or delete the ee_guardrails row): %w", err)
 		}
 		options = safetyplugin.Options{StatusCode: cfg.Deny.Status, DenyMessage: cfg.Deny.Message}
-	}
-	if err != nil {
-		return err
 	}
 	plugin, err := safetyplugin.New(checker, options, log)
 	if err != nil {
@@ -93,7 +91,7 @@ func assembleGuardrails(ctx context.Context, host *bifrostServer.BifrostHTTPServ
 	if err := host.SyncLoadedPlugin(ctx, plugin.GetName(), plugin, schemas.Ptr(schemas.PluginPlacementPreBuiltin), schemas.Ptr(guardrailsPluginOrder)); err != nil {
 		return fmt.Errorf("ee: register guardrails plugin: %w", err)
 	}
-	handler, err := guardrailshttp.NewHandler(store, builder, plugin, func() bool { return mode != "" })
+	handler, err := guardrailshttp.NewHandler(store, builder, plugin, log, func() bool { return mode != "" })
 	if err != nil {
 		return err
 	}

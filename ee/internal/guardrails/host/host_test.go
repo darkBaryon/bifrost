@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/config"
@@ -44,12 +45,18 @@ func (c *fakeClient) ChatCompletionRequest(ctx *schemas.BifrostContext, req *sch
 	}, nil
 }
 
-type fakeProviders struct{ configured map[string]int }
+type fakeProviders struct {
+	configured map[string]int
+	lookupErr  error
+}
 
 func (p fakeProviders) GetProviderConfig(_ context.Context, provider schemas.ModelProvider) (*configstore.ProviderConfig, error) {
+	if p.lookupErr != nil {
+		return nil, p.lookupErr
+	}
 	retries, ok := p.configured[string(provider)]
 	if !ok {
-		return nil, errors.New("not found")
+		return nil, configstore.ErrNotFound
 	}
 	return &configstore.ProviderConfig{NetworkConfig: &schemas.NetworkConfig{MaxRetries: retries}}, nil
 }
@@ -100,19 +107,24 @@ func TestJudgeModelRequest(t *testing.T) {
 	}
 }
 
-// 错误信息保留截断后的消息用于排障，不带完整响应体。
-func TestJudgeModelErrorsTruncateMessage(t *testing.T) {
+// provider 错误不带消息（可能回显送检内容）；网关自身错误保留截断后的消息用于排障。
+func TestJudgeModelErrorPolicy(t *testing.T) {
 	status := 429
-	long := "rate limited: " + strings.Repeat("x", 300)
-	client := &fakeClient{err: &schemas.BifrostError{StatusCode: &status, Error: &schemas.ErrorField{Type: schemas.Ptr("rate_limit"), Code: schemas.Ptr("429"), Message: long}}}
+	provider := &fakeClient{err: &schemas.BifrostError{StatusCode: &status, Error: &schemas.ErrorField{Type: schemas.Ptr("rate_limit"), Code: schemas.Ptr("429"), Message: "invalid input: 私密回显"}}}
 	log := &testLogger{}
-	_, err := host.NewJudgeModel(client, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || !strings.Contains(err.Error(), "status=429") || !strings.Contains(err.Error(), "rate limited") || strings.Contains(err.Error(), strings.Repeat("x", 250)) {
-		t.Fatalf("err=%v logs=%s", err, log.joined())
+	_, err := host.NewJudgeModel(provider, "deepseek", "m", log).Complete(context.Background(), "s", "u")
+	if err == nil || strings.Contains(err.Error(), "私密回显") || strings.Contains(log.joined(), "私密回显") || !strings.Contains(err.Error(), "status=429") || !strings.Contains(err.Error(), "provider_message=omitted") {
+		t.Fatalf("provider message leaked or status lost: err=%v logs=%s", err, log.joined())
+	}
+	long := "no keys found that support model: " + strings.Repeat("模", 100)
+	gateway := &fakeClient{err: &schemas.BifrostError{IsBifrostError: true, Error: &schemas.ErrorField{Message: long}}}
+	_, err = host.NewJudgeModel(gateway, "deepseek", "m", log).Complete(context.Background(), "s", "u")
+	if err == nil || !strings.Contains(err.Error(), "no keys found") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
+		t.Fatalf("gateway message not kept, not truncated or broke UTF-8: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := host.NewJudgeModel(client, "deepseek", "m", log).Complete(ctx, "s", "u"); !errors.Is(err, context.Canceled) {
+	if _, err := host.NewJudgeModel(provider, "deepseek", "m", log).Complete(ctx, "s", "u"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled ctx must surface: %v", err)
 	}
 }
@@ -163,6 +175,10 @@ func TestBuilderRejectsUnknownProviderAndNilDeps(t *testing.T) {
 	}
 	if _, err := b.Build(context.Background(), sampleConfig(t, "missing")); err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("err=%v", err)
+	}
+	failing, _ := host.NewBuilder(&fakeClient{}, fakeProviders{lookupErr: errors.New("db down")}, log)
+	if _, err := failing.Build(context.Background(), sampleConfig(t, "deepseek")); err == nil || !strings.Contains(err.Error(), "lookup failed") || !strings.Contains(log.joined(), "db down") {
+		t.Fatalf("lookup failure not distinguished: err=%v logs=%s", err, log.joined())
 	}
 	if _, err := host.NewBuilder(nil, fakeProviders{}, log); err == nil {
 		t.Fatal("nil client accepted")

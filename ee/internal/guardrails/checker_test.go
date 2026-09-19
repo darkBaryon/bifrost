@@ -115,17 +115,23 @@ func TestDetectorFailures(t *testing.T) {
 	}
 }
 
+// 失败放行的规则先完成，再由另一条规则拦截：两条评估都保留。用屏障固定顺序，不依赖调度。
 func TestAllowFailureContinuesToBlockingRule(t *testing.T) {
+	failed := make(chan struct{})
 	r := rule("broken")
 	r.OnError = guardrails.Allow
 	e := mustChecker(t, []guardrails.Rule{r, rule("block")}, map[string]guardrails.Detector{
-		"broken": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, errors.New("failed") }),
+		"broken": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			defer close(failed)
+			return nil, errors.New("failed")
+		}),
 		"block": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			<-failed
 			return []guardrails.Finding{{Level: guardrails.High}}, nil
 		}),
 	})
 	result, err := e.Check(context.Background(), guardrails.Input, "text")
-	if err != nil || result.Action != guardrails.Block || len(result.RuleEvaluations) != 2 {
+	if err != nil || result.Action != guardrails.Block || len(result.RuleEvaluations) != 2 || result.RuleEvaluations[0].Outcome != guardrails.Failed || result.Blocking == nil || result.Blocking.RuleID != "block" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }

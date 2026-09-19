@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -87,10 +88,11 @@ func (m *JudgeModel) Complete(ctx context.Context, system, user string) (string,
 	return text, err
 }
 
-// 错误消息只保留前 maxErrorMessageBytes 字节：足够定位鉴权、限流、模型不存在等原因，又不会把长响应体带进日志。
+// 网关自身产生的错误消息（如"没有支持该模型的 key"）保留前 maxErrorMessageBytes 字节用于排障；
+// provider 返回的错误消息可能回显送检内容，一律不进日志与错误链，只留状态码、类型和代码。
 const maxErrorMessageBytes = 200
 
-// judgeError 保留状态码、错误类型、代码与截断后的消息；不带 provider 返回的完整正文。
+// judgeError 把网关错误转成不含送检内容的普通 error。
 func judgeError(bErr *schemas.BifrostError) error {
 	parts := []string{"judge request failed"}
 	if bErr.StatusCode != nil {
@@ -103,14 +105,27 @@ func judgeError(bErr *schemas.BifrostError) error {
 		if bErr.Error.Code != nil {
 			parts = append(parts, "code="+*bErr.Error.Code)
 		}
-		if msg := strings.TrimSpace(bErr.Error.Message); msg != "" {
-			if len(msg) > maxErrorMessageBytes {
-				msg = msg[:maxErrorMessageBytes] + "…"
+		if bErr.IsBifrostError {
+			if msg := truncateUTF8(strings.TrimSpace(bErr.Error.Message), maxErrorMessageBytes); msg != "" {
+				parts = append(parts, "message="+strconv.Quote(msg))
 			}
-			parts = append(parts, "message="+strconv.Quote(msg))
+		} else {
+			parts = append(parts, "provider_message=omitted")
 		}
 	}
 	return errors.New(strings.Join(parts, " "))
+}
+
+// truncateUTF8 按字节上限截断但不切断多字节字符。
+func truncateUTF8(s string, limit int) string {
+	if len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "…"
 }
 
 // responseText 取第一个候选的纯文本；没有文本视为一次失败（可重试）。

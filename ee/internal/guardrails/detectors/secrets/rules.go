@@ -90,7 +90,7 @@ func loadRules(data []byte) ([]rule, allowlist, error) {
 		if rf.SecretGroup < 0 || rf.SecretGroup > re.NumSubexp() {
 			return nil, allowlist{}, fmt.Errorf("secrets: rule %s: secret_group %d out of range", rf.ID, rf.SecretGroup)
 		}
-		level, ok := parseLevel(rf.Level)
+		level, ok := guardrails.ParseLevel(rf.Level)
 		if !ok {
 			return nil, allowlist{}, fmt.Errorf("secrets: rule %s: unknown level %q", rf.ID, rf.Level)
 		}
@@ -137,16 +137,4 @@ func compileAllow(af allowFile) (allowlist, error) {
 		}
 	}
 	return al, nil
-}
-
-func parseLevel(s string) (guardrails.Level, bool) {
-	switch s {
-	case "low":
-		return guardrails.Low, true
-	case "medium":
-		return guardrails.Medium, true
-	case "high":
-		return guardrails.High, true
-	}
-	return 0, false
 }

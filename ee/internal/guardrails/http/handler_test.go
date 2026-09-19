@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/config"
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/persistence"
+	safetyplugin "github.com/darkBaryon/bifrost/ee/internal/guardrails/plugin"
 	"github.com/fasthttp/router"
 	upstream "github.com/maximhq/bifrost/transports/bifrost-http/handlers"
 	"github.com/valyala/fasthttp"
@@ -30,19 +32,33 @@ func (b fakeBuilder) Build(_ context.Context, cfg config.Config) (*guardrails.Ch
 }
 
 type fakeSwapper struct {
-	mu    sync.Mutex
-	swaps []*guardrails.Checker
+	mu      sync.Mutex
+	swaps   []*guardrails.Checker
+	options []safetyplugin.Options
 }
 
-func (s *fakeSwapper) Swap(c *guardrails.Checker) {
+func (s *fakeSwapper) Swap(c *guardrails.Checker, o safetyplugin.Options) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.swaps = append(s.swaps, c)
+	s.options = append(s.options, o)
+	return nil
 }
 
-const validConfig = `{"deny":{"status":400,"message":"no"},"secrets":{"enabled":true,"stages":["input"],"threshold":"high","on_match":"block","on_error":"block"}}`
+type testLogger struct {
+	mu    sync.Mutex
+	lines []string
+}
 
-func setup(t *testing.T, builder Builder, locked Locked) (*router.Router, *fakeSwapper) {
+func (l *testLogger) Error(f string, a ...any) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.lines = append(l.lines, fmt.Sprintf(f, a...))
+}
+
+const validConfig = `{"deny":{"status":451,"message":"自定义拒绝"},"secrets":{"enabled":true,"stages":["input"],"threshold":"high","on_match":"block","on_error":"block"}}`
+
+func setup(t *testing.T, builder Builder, locked Locked) (*router.Router, *fakeSwapper, *testLogger) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "config.db")), &gorm.Config{})
 	if err != nil {
@@ -54,7 +70,8 @@ func setup(t *testing.T, builder Builder, locked Locked) (*router.Router, *fakeS
 		t.Fatal(err)
 	}
 	swapper := &fakeSwapper{}
-	h, err := NewHandler(persistence.NewStore(db), builder, swapper, locked)
+	log := &testLogger{}
+	h, err := NewHandler(persistence.NewStore(db), builder, swapper, log, locked)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +80,7 @@ func setup(t *testing.T, builder Builder, locked Locked) (*router.Router, *fakeS
 	if err := h.RegisterRoutes(r, am.APIMiddleware()); err != nil {
 		t.Fatal(err)
 	}
-	return r, swapper
+	return r, swapper, log
 }
 
 func call(t *testing.T, r *router.Router, path, body string) (int, map[string]any) {
@@ -85,7 +102,7 @@ func call(t *testing.T, r *router.Router, path, body string) (int, map[string]an
 }
 
 func TestLifecycle(t *testing.T) {
-	r, swapper := setup(t, fakeBuilder{}, nil)
+	r, swapper, _ := setup(t, fakeBuilder{}, nil)
 	status, body := call(t, r, "/api/guardrails/get", "")
 	if status != 200 || body["config"] != nil || body["version"].(float64) != 0 {
 		t.Fatalf("empty get: %d %v", status, body)
@@ -93,6 +110,9 @@ func TestLifecycle(t *testing.T) {
 	status, body = call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`)
 	if status != 200 || body["version"].(float64) != 1 || len(swapper.swaps) != 1 || swapper.swaps[0] == nil {
 		t.Fatalf("update: %d %v swaps=%d", status, body, len(swapper.swaps))
+	}
+	if swapper.options[0] != (safetyplugin.Options{StatusCode: 451, DenyMessage: "自定义拒绝"}) {
+		t.Fatalf("deny options not published with the checker: %+v", swapper.options[0])
 	}
 	status, _ = call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`)
 	if status != fasthttp.StatusConflict || len(swapper.swaps) != 1 {
@@ -109,7 +129,7 @@ func TestLifecycle(t *testing.T) {
 }
 
 func TestRejectionsDoNotSwap(t *testing.T) {
-	r, swapper := setup(t, fakeBuilder{}, nil)
+	r, swapper, _ := setup(t, fakeBuilder{}, nil)
 	for name, body := range map[string]string{
 		"not json":        "{",
 		"unknown field":   `{"config":` + validConfig + `,"version":0,"x":1}`,
@@ -126,7 +146,7 @@ func TestRejectionsDoNotSwap(t *testing.T) {
 	if len(swapper.swaps) != 0 {
 		t.Fatal("rejected update swapped the checker")
 	}
-	failing, swapper := setup(t, fakeBuilder{fail: errors.New("judge provider \"x\" is not configured")}, nil)
+	failing, swapper, log := setup(t, fakeBuilder{fail: errors.New("judge provider \"x\" is not configured")}, nil)
 	if status, body := call(t, failing, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`); status != fasthttp.StatusBadRequest || !strings.Contains(body["error"].(map[string]any)["message"].(string), "not configured") {
 		t.Fatalf("build failure: %d %v", status, body)
 	}
@@ -136,10 +156,73 @@ func TestRejectionsDoNotSwap(t *testing.T) {
 	if len(swapper.swaps) != 0 {
 		t.Fatal("failed build swapped the checker")
 	}
+	if len(log.lines) != 1 || !strings.Contains(log.lines[0], "not configured") {
+		t.Fatalf("build failure not logged: %v", log.lines)
+	}
+}
+
+// 存储故障：对外通用错误，服务端日志有操作与原因。
+func TestStorageFailureIsLogged(t *testing.T) {
+	r, swapper, log := setup(t, fakeBuilder{}, nil)
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "broken.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 未迁移的库：表不存在，读写都会失败。
+	h, err := NewHandler(persistence.NewStore(db), fakeBuilder{}, swapper, log, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broken := router.New()
+	am := &upstream.AuthMiddleware{}
+	if err := h.RegisterRoutes(broken, am.APIMiddleware()); err != nil {
+		t.Fatal(err)
+	}
+	_ = r
+	if status, _ := call(t, broken, "/api/guardrails/get", ""); status != fasthttp.StatusInternalServerError {
+		t.Fatalf("get on broken store: %d", status)
+	}
+	if status, _ := call(t, broken, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`); status != fasthttp.StatusInternalServerError {
+		t.Fatalf("update on broken store: %d", status)
+	}
+	if len(swapper.swaps) != 0 {
+		t.Fatal("storage failure swapped the checker")
+	}
+	joined := strings.Join(log.lines, "\n")
+	if !strings.Contains(joined, "storage read failed") || !strings.Contains(joined, "storage update failed") || !strings.Contains(joined, "no such table") {
+		t.Fatalf("storage failures not diagnosable: %v", log.lines)
+	}
+}
+
+// update 与 reset 在同一把锁下完成"写库 + 发布"，并发交错后库中状态与最后一次发布一致。
+func TestUpdateAndResetAreSerialized(t *testing.T) {
+	r, swapper, _ := setup(t, fakeBuilder{}, nil)
+	var wg sync.WaitGroup
+	for i := range 20 {
+		wg.Add(1)
+		go func(reset bool) {
+			defer wg.Done()
+			if reset {
+				call(t, r, "/api/guardrails/reset", "")
+				return
+			}
+			_, body := call(t, r, "/api/guardrails/get", "")
+			version := int(body["version"].(float64))
+			call(t, r, "/api/guardrails/update", fmt.Sprintf(`{"config":%s,"version":%d}`, validConfig, version))
+		}(i%3 == 0)
+	}
+	wg.Wait()
+	_, body := call(t, r, "/api/guardrails/get", "")
+	swapper.mu.Lock()
+	defer swapper.mu.Unlock()
+	last := swapper.swaps[len(swapper.swaps)-1]
+	if (body["config"] == nil) != (last == nil) {
+		t.Fatalf("stored state (configured=%v) diverged from published state (configured=%v)", body["config"] != nil, last != nil)
+	}
 }
 
 func TestLockedUnderFakeMode(t *testing.T) {
-	r, swapper := setup(t, fakeBuilder{}, func() bool { return true })
+	r, swapper, _ := setup(t, fakeBuilder{}, func() bool { return true })
 	if status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`); status != fasthttp.StatusConflict || len(swapper.swaps) != 0 {
 		t.Fatalf("locked update: %d", status)
 	}
@@ -149,10 +232,13 @@ func TestLockedUnderFakeMode(t *testing.T) {
 }
 
 func TestRequiresAuthAndDeps(t *testing.T) {
-	if _, err := NewHandler(nil, fakeBuilder{}, &fakeSwapper{}, nil); err == nil {
+	if _, err := NewHandler(nil, fakeBuilder{}, &fakeSwapper{}, &testLogger{}, nil); err == nil {
 		t.Fatal("nil store accepted")
 	}
-	h, _ := NewHandler(persistence.NewStore(nil), fakeBuilder{}, &fakeSwapper{}, nil)
+	if _, err := NewHandler(persistence.NewStore(nil), fakeBuilder{}, &fakeSwapper{}, nil, nil); err == nil {
+		t.Fatal("nil logger accepted")
+	}
+	h, _ := NewHandler(persistence.NewStore(nil), fakeBuilder{}, &fakeSwapper{}, &testLogger{}, nil)
 	if err := h.RegisterRoutes(router.New(), nil); err == nil {
 		t.Fatal("nil auth accepted")
 	}

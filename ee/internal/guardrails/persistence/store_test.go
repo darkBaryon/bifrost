@@ -64,3 +64,30 @@ func TestVersionedUpdates(t *testing.T) {
 		t.Fatalf("version restarts after reset: row=%+v err=%v", row, err)
 	}
 }
+
+// 条件更新影响 0 行（例如被触发器忽略）时必须报版本冲突，而不是返回虚构的新版本。
+func TestZeroRowUpdateIsConflict(t *testing.T) {
+	ctx := context.Background()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "config.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sql, _ := db.DB()
+	t.Cleanup(func() { sql.Close() })
+	if err := Migrate(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	s := NewStore(db)
+	if _, err := s.Update(ctx, `{"a":1}`, UnsetVersion); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Exec("CREATE TRIGGER swallow BEFORE UPDATE ON ee_guardrails BEGIN SELECT RAISE(IGNORE); END").Error; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Update(ctx, `{"a":2}`, 1); !errors.Is(err, ErrVersionConflict) {
+		t.Fatalf("zero-row update reported as success: %v", err)
+	}
+	if row, err := s.Read(ctx); err != nil || row.Version != 1 || row.Config != `{"a":1}` {
+		t.Fatalf("stored state changed: %+v err=%v", row, err)
+	}
+}
