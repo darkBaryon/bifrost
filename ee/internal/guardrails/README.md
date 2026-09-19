@@ -98,7 +98,7 @@
 ## 检测器要点
 
 - **密钥（D3）**：规则数据源自 Gitleaks 并按本仓核实补充（国内外厂商前缀、钉钉 / 飞书 / 企业微信 webhook、中文字段名）。厂商专用规则报 `high`，无法归属厂商的通用规则报 `medium`；命中值以 `sk-bf-` 开头（网关自身的虚拟 key）一律不报；`ignored_keywords` 供管理员止血误报。
-- **判官（D1/D4/D5）**：每个项目一个实例，每条业务规则一个实例；判官请求是跳过插件管线的内部子请求，不会再经过本插件，也不进上游日志与计费（本包只记 token 数）。判官返回的理由不记录；判官调用失败时，从 provider HTTP 响应解析出的错误（type、code、message 都可能回显送检内容）一律不进日志，只留状态码与按状态码派生的固定类别；网关自造的错误（取消、超时、key 池没有支持判官模型的 key、连不上 provider 的 `provider_connection_failed`、key 全部失效的 `upstream_credentials_exhausted`）保留类型、代码与前 200 字节消息。判别实现见 [host/judge.go](host/judge.go) 的 `fromProviderResponse`。判官 provider 自带的重试会与检测器重试相乘，装配时记 Warn。
+- **判官（D1/D4/D5）**：每个项目一个实例，每条业务规则一个实例；判官请求是跳过插件管线的内部子请求，不会再经过本插件，也不进上游日志与计费（本包只记 token 数）。判官返回的理由不记录；判官调用失败时，网关或传输层生成的错误（取消、超时、key 池没有支持判官模型的 key；即 `IsBifrostError` 为 true 或没有状态码）保留类型、代码与前 200 字节消息；带状态码的错误按 provider 响应处理，type/code/message 一律不进日志，只留状态码与固定类别——其中类型为网关合成的连接失败 / key 耗尽时给出对应的 `gateway_*` 类别（类型字段可被 provider 正文伪造，故只给类别、不复制其他字段）。判别实现见 [host/judge.go](host/judge.go) 的 `fromProviderResponse`。判官 provider 自带的重试会与检测器重试相乘，装配时记 Warn。
 
 ## 开发联调
 

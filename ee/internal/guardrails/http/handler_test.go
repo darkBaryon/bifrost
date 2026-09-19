@@ -46,7 +46,9 @@ type fakeSwapper struct {
 func (s *fakeSwapper) Swap(c *guardrails.Checker, o safetyplugin.Options) error {
 	s.mu.Lock()
 	first := s.gate != nil && !s.gated
-	s.gated = s.gated || first
+	if first {
+		s.gated = true
+	}
 	s.mu.Unlock()
 	if first {
 		s.entered <- struct{}{}

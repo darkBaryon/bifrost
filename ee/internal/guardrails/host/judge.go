@@ -91,51 +91,50 @@ func (m *JudgeModel) Complete(ctx context.Context, system, user string) (string,
 // 错误消息保留上限，按 UTF-8 边界截断。
 const maxErrorMessageBytes = 200
 
-// upstreamCredentialsExhausted 是上游在判官 provider 的 key 全部失效时合成的错误类型（core/bifrost.go 的 errAllKeysDead 分支，无导出常量）。
-const upstreamCredentialsExhausted = "upstream_credentials_exhausted"
+// 上游在拿不到可用 key 或连不上 provider 时合成的错误类型（IsBifrostError 为 false、带状态码）：
+// 连接失败 schemas.ProviderConnectionFailed（502），key 全部失效 upstream_credentials_exhausted（502），
+// key 全被过滤 no_eligible_keys（503；本仓未装配 KeyPoolFilter，当前不可达，一并收录以防日后装配后静默落回 provider 分支）。
+// 出处 core/providers/utils/utils.go NewBifrostUpstreamConnectionError 与 core/bifrost.go executeRequestWithRetries。
+var synthesizedGatewayTypes = map[string]string{
+	schemas.ProviderConnectionFailed: "gateway_connection_failed",
+	"upstream_credentials_exhausted": "gateway_credentials_exhausted",
+	"no_eligible_keys":               "gateway_no_eligible_keys",
+}
 
-// judgeError 把网关错误转成不含送检内容的普通 error。
-// 两类来源：provider HTTP 响应解析出的错误（IsBifrostError 为 false、带 provider 状态码，且类型不是网关合成的
-// 连接失败 / key 耗尽），其 type/code/message 都可能回显送检内容，一律不保留，只按状态码归入固定类别；
-// 其余都是网关或传输层自造（取消、超时、key 池没有支持判官模型的 key、连不上 provider、key 全部失效），
-// 文本为 Bifrost 常量，保留类型、代码与截断后的消息用于排障。
+// judgeError 把网关错误转成不含送检内容的普通 error。三类处理：
+//   - IsBifrostError 为 true 或没有状态码：文本由网关或传输层生成（取消、超时、key 池没有支持判官模型的 key），
+//     provider 正文无法影响这些字段，保留类型、代码与截断后的消息；
+//   - 带状态码且类型在 synthesizedGatewayTypes 里：多半是网关合成的连接失败 / key 耗尽，但 Error.Type 在 provider
+//     响应路径上由 provider 正文原样填入、不可信，所以只输出本地固定类别，不复制 code/message（尽力而为地保留诊断）；
+//   - 其余：provider HTTP 响应解析出的错误，type/code/message 都可能回显送检内容，只按状态码归入固定类别。
 func judgeError(bErr *schemas.BifrostError) error {
 	parts := []string{"judge request failed"}
 	if bErr.StatusCode != nil {
 		parts = append(parts, fmt.Sprintf("status=%d", *bErr.StatusCode))
 	}
-	if fromProviderResponse(bErr) {
-		parts = append(parts, "category="+providerFailureCategory(*bErr.StatusCode))
+	if bErr.IsBifrostError || bErr.StatusCode == nil {
+		parts = append(parts, "category=gateway")
+		if bErr.Error != nil {
+			if bErr.Error.Type != nil {
+				parts = append(parts, "type="+*bErr.Error.Type)
+			}
+			if bErr.Error.Code != nil {
+				parts = append(parts, "code="+*bErr.Error.Code)
+			}
+			if msg := truncateUTF8(strings.TrimSpace(bErr.Error.Message), maxErrorMessageBytes); msg != "" {
+				parts = append(parts, "message="+strconv.Quote(msg))
+			}
+		}
 		return errors.New(strings.Join(parts, " "))
 	}
-	parts = append(parts, "category=gateway")
-	if bErr.Error != nil {
-		if bErr.Error.Type != nil {
-			parts = append(parts, "type="+*bErr.Error.Type)
-		}
-		if bErr.Error.Code != nil {
-			parts = append(parts, "code="+*bErr.Error.Code)
-		}
-		if msg := truncateUTF8(strings.TrimSpace(bErr.Error.Message), maxErrorMessageBytes); msg != "" {
-			parts = append(parts, "message="+strconv.Quote(msg))
-		}
-	}
-	return errors.New(strings.Join(parts, " "))
-}
-
-// fromProviderResponse 判断错误是否由 provider 的 HTTP 响应解析而来：只有这种错误可能带回显文本。
-// 上游把连接失败与 key 耗尽也合成为 IsBifrostError=false 的 502，按类型排除。
-func fromProviderResponse(bErr *schemas.BifrostError) bool {
-	if bErr.IsBifrostError || bErr.StatusCode == nil {
-		return false
-	}
 	if bErr.Error != nil && bErr.Error.Type != nil {
-		switch *bErr.Error.Type {
-		case schemas.ProviderConnectionFailed, upstreamCredentialsExhausted:
-			return false
+		if category, ok := synthesizedGatewayTypes[*bErr.Error.Type]; ok {
+			parts = append(parts, "category="+category)
+			return errors.New(strings.Join(parts, " "))
 		}
 	}
-	return true
+	parts = append(parts, "category="+providerFailureCategory(*bErr.StatusCode))
+	return errors.New(strings.Join(parts, " "))
 }
 
 // providerFailureCategory 只按 provider 返回的 HTTP 状态码给出固定类别，不引用任何自由文本。

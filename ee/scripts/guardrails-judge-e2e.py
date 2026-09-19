@@ -90,9 +90,8 @@ def main():
                 persist()
                 print(f"{s['id']:4} {stage:6} expect={s['expect']:5} got={got:8} {code:35} {ms:6.0f}ms", flush=True)
         node.expect(200, '/api/guardrails/reset')
-    except Exception as exc:  # noqa: BLE001 - 记录现场（含调用栈）后按失败退出
-        error = f'{type(exc).__name__}: {exc}\n{traceback.format_exc()}'
-        traceback.print_exc()
+    except Exception:  # noqa: BLE001 - 记录现场（含调用栈）后按失败退出；调用栈只在结尾打印一次
+        error = traceback.format_exc()
     finally:
         node.stop()
         model.shutdown()
@@ -110,7 +109,7 @@ def main():
     print('log:', root / 'node' / 'server.log')
     print('results:', root / 'results.json')
     if error:
-        print('ABORTED', error, f'({len(results)} results kept)')
+        print('ABORTED', f'({len(results)} results kept)\n' + error, file=sys.stderr)
     if error or len(ok) != len(results) or failures:
         sys.exit(1)
 
