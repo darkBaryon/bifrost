@@ -104,9 +104,9 @@ var synthesizedGatewayTypes = map[string]bool{
 // judgeError 把网关错误转成不含送检内容的普通 error。类别名只陈述可验证的事实，不断言来源：
 //   - IsBifrostError 为 true 或没有状态码：文本由网关或传输层生成（取消、超时、key 池没有支持判官模型的 key），
 //     provider 正文无法影响这些字段，记 category=gateway_internal 并保留类型、代码与截断后的消息；
-//   - 带状态码：按状态码归入 provider_* 类别；若类型命中 synthesizedGatewayTypes，附加 known_type=<本地清单常量>
-//     （多半是网关合成的连接失败 / key 耗尽，但 Error.Type 在 provider 响应路径上由 provider 正文原样填入、不可信，
-//     所以只输出比对命中的常量名，不复制 code/message）。
+//   - 带状态码：只按状态码归入 http_* 类别（状态码可能来自 provider 响应，也可能是网关合成的 502/503）；
+//     若类型命中 synthesizedGatewayTypes，附加 known_type=<本地清单常量>（多半是网关合成的连接失败 / key 耗尽，
+//     但 Error.Type 在 provider 响应路径上由 provider 正文原样填入、不可信，所以只输出比对命中的常量名，不复制 code/message）。
 func judgeError(bErr *schemas.BifrostError) error {
 	parts := []string{"judge request failed"}
 	if bErr.StatusCode != nil {
@@ -127,29 +127,29 @@ func judgeError(bErr *schemas.BifrostError) error {
 		}
 		return errors.New(strings.Join(parts, " "))
 	}
-	parts = append(parts, "category="+providerFailureCategory(*bErr.StatusCode))
+	parts = append(parts, "category="+statusCategory(*bErr.StatusCode))
 	if bErr.Error != nil && bErr.Error.Type != nil && synthesizedGatewayTypes[*bErr.Error.Type] {
 		parts = append(parts, "known_type="+*bErr.Error.Type)
 	}
 	return errors.New(strings.Join(parts, " "))
 }
 
-// providerFailureCategory 只按 provider 返回的 HTTP 状态码给出固定类别，不引用任何自由文本。
+// statusCategory 只按 HTTP 状态码给出固定类别，不看状态码由谁产生，也不引用任何自由文本。
 // 数字是 HTTP 状态码；本包不引入 HTTP 框架，故不用命名常量。
-func providerFailureCategory(code int) string {
+func statusCategory(code int) string {
 	switch {
 	case code == 401 || code == 403:
-		return "provider_auth"
+		return "http_auth"
 	case code == 429:
-		return "provider_rate_limited"
+		return "http_rate_limited"
 	case code == 499:
-		return "provider_cancelled"
+		return "http_cancelled"
 	case code >= 500:
-		return "provider_unavailable"
+		return "http_unavailable"
 	case code >= 400:
-		return "provider_rejected"
+		return "http_rejected"
 	}
-	return "provider_error"
+	return "http_other"
 }
 
 // truncateUTF8 按字节上限截断但不切断多字节字符。
