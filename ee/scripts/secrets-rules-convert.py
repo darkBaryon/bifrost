@@ -10,6 +10,7 @@
 - 丢弃只按文件路径判断的规则和规则里的 path 条件（网关扫描的是对话文本，没有路径）。
 - 规则级白名单：含 paths 且 condition 为 AND 的整条丢弃（永远无法满足）；其余去掉 paths 部分。
 - 等级：id 以 generic- 开头的为 medium，其余为 high；extra 文件可覆盖。
+- 终止符：把 Gitleaks 面向代码的终止符字符类补上中英文句读，对话里"密钥是 xxx，…"才不会漏（见 TERMINATOR_NEW）。
 - extra 文件：replace 按 id 覆盖整条规则；remove 删除；add 追加；keyword_regex_patch 对指定规则追加关键词并替换正则片段。
 输出按 id 排序，便于 diff。
 """
@@ -36,13 +37,24 @@ def convert_allowlist(allow: dict) -> dict | None:
     return out
 
 
+# Gitleaks 的终止符面向代码扫描：密钥后面只认反引号、引号、空白、分号、字面 \n\r 或行尾。
+# 对话文本里"我的密钥是 xxx，帮我看看""the key is xxx, please" 才是常态，逗号句号等标点会让整条规则漏检，
+# 所以统一把中英文常见句读补进终止符字符类。只放宽边界字符，不改前缀与长度约束。
+TERMINATOR_OLD = r"""(?:[\x60'"\s;]|\\[nr]|$)"""
+TERMINATOR_NEW = r"""(?:[\x60'"\s;,.:!?)\]}]|[，。、；：！？）】》」"']|\\[nr]|$)"""
+
+
+def patch_terminator(regex: str) -> str:
+    return regex.replace(TERMINATOR_OLD, TERMINATOR_NEW)
+
+
 def convert_rule(rule: dict) -> dict | None:
     if "regex" not in rule:
         return None
     out = {
         "id": rule["id"],
         "description": rule.get("description", ""),
-        "regex": rule["regex"],
+        "regex": patch_terminator(rule["regex"]),
         "keywords": sorted({k.lower() for k in rule.get("keywords", [])}),
         "entropy": float(rule.get("entropy", 0)),
         "secret_group": int(rule.get("secretGroup", 0)),
@@ -78,7 +90,7 @@ def normalize_extra(rule: dict) -> dict:
     return {
         "id": rule["id"],
         "description": rule.get("description", ""),
-        "regex": rule["regex"],
+        "regex": patch_terminator(rule["regex"]),
         "keywords": sorted({k.lower() for k in rule.get("keywords", [])}),
         "entropy": float(rule.get("entropy", 0)),
         "secret_group": int(rule.get("secret_group", 0)),

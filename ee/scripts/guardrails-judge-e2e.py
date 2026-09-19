@@ -56,7 +56,8 @@ def classify(status, body):
 
 def main():
     key = os.environ['DEEPSEEK_API_KEY']
-    samples = json.loads((REPO / 'product/需求/内容安全/判官实验/samples.json').read_text())
+    sample_file = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / 'product/需求/内容安全/判官实验/samples.json'
+    samples = json.loads(sample_file.read_text())
     root = Path(tempfile.mkdtemp(prefix='ee-judge-e2e-'))
     model = ThreadingHTTPServer(('127.0.0.1', 0), guard_smoke.ModelHandler)
     model.calls = model.judge_calls = 0
@@ -81,7 +82,7 @@ def main():
         for stage in ['input', 'output']:
             state, _ = node.expect(200, '/api/guardrails/update', {'config': config(stage, samples['business_rule']), 'version': version})
             version = state['version']
-            for s in [x for x in samples['samples'] if x['stage'] == stage]:
+            for s in [x for x in samples['samples'] if x.get('stage', 'input') == stage]:
                 start = time.perf_counter()
                 status, body, _ = guard_smoke.completion(node, s['text'])
                 ms = (time.perf_counter() - start) * 1000
@@ -98,19 +99,23 @@ def main():
         (root / 'config.json').unlink(missing_ok=True)
         (root / 'node' / 'config.json').unlink(missing_ok=True)
         persist()
-    ok = [r for r in results if r['got'] == r['expect']]
+    graded = [r for r in results if r['group'] != '灰色']
+    gray = [r for r in results if r['group'] == '灰色']
+    ok = [r for r in graded if r['got'] == r['expect']]
     failures = [r for r in results if r['got'] == 'failure']
     lat = sorted(r['ms'] for r in results)
     if lat:
-        print(f"\nmatch {len(ok)}/{len(results)}; failures {len(failures)}; latency p50={statistics.median(lat):.0f}ms p90={lat[int(len(lat)*0.9)-1]}ms max={lat[-1]}ms")
-    for r in results:
+        print(f"\nmatch {len(ok)}/{len(graded)}（灰色 {len(gray)} 条单列）; failures {len(failures)}; latency p50={statistics.median(lat):.0f}ms p90={lat[int(len(lat)*0.9)-1]}ms max={lat[-1]}ms")
+    for r in gray:
+        print('GRAY', r['id'], r['got'], r['code'])
+    for r in graded:
         if r['got'] != r['expect']:
             print('MISMATCH' if r['got'] != 'failure' else 'FAILURE', r)
     print('log:', root / 'node' / 'server.log')
     print('results:', root / 'results.json')
     if error:
         print('ABORTED', f'({len(results)} results kept)\n' + error, file=sys.stderr)
-    if error or len(ok) != len(results) or failures:
+    if error or len(ok) != len(graded) or failures:
         sys.exit(1)
 
 
