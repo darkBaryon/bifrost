@@ -11,9 +11,6 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
-// testOptions 是本包测试夹具统一使用的拒绝策略，newPlugin 与断言共用。
-var testOptions = safety.Options{StatusCode: 400, DenyMessage: "请求已拦截"}
-
 func outputChecker(t *testing.T) *guardrails.Checker {
 	t.Helper()
 	e, err := guardrails.New([]guardrails.Rule{testRule(guardrails.Output)}, map[string]guardrails.Detector{"local": detectorFunc(matchingDetector)}, 512)

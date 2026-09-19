@@ -41,6 +41,10 @@ func matchingDetector(_ context.Context, text string) ([]guardrails.Finding, err
 	}
 	return nil, nil
 }
+
+// testOptions 是本包测试夹具统一使用的拒绝策略，newPlugin 与断言共用。
+var testOptions = safety.Options{StatusCode: 400, DenyMessage: "请求已拦截"}
+
 func newPlugin(t *testing.T, rules []guardrails.Rule, d detectorFunc) (*safety.Plugin, *testLogger) {
 	t.Helper()
 	e, err := guardrails.New(rules, map[string]guardrails.Detector{"local": d}, 512)

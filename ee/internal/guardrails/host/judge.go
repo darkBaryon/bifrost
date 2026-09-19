@@ -88,13 +88,17 @@ func (m *JudgeModel) Complete(ctx context.Context, system, user string) (string,
 	return text, err
 }
 
-// 判官错误只有两类来源：provider 的 HTTP 响应（IsBifrostError 为 false 且带 provider 状态码，其 type/code/message
-// 都可能回显送检内容，一律不保留，只按状态码归入固定类别）；网关或传输层自造的错误（IsBifrostError 为 true 的
-// 取消/超时，或没有 provider 状态码的错误，如 key 池里没有支持判官模型的 key），其文本不含送检内容，保留类型、
-// 代码与消息前 maxErrorMessageBytes 字节用于排障。
+// 错误消息保留上限，按 UTF-8 边界截断。
 const maxErrorMessageBytes = 200
 
+// upstreamCredentialsExhausted 是上游在判官 provider 的 key 全部失效时合成的错误类型（core/bifrost.go 的 errAllKeysDead 分支，无导出常量）。
+const upstreamCredentialsExhausted = "upstream_credentials_exhausted"
+
 // judgeError 把网关错误转成不含送检内容的普通 error。
+// 两类来源：provider HTTP 响应解析出的错误（IsBifrostError 为 false、带 provider 状态码，且类型不是网关合成的
+// 连接失败 / key 耗尽），其 type/code/message 都可能回显送检内容，一律不保留，只按状态码归入固定类别；
+// 其余都是网关或传输层自造（取消、超时、key 池没有支持判官模型的 key、连不上 provider、key 全部失效），
+// 文本为 Bifrost 常量，保留类型、代码与截断后的消息用于排障。
 func judgeError(bErr *schemas.BifrostError) error {
 	parts := []string{"judge request failed"}
 	if bErr.StatusCode != nil {
@@ -119,9 +123,19 @@ func judgeError(bErr *schemas.BifrostError) error {
 	return errors.New(strings.Join(parts, " "))
 }
 
-// fromProviderResponse 判断错误是否由 provider 的 HTTP 响应产生：只有这种错误可能带回显文本。
+// fromProviderResponse 判断错误是否由 provider 的 HTTP 响应解析而来：只有这种错误可能带回显文本。
+// 上游把连接失败与 key 耗尽也合成为 IsBifrostError=false 的 502，按类型排除。
 func fromProviderResponse(bErr *schemas.BifrostError) bool {
-	return !bErr.IsBifrostError && bErr.StatusCode != nil
+	if bErr.IsBifrostError || bErr.StatusCode == nil {
+		return false
+	}
+	if bErr.Error != nil && bErr.Error.Type != nil {
+		switch *bErr.Error.Type {
+		case schemas.ProviderConnectionFailed, upstreamCredentialsExhausted:
+			return false
+		}
+	}
+	return true
 }
 
 // providerFailureCategory 只按 provider 返回的 HTTP 状态码给出固定类别，不引用任何自由文本。

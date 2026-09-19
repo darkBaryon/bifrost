@@ -44,8 +44,11 @@ type fakeSwapper struct {
 }
 
 func (s *fakeSwapper) Swap(c *guardrails.Checker, o safetyplugin.Options) error {
-	if s.gate != nil && !s.gated {
-		s.gated = true
+	s.mu.Lock()
+	first := s.gate != nil && !s.gated
+	s.gated = s.gated || first
+	s.mu.Unlock()
+	if first {
 		s.entered <- struct{}{}
 		<-s.gate
 	}
@@ -233,23 +236,25 @@ type outcome struct {
 // update 与 reset 从写库到发布共用一把锁：第一方停在"已写库、未发布"时，第二方不得已经改动库；
 // 第一方发布后第二方才执行，最终库中状态与最后一次发布一致。去掉 Handler 的锁，第二方会在第一方阻塞期间写库，本用例失败。
 func TestUpdateAndResetAreSerialized(t *testing.T) {
-	const wait = 200 * time.Millisecond
+	const (
+		holdWindow     = 200 * time.Millisecond // 第一方持锁期间观察"预期不发生"的窗口
+		barrierTimeout = 5 * time.Second        // 合法阻塞的请求最长允许多久返回
+	)
 	updateBody := `{"config":` + validConfig + `,"version":0}`
 	for _, first := range []string{"update", "reset"} {
 		t.Run(first+" first", func(t *testing.T) {
 			r, swapper, _ := setup(t, fakeBuilder{}, nil)
+			// 默认 update 先行、reset 第二；reset 先行时先播种并整体对调角色。
+			firstPath, firstBody := "/api/guardrails/update", updateBody
 			second, secondPath, secondBody := "reset", "/api/guardrails/reset", ""
-			if first == "reset" { // 让 reset 有东西可删；第二方是 update
+			if first == "reset" {
 				if status, _ := call(t, r, "/api/guardrails/update", updateBody); status != 200 {
 					t.Fatal("seed update failed")
 				}
+				firstPath, firstBody = "/api/guardrails/reset", ""
 				second, secondPath, secondBody = "update", "/api/guardrails/update", updateBody
 			}
 			swapper.entered, swapper.gate = make(chan struct{}, 1), make(chan struct{})
-			firstPath, firstBody := "/api/guardrails/update", updateBody
-			if first == "reset" {
-				firstPath, firstBody = "/api/guardrails/reset", ""
-			}
 			run := func(path, body string) chan outcome {
 				done := make(chan outcome, 1)
 				go func() {
@@ -261,14 +266,14 @@ func TestUpdateAndResetAreSerialized(t *testing.T) {
 			firstDone := run(firstPath, firstBody)
 			select {
 			case <-swapper.entered: // 第一方已写库，停在发布前
-			case <-time.After(5 * time.Second):
+			case <-time.After(barrierTimeout):
 				t.Fatal("first request never reached publish")
 			}
 			secondDone := run(secondPath, secondBody)
 			select {
 			case o := <-secondDone:
 				t.Fatalf("second request (%s) completed while the first held the persist-and-publish lock: %+v", second, o)
-			case <-time.After(wait):
+			case <-time.After(holdWindow):
 			}
 			// 第一方仍持锁：库里必须还是第一方写入后的状态，第二方不得已经写库。
 			_, body := call(t, r, "/api/guardrails/get", "")
@@ -282,7 +287,7 @@ func TestUpdateAndResetAreSerialized(t *testing.T) {
 					if o.err != nil || o.status != 200 {
 						t.Fatalf("request outcome %+v", o)
 					}
-				case <-time.After(5 * time.Second):
+				case <-time.After(barrierTimeout):
 					t.Fatal("request did not finish after the lock was released")
 				}
 			}

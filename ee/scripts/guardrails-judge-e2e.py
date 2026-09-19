@@ -9,6 +9,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -89,8 +90,9 @@ def main():
                 persist()
                 print(f"{s['id']:4} {stage:6} expect={s['expect']:5} got={got:8} {code:35} {ms:6.0f}ms", flush=True)
         node.expect(200, '/api/guardrails/reset')
-    except Exception as exc:  # noqa: BLE001 - 记录现场后按失败退出
-        error = f'{type(exc).__name__}: {exc}'
+    except Exception as exc:  # noqa: BLE001 - 记录现场（含调用栈）后按失败退出
+        error = f'{type(exc).__name__}: {exc}\n{traceback.format_exc()}'
+        traceback.print_exc()
     finally:
         node.stop()
         model.shutdown()

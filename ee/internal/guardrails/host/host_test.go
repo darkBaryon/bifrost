@@ -123,11 +123,28 @@ func TestJudgeModelErrorPolicy(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "category=gateway") || !strings.Contains(err.Error(), "no keys found that support model") {
 		t.Fatalf("gateway-generated message lost: %v", err)
 	}
+	// 上游真实取消形状：IsBifrostError 为 true 且带 499。
+	cancelStatus := 499
 	long := strings.Repeat("模", 100)
-	cancelled := &fakeClient{err: &schemas.BifrostError{IsBifrostError: true, Error: &schemas.ErrorField{Type: schemas.Ptr("request_cancelled"), Message: long}}}
+	cancelled := &fakeClient{err: &schemas.BifrostError{IsBifrostError: true, StatusCode: &cancelStatus, Error: &schemas.ErrorField{Type: schemas.Ptr("request_cancelled"), Message: long}}}
 	_, err = host.NewJudgeModel(cancelled, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || !strings.Contains(err.Error(), "type=request_cancelled") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
+	if err == nil || !strings.Contains(err.Error(), "category=gateway") || !strings.Contains(err.Error(), "type=request_cancelled") || strings.Contains(err.Error(), strings.Repeat("模", 70)) || !utf8.ValidString(err.Error()) {
 		t.Fatalf("gateway message not kept, not truncated or broke UTF-8: %v", err)
+	}
+	// 网关合成的 502：连不上 provider、判官 key 全部失效——IsBifrostError 为 false 且带状态码，但消息是 Bifrost 常量，须保留。
+	bad := 502
+	for _, kind := range []string{schemas.ProviderConnectionFailed, "upstream_credentials_exhausted"} {
+		synthesized := &fakeClient{err: &schemas.BifrostError{StatusCode: &bad, Error: &schemas.ErrorField{Type: schemas.Ptr(kind), Message: "synthesized by gateway"}}}
+		_, err = host.NewJudgeModel(synthesized, "deepseek", "m", log).Complete(context.Background(), "s", "u")
+		if err == nil || !strings.Contains(err.Error(), "category=gateway") || !strings.Contains(err.Error(), "type="+kind) || !strings.Contains(err.Error(), "synthesized by gateway") {
+			t.Fatalf("%s diagnostics dropped: %v", kind, err)
+		}
+	}
+	// 同样是 502，但类型来自 provider 正文：不保留任何字段。
+	body := &fakeClient{err: &schemas.BifrostError{StatusCode: &bad, Error: &schemas.ErrorField{Type: schemas.Ptr("server_error " + echo), Message: echo}}}
+	_, err = host.NewJudgeModel(body, "deepseek", "m", log).Complete(context.Background(), "s", "u")
+	if err == nil || strings.Contains(err.Error(), echo) || !strings.Contains(err.Error(), "category=provider_unavailable") {
+		t.Fatalf("provider 502 leaked: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
