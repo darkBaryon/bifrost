@@ -40,9 +40,13 @@ def config(stage, rule):
 
 
 def classify(status, body):
-    """只有合法回答算放行、只有内容命中算拦截；其他一律记为验证失败，不能混入放行或拦截。"""
-    if status == 200 and isinstance(body, dict) and body.get('choices'):
-        return 'pass', ''
+    """只有带非空正文的合法回答算放行、只有内容命中算拦截；其他一律记为验证失败，不能混入放行或拦截。"""
+    if status == 200 and isinstance(body, dict):
+        choices = body.get('choices') or []
+        message = choices[0].get('message', {}) if choices and isinstance(choices[0], dict) else {}
+        if isinstance(message.get('content'), str) and message['content'].strip():
+            return 'pass', ''
+        return 'failure', 'invalid_completion'
     code = body.get('error', {}).get('code', '') if isinstance(body, dict) else ''
     if status == 400 and code == 'content_safety_blocked':
         return 'block', code
@@ -63,6 +67,12 @@ def main():
     cfg['providers']['deepseek'] = {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': ['deepseek-v4-flash']}], 'network_config': {'max_retries': 0}}
     node = identity_smoke.Node(str(REPO / 'ee/tmp/bifrost-http'), root / 'node', cfg, '')
     results = []
+    outcome = {'error': None}
+
+    def persist():
+        # 逐条结果与中途异常都落盘，异常中断也保留已完成部分。
+        (root / 'results.json').write_text(json.dumps({'results': results, 'error': outcome['error']}, ensure_ascii=False, indent=1))
+
     try:
         node.start()
         node.login('judge-e2e', password)
@@ -76,14 +86,17 @@ def main():
                 ms = (time.perf_counter() - start) * 1000
                 got, code = classify(status, body)
                 results.append({'id': s['id'], 'group': s['group'], 'stage': stage, 'expect': s['expect'], 'got': got, 'code': code, 'ms': round(ms), 'status': status})
+                persist()
                 print(f"{s['id']:4} {stage:6} expect={s['expect']:5} got={got:8} {code:35} {ms:6.0f}ms", flush=True)
         node.expect(200, '/api/guardrails/reset')
+    except Exception as exc:  # noqa: BLE001 - 记录现场后按失败退出
+        outcome['error'] = f'{type(exc).__name__}: {exc}'
     finally:
         node.stop()
         model.shutdown()
         (root / 'config.json').unlink(missing_ok=True)
         (root / 'node' / 'config.json').unlink(missing_ok=True)
-    (root / 'results.json').write_text(json.dumps(results, ensure_ascii=False, indent=1))
+        persist()
     ok = [r for r in results if r['got'] == r['expect']]
     failures = [r for r in results if r['got'] == 'failure']
     lat = sorted(r['ms'] for r in results)
@@ -94,7 +107,9 @@ def main():
             print('MISMATCH' if r['got'] != 'failure' else 'FAILURE', r)
     print('log:', root / 'node' / 'server.log')
     print('results:', root / 'results.json')
-    if len(ok) != len(results) or failures:
+    if outcome['error']:
+        print('ABORTED', outcome['error'], f'({len(results)} results kept)')
+    if outcome['error'] or len(ok) != len(results) or failures:
         sys.exit(1)
 
 

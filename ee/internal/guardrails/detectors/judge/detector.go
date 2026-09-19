@@ -30,7 +30,7 @@ const (
 	BusinessRule Kind = "business_rule"
 )
 
-// 应用层重试次数范围（用户裁决 3–5 次）与退避基数；总时长受规则 Timeout 约束。
+// 应用层重试次数范围（用户裁决 3–5 次）与退避基数；总时长受规则 Timeout 约束。范围与默认值须与 config 包的 minJudgeRetries/maxJudgeRetries/DefaultJudgeRetries 一致。
 const (
 	minRetries     = 3
 	maxRetries     = 5

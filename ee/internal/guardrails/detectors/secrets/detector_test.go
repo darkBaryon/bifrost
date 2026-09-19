@@ -155,6 +155,16 @@ func TestNoFalsePositives(t *testing.T) {
 		"wecom bad key":      "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=short",
 		"sk generic short":   "sk-" + fake(71, 12, hex),
 		"sts short":          "STS." + fake(72, 4, alnum),
+		"cerebras uppercase": "csk-" + fake(73, 48, "ABCDEFGHIJKLMNOPQRSTUVWXYZ"),
+		"xai short":          "xai-" + fake(74, 40, alnum),
+		"bailian plan short": "sk-sp-" + fake(75, 8, alnum),
+		"minimax short":      "sk-api-" + fake(76, 10, alnum),
+		"qianfan bad shape":  "bce-v3/ALTAK-" + fake(77, 8, alnum) + "/notahexstring",
+		"altak short":        "ALTAK-" + fake(78, 8, alnum),
+		"cais short":         "CAIS" + fake(79, 20, alnum),
+		"feishu other path":  "https://open.feishu.cn/open-apis/bot/v1/other/" + fake(80, 36, alnum),
+		"anthropic no digit": "sk-ant-api-" + fake(81, 20, alnum),
+		"aktp short":         "AKTP" + fake(82, 10, alnum),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if got := levels(t, d, text); len(got) != 0 {

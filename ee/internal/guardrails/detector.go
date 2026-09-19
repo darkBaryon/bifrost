@@ -1,4 +1,4 @@
-// 本文件定义本地检测器契约、风险结果及其有效性检查。
+// 本文件定义本地检测器契约、风险等级及其名称，以及拦截响应状态码的业务边界。
 package guardrails
 
 import (
@@ -18,19 +18,19 @@ const (
 
 // 等级在配置、规则数据和判官输出里的字符串名；只在这里定义，各处经 ParseLevel 解析。
 const (
-	LevelNameLow    = "low"
-	LevelNameMedium = "medium"
-	LevelNameHigh   = "high"
+	levelNameLow    = "low"
+	levelNameMedium = "medium"
+	levelNameHigh   = "high"
 )
 
-// ParseLevel 把等级名解析为 Level；未知名称返回 false。
+// ParseLevel 把等级名（low/medium/high）解析为 Level；未知名称返回 false。
 func ParseLevel(name string) (Level, bool) {
 	switch name {
-	case LevelNameLow:
+	case levelNameLow:
 		return Low, true
-	case LevelNameMedium:
+	case levelNameMedium:
 		return Medium, true
-	case LevelNameHigh:
+	case levelNameHigh:
 		return High, true
 	}
 	return 0, false

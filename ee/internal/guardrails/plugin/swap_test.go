@@ -119,16 +119,18 @@ func TestSwapUnderConcurrentRequests(t *testing.T) {
 	wg.Wait()
 }
 
-// 拒绝策略与检查器一起热替换：Swap 后新请求用新状态码与文案，进行中的请求仍用旧快照；非法选项不替换。
+// 拒绝策略与检查器一起热替换：Swap 后新请求用新状态码与文案，更新前已准入的请求仍用旧快照的状态码与文案；非法选项不替换。
 func TestSwapReplacesDenyOptions(t *testing.T) {
-	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
+	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
 	inflight := primed(t, p, testContext())
 	if err := p.Swap(outputChecker(t), safety.Options{StatusCode: 451, DenyMessage: "新文案"}); err != nil {
 		t.Fatal(err)
 	}
-	_, _, _ = inflight, p, t
-	fresh := primed(t, p, testContext())
-	got, bErr, _ := p.PostLLMHook(fresh, response("unsafe"), nil)
+	got, bErr, _ := p.PostLLMHook(inflight, response("unsafe"), nil)
+	if got != nil || bErr == nil || *bErr.StatusCode != 400 || bErr.Error.Message != "请求已拦截" {
+		t.Fatalf("in-flight request did not keep its deny options: %+v", bErr)
+	}
+	got, bErr, _ = p.PostLLMHook(primed(t, p, testContext()), response("unsafe"), nil)
 	if got != nil || bErr == nil || *bErr.StatusCode != 451 || bErr.Error.Message != "新文案" {
 		t.Fatalf("new options not applied: %+v", bErr)
 	}
@@ -137,5 +139,12 @@ func TestSwapReplacesDenyOptions(t *testing.T) {
 	}
 	if _, bErr, _ := p.PostLLMHook(primed(t, p, testContext()), response("unsafe"), nil); bErr == nil || *bErr.StatusCode != 451 {
 		t.Fatal("failed swap changed the running options")
+	}
+	// 关闭检测不需要拒绝策略。
+	if err := p.Swap(nil, safety.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	if got, bErr, _ := p.PostLLMHook(primed(t, p, testContext()), response("unsafe"), nil); got == nil || bErr != nil {
+		t.Fatal("disabled plugin did not pass through")
 	}
 }

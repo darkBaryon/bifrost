@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails"
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/config"
@@ -35,9 +36,20 @@ type fakeSwapper struct {
 	mu      sync.Mutex
 	swaps   []*guardrails.Checker
 	options []safetyplugin.Options
+	// gate 非 nil 时，Swap 先发出 entered 再等待 gate，用来把"已写库、未发布"这一刻固定住。
+	entered chan struct{}
+	gate    chan struct{}
+	fail    error
 }
 
 func (s *fakeSwapper) Swap(c *guardrails.Checker, o safetyplugin.Options) error {
+	if s.gate != nil {
+		s.entered <- struct{}{}
+		<-s.gate
+	}
+	if s.fail != nil {
+		return s.fail
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.swaps = append(s.swaps, c)
@@ -123,7 +135,7 @@ func TestLifecycle(t *testing.T) {
 		t.Fatalf("get: %d %v", status, body)
 	}
 	status, body = call(t, r, "/api/guardrails/reset", "")
-	if status != 200 || body["version"].(float64) != 0 || len(swapper.swaps) != 2 || swapper.swaps[1] != nil {
+	if status != 200 || body["version"].(float64) != 0 || len(swapper.swaps) != 2 || swapper.swaps[1] != nil || swapper.options[1] != (safetyplugin.Options{}) {
 		t.Fatalf("reset: %d %v swaps=%v", status, body, swapper.swaps)
 	}
 }
@@ -163,12 +175,12 @@ func TestRejectionsDoNotSwap(t *testing.T) {
 
 // 存储故障：对外通用错误，服务端日志有操作与原因。
 func TestStorageFailureIsLogged(t *testing.T) {
-	r, swapper, log := setup(t, fakeBuilder{}, nil)
 	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "broken.db")), &gorm.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// 未迁移的库：表不存在，读写都会失败。
+	swapper, log := &fakeSwapper{}, &testLogger{}
 	h, err := NewHandler(persistence.NewStore(db), fakeBuilder{}, swapper, log, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +190,6 @@ func TestStorageFailureIsLogged(t *testing.T) {
 	if err := h.RegisterRoutes(broken, am.APIMiddleware()); err != nil {
 		t.Fatal(err)
 	}
-	_ = r
 	if status, _ := call(t, broken, "/api/guardrails/get", ""); status != fasthttp.StatusInternalServerError {
 		t.Fatalf("get on broken store: %d", status)
 	}
@@ -194,30 +205,75 @@ func TestStorageFailureIsLogged(t *testing.T) {
 	}
 }
 
-// update 与 reset 在同一把锁下完成"写库 + 发布"，并发交错后库中状态与最后一次发布一致。
+// reset 发布失败与 update 一样报 500 并记日志。
+func TestResetSwapFailureIsReported(t *testing.T) {
+	r, swapper, log := setup(t, fakeBuilder{}, nil)
+	swapper.fail = errors.New("swap broken")
+	if status, _ := call(t, r, "/api/guardrails/reset", ""); status != fasthttp.StatusInternalServerError || !strings.Contains(strings.Join(log.lines, ""), "swap failed after reset") {
+		t.Fatalf("reset swap failure not reported: %d %v", status, log.lines)
+	}
+}
+
+// update 与 reset 从写库到发布共用一把锁：一方停在"已写库、未发布"时，另一方必须等它发布完；最终库中状态与最后一次发布一致。
 func TestUpdateAndResetAreSerialized(t *testing.T) {
-	r, swapper, _ := setup(t, fakeBuilder{}, nil)
-	var wg sync.WaitGroup
-	for i := range 20 {
-		wg.Add(1)
-		go func(reset bool) {
-			defer wg.Done()
-			if reset {
-				call(t, r, "/api/guardrails/reset", "")
-				return
+	for _, first := range []string{"update", "reset"} {
+		t.Run(first+" first", func(t *testing.T) {
+			r, swapper, _ := setup(t, fakeBuilder{}, nil)
+			if first == "reset" { // 让 reset 有东西可删
+				if status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`); status != 200 {
+					t.Fatal("seed update failed")
+				}
+			}
+			swapper.entered, swapper.gate = make(chan struct{}, 1), make(chan struct{})
+			firstDone := make(chan int, 1)
+			go func() {
+				if first == "update" {
+					status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`)
+					firstDone <- status
+				} else {
+					status, _ := call(t, r, "/api/guardrails/reset", "")
+					firstDone <- status
+				}
+			}()
+			<-swapper.entered // 第一方已写库，停在发布前
+			secondDone := make(chan int, 1)
+			go func() {
+				if first == "update" {
+					status, _ := call(t, r, "/api/guardrails/reset", "")
+					secondDone <- status
+				} else {
+					status, _ := call(t, r, "/api/guardrails/update", `{"config":`+validConfig+`,"version":0}`)
+					secondDone <- status
+				}
+			}()
+			select {
+			case <-secondDone:
+				t.Fatal("second request completed while the first held the persist-and-publish lock")
+			case <-time.After(100 * time.Millisecond):
+			}
+			swapper.gate <- struct{}{} // 放行第一方发布
+			if status := <-firstDone; status != 200 {
+				t.Fatalf("first %s status %d", first, status)
+			}
+			<-swapper.entered // 第二方轮到发布
+			swapper.gate <- struct{}{}
+			if status := <-secondDone; status != 200 {
+				t.Fatalf("second request status %d", status)
 			}
 			_, body := call(t, r, "/api/guardrails/get", "")
-			version := int(body["version"].(float64))
-			call(t, r, "/api/guardrails/update", fmt.Sprintf(`{"config":%s,"version":%d}`, validConfig, version))
-		}(i%3 == 0)
-	}
-	wg.Wait()
-	_, body := call(t, r, "/api/guardrails/get", "")
-	swapper.mu.Lock()
-	defer swapper.mu.Unlock()
-	last := swapper.swaps[len(swapper.swaps)-1]
-	if (body["config"] == nil) != (last == nil) {
-		t.Fatalf("stored state (configured=%v) diverged from published state (configured=%v)", body["config"] != nil, last != nil)
+			swapper.mu.Lock()
+			defer swapper.mu.Unlock()
+			last := swapper.swaps[len(swapper.swaps)-1]
+			if first == "update" { // 顺序 update → reset：最终未配置且最后发布为 nil
+				if body["config"] != nil || last != nil || len(swapper.swaps) != 2 {
+					t.Fatalf("expected reset to win: body=%v swaps=%d last=%v", body, len(swapper.swaps), last)
+				}
+			} else { // 顺序 reset → update：最终已配置且最后发布为新检查器
+				if body["config"] == nil || body["version"].(float64) != 1 || last == nil {
+					t.Fatalf("expected update to win: body=%v last=%v", body, last)
+				}
+			}
+		})
 	}
 }
 

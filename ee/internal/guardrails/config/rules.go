@@ -36,7 +36,7 @@ type Plan struct {
 }
 
 // Expand 按固定顺序（密钥 → 有害 → 提示词攻击 → 业务规则）生成规则；同项目多阶段各一条规则。
-// 调用前须先通过 Validate。
+// 输入须是 config.Parse 返回的配置（已校验）。
 func (c Config) Expand() Plan {
 	var p Plan
 	if c.Secrets.Enabled {

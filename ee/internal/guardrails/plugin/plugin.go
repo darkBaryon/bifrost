@@ -37,7 +37,7 @@ type snapshotKey struct{}
 
 var _ schemas.LLMPlugin = (*Plugin)(nil)
 
-// New 构造可注册的插件；checker 可为 nil（未配置，全部透传），options 须合法，调用方须提供可用的 logger 实例。
+// New 构造可注册的插件；checker 为 nil 表示未配置（全部透传，options 不参与），否则 options 须合法；调用方须提供可用的 logger 实例。
 func New(checker *guardrails.Checker, options Options, logger Logger) (*Plugin, error) {
 	if logger == nil {
 		return nil, fmt.Errorf("guardrails plugin: logger is required")
@@ -51,8 +51,12 @@ func New(checker *guardrails.Checker, options Options, logger Logger) (*Plugin, 
 	return p, nil
 }
 
+// newState 校验一份配置快照：未配置（checker 为 nil）时不需要拒绝策略，存零值；已配置时状态码与文案必须合法。
 func newState(checker *guardrails.Checker, options Options) (*state, error) {
-	if checker != nil && checker.MaxTextBytes() <= 0 {
+	if checker == nil {
+		return &state{}, nil
+	}
+	if checker.MaxTextBytes() <= 0 {
 		return nil, fmt.Errorf("guardrails plugin: checker is not initialised")
 	}
 	if options.StatusCode < guardrails.MinDenyStatus || options.StatusCode > guardrails.MaxDenyStatus || strings.TrimSpace(options.DenyMessage) == "" {
@@ -61,7 +65,7 @@ func newState(checker *guardrails.Checker, options Options) (*state, error) {
 	return &state{checker: checker, options: options}, nil
 }
 
-// Swap 原子替换检查器与拒绝策略，只影响之后到达的请求；checker 为 nil 表示关闭检测。options 非法时不替换并返回错误。
+// Swap 原子替换检查器与拒绝策略，只影响之后到达的请求；checker 为 nil 表示关闭检测（options 忽略）。options 非法时不替换并返回错误。
 func (p *Plugin) Swap(checker *guardrails.Checker, options Options) error {
 	st, err := newState(checker, options)
 	if err != nil {

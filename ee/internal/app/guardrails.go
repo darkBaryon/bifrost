@@ -35,8 +35,6 @@ const (
 	fakeDenyMessage  = "开发测试：内容命中假检测器，已拦截"
 	// 在内置插件之前执行，覆盖可能提前返回的缓存等响应。
 	guardrailsPluginOrder = math.MinInt
-	// 未配置时插件透传，拒绝策略不会用到；插件构造仍要求一份合法值。
-	placeholderDenyMessage = "内容未通过安全检查"
 )
 
 // assembleGuardrails 按顺序：建表 → 读库 → 构建（失败拒启）→ 注册插件 → 注册接口。
@@ -66,8 +64,9 @@ func assembleGuardrails(ctx context.Context, host *bifrostServer.BifrostHTTPServ
 	if err != nil {
 		return err
 	}
+	// 未配置时 checker 为 nil，插件透传，不需要拒绝策略。
 	var checker *guardrails.Checker
-	options := safetyplugin.Options{StatusCode: fasthttp.StatusBadRequest, DenyMessage: placeholderDenyMessage}
+	var options safetyplugin.Options
 	switch {
 	case mode != "":
 		if checker, err = fakeChecker(mode); err != nil {

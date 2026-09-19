@@ -14,6 +14,7 @@ import (
 )
 
 // 配置数值边界与默认值；产品裁决见 workbench 方案 v5 §4.5。
+// 判官重试范围与默认值须与 detectors/judge 的 minRetries/maxRetries/DefaultRetries 一致；judge 不依赖本包，故各写一份并互相注明。
 const (
 	DefaultMaxTextBytes     = 64 * 1024
 	DefaultJudgeRetries     = 3

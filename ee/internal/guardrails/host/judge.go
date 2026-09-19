@@ -88,8 +88,9 @@ func (m *JudgeModel) Complete(ctx context.Context, system, user string) (string,
 	return text, err
 }
 
-// 网关自身产生的错误消息（如"没有支持该模型的 key"）保留前 maxErrorMessageBytes 字节用于排障；
-// provider 返回的错误消息可能回显送检内容，一律不进日志与错误链，只留状态码、类型和代码。
+// 网关自身产生的错误（IsBifrostError，如"没有支持该模型的 key"、请求取消）的类型、代码与消息前 maxErrorMessageBytes 字节
+// 保留用于排障；provider 返回的错误字段（type、code、message）都可能回显送检内容，一律不进日志与错误链，
+// 只按 HTTP 状态码归入本地白名单类别。
 const maxErrorMessageBytes = 200
 
 // judgeError 把网关错误转成不含送检内容的普通 error。
@@ -98,22 +99,40 @@ func judgeError(bErr *schemas.BifrostError) error {
 	if bErr.StatusCode != nil {
 		parts = append(parts, fmt.Sprintf("status=%d", *bErr.StatusCode))
 	}
-	if bErr.Error != nil {
+	if bErr.IsBifrostError && bErr.Error != nil {
 		if bErr.Error.Type != nil {
 			parts = append(parts, "type="+*bErr.Error.Type)
 		}
 		if bErr.Error.Code != nil {
 			parts = append(parts, "code="+*bErr.Error.Code)
 		}
-		if bErr.IsBifrostError {
-			if msg := truncateUTF8(strings.TrimSpace(bErr.Error.Message), maxErrorMessageBytes); msg != "" {
-				parts = append(parts, "message="+strconv.Quote(msg))
-			}
-		} else {
-			parts = append(parts, "provider_message=omitted")
+		if msg := truncateUTF8(strings.TrimSpace(bErr.Error.Message), maxErrorMessageBytes); msg != "" {
+			parts = append(parts, "message="+strconv.Quote(msg))
 		}
+	} else {
+		parts = append(parts, "category="+providerFailureCategory(bErr.StatusCode))
 	}
 	return errors.New(strings.Join(parts, " "))
+}
+
+// providerFailureCategory 只按状态码给出固定类别，不引用 provider 的任何自由文本。
+func providerFailureCategory(status *int) string {
+	if status == nil {
+		return "provider_error"
+	}
+	switch code := *status; {
+	case code == 401 || code == 403:
+		return "provider_auth"
+	case code == 429:
+		return "provider_rate_limited"
+	case code == 499:
+		return "cancelled"
+	case code >= 500:
+		return "provider_unavailable"
+	case code >= 400:
+		return "provider_rejected"
+	}
+	return "provider_error"
 }
 
 // truncateUTF8 按字节上限截断但不切断多字节字符。

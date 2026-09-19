@@ -34,7 +34,7 @@ func NewBuilder(client Client, providers ProviderLookup, log Logger) (*Builder, 
 	return &Builder{client: client, providers: providers, log: log}, nil
 }
 
-// Build 按配置创建检测器与规则并返回检查器；配置须已通过 config.Validate。
+// Build 按配置创建检测器与规则并返回检查器；配置须是 config.Parse 返回的（已校验）。
 // 判官 provider 必须已在网关配置，否则返回错误；provider 自带重试时记 Warn（实际调用次数会与检测器重试相乘）。
 func (b *Builder) Build(ctx context.Context, cfg config.Config) (*guardrails.Checker, error) {
 	plan := cfg.Expand()

@@ -142,12 +142,14 @@ func (h *Handler) reset(ctx *fasthttp.RequestCtx) {
 		h.storageFailure(ctx, "reset", err)
 		return
 	}
-	_ = h.swapper.Swap(nil, disabledOptions)
+	// 未配置状态不需要拒绝策略；与 update 一样，发布失败如实报错，不让库与运行状态静默错位。
+	if err := h.swapper.Swap(nil, safetyplugin.Options{}); err != nil {
+		h.log.Error("content safety config: swap failed after reset: %v", err)
+		upstream.SendError(ctx, fasthttp.StatusInternalServerError, "guardrails configuration reset but could not be deactivated; restart the gateway")
+		return
+	}
 	upstream.SendJSON(ctx, stateResponse{Config: nil, Version: persistence.UnsetVersion})
 }
-
-// disabledOptions 是未配置时插件持有的拒绝策略；检查器为 nil 时不会用到，只需满足插件的合法性检查。
-var disabledOptions = safetyplugin.Options{StatusCode: fasthttp.StatusBadRequest, DenyMessage: "内容未通过安全检查"}
 
 // storageFailure 把存储故障的原因留在服务端日志，对外只给通用错误。
 func (h *Handler) storageFailure(ctx *fasthttp.RequestCtx, op string, err error) {
