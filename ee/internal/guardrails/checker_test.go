@@ -58,21 +58,27 @@ func TestRuleActionsAndThreshold(t *testing.T) {
 	}
 }
 
-func TestOrderShortCircuitAndStages(t *testing.T) {
-	var calls []string
+// 同阶段规则并行执行，结果按配置顺序；其他阶段的规则不执行。
+func TestParallelStagesAndOrder(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string]bool{}
 	detectors := map[string]guardrails.Detector{}
-	for _, id := range []string{"observe", "block", "never", "output"} {
+	for _, id := range []string{"observe", "second", "output"} {
 		detectors[id] = detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
-			calls = append(calls, id)
+			mu.Lock()
+			calls[id] = true
+			mu.Unlock()
 			return []guardrails.Finding{{Level: guardrails.High}}, nil
 		})
 	}
-	rules := []guardrails.Rule{rule("observe"), rule("output"), rule("block"), rule("never")}
+	rules := []guardrails.Rule{rule("observe"), rule("output"), rule("second")}
 	rules[0].OnMatch = guardrails.Observe
 	rules[1].Stage = guardrails.Output
+	rules[2].OnMatch = guardrails.Observe
 	e := mustChecker(t, rules, detectors)
 	result, err := e.Check(context.Background(), guardrails.Input, "")
-	if err != nil || result.Action != guardrails.Block || strings.Join(calls, ",") != "observe,block" {
+	if err != nil || result.Action != guardrails.Allow || result.Blocking != nil || len(result.RuleEvaluations) != 2 ||
+		result.RuleEvaluations[0].RuleID != "observe" || result.RuleEvaluations[1].RuleID != "second" || calls["output"] {
 		t.Fatalf("calls=%v result=%+v err=%v", calls, result, err)
 	}
 	if !e.HasRules(guardrails.Output) || e.MaxTextBytes() != 1024 {
@@ -239,7 +245,7 @@ func TestUninitializedCheckerAndContext(t *testing.T) {
 	}
 }
 
-// 超限和取消必须先于线性 UTF-8 扫描；出错不能丢失此前已完成的规则执行结果。
+// 超限和取消必须先于线性 UTF-8 扫描。
 func TestCheckErrorPrecedenceAndRuleEvaluations(t *testing.T) {
 	e := mustChecker(t, nil, nil)
 	oversized := strings.Repeat("x", 1024) + string([]byte{0xff})
@@ -251,21 +257,5 @@ func TestCheckErrorPrecedenceAndRuleEvaluations(t *testing.T) {
 	if _, err := e.Check(ctx, guardrails.Input, oversized); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation must precede text validation: %v", err)
 	}
-	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
-	first, second := rule("first"), rule("second")
-	first.OnMatch = guardrails.Observe
-	e = mustChecker(t, []guardrails.Rule{first, second}, map[string]guardrails.Detector{
-		"first": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
-			return []guardrails.Finding{{Level: guardrails.High}}, nil
-		}),
-		"second": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
-			cancel()
-			return nil, context.Canceled
-		}),
-	})
-	result, err := e.Check(ctx, guardrails.Input, "text")
-	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block || len(result.RuleEvaluations) != 1 || result.RuleEvaluations[0].Action != guardrails.Observe {
-		t.Fatalf("completed rule evaluation lost: result=%+v err=%v", result, err)
-	}
+	// 已完成评估在父取消时的保留见 parallel_test.go 的确定性用例。
 }

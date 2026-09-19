@@ -19,7 +19,7 @@ const (
 // Finding 只携带风险等级，不保留命中原文。
 type Finding struct{ Level Level }
 
-// Detector 是本地检测器契约。实现必须支持并发并响应 ctx 取消；调用为同步，框架不强杀 goroutine。
+// Detector 是本地检测器契约。实现必须支持并发并响应 ctx 取消，被取消时返回 ctx.Err()；调用为同步，框架不强杀 goroutine。
 type Detector interface {
 	Detect(ctx context.Context, text string) ([]Finding, error)
 }

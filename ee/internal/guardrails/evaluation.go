@@ -24,6 +24,8 @@ const (
 	DetectorError   Failure = "detector_error"
 	DetectorTimeout Failure = "detector_timeout"
 	InvalidResult   Failure = "invalid_result"
+	// TextTooLarge 表示检测器声明文本超过其自身上限（ErrDetectorTextTooLarge），与检测器故障区分。
+	TextTooLarge Failure = "text_too_large"
 )
 
 // RuleEvaluation 是单条规则的风险等级、命中或失败情况及处置结果；不包含检测正文或异常原文。
@@ -38,25 +40,45 @@ type RuleEvaluation struct {
 	HighestLevel Level
 }
 
-func (c *Checker) evaluateRule(ctx context.Context, rule Rule, text string) (RuleEvaluation, error) {
+// evaluationState 区分规则已完成、因其他规则拦截被取消，以及父请求取消。
+type evaluationState uint8
+
+const (
+	completed evaluationState = iota
+	discarded
+)
+
+// evaluateRule 用 blockCtx 派生检测超时；检测因取消返回时，父取消是框架错误、拦截取消则丢弃，其余按结果记录。
+func (c *Checker) evaluateRule(parent, blockCtx context.Context, rule Rule, text string) (RuleEvaluation, evaluationState, error) {
 	ruleEvaluation := RuleEvaluation{
 		RuleID: rule.ID, DetectorID: rule.DetectorID,
 		Category: rule.Category, Stage: rule.Stage,
 		Outcome: Passed, Action: Allow,
 	}
-	if err := ctx.Err(); err != nil {
-		return ruleEvaluation, err
+	if err := parent.Err(); err != nil {
+		return ruleEvaluation, discarded, err
 	}
-	detectCtx, cancel := context.WithTimeout(ctx, rule.Timeout)
+	if blockCtx.Err() != nil {
+		return ruleEvaluation, discarded, nil
+	}
+	detectCtx, cancel := context.WithTimeout(blockCtx, rule.Timeout)
 	findings, err := c.detectors[rule.DetectorID].Detect(detectCtx, text)
 	deadlineErr := detectCtx.Err()
 	cancel()
-	if parentErr := ctx.Err(); parentErr != nil {
-		return ruleEvaluation, parentErr
+	// 检测器只有因取消而返回（按契约返回 ctx.Err()）时才区分父取消（框架错误）与拦截取消（丢弃）；其余返回一律记录。
+	if errors.Is(err, context.Canceled) {
+		if parentErr := parent.Err(); parentErr != nil {
+			return ruleEvaluation, discarded, parentErr
+		}
+		if blockCtx.Err() != nil {
+			return ruleEvaluation, discarded, nil
+		}
 	}
 	switch {
 	case errors.Is(deadlineErr, context.DeadlineExceeded), errors.Is(err, context.DeadlineExceeded):
 		ruleEvaluation.Failure = DetectorTimeout
+	case errors.Is(err, ErrDetectorTextTooLarge):
+		ruleEvaluation.Failure = TextTooLarge
 	case err != nil:
 		ruleEvaluation.Failure = DetectorError
 	default:
@@ -75,5 +97,5 @@ func (c *Checker) evaluateRule(ctx context.Context, rule Rule, text string) (Rul
 	} else if ruleEvaluation.HighestLevel >= rule.Threshold {
 		ruleEvaluation.Outcome, ruleEvaluation.Action = Matched, rule.OnMatch
 	}
-	return ruleEvaluation, nil
+	return ruleEvaluation, completed, nil
 }

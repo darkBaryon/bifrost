@@ -121,7 +121,7 @@ func TestUnsupportedOutputCarriers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := response("safe")
 			tc.mutate(r)
-			got, bErr, err := p.PostLLMHook(testContext(), r, nil)
+			got, bErr, err := p.PostLLMHook(primed(t, p, testContext()), r, nil)
 			if got != nil || err != nil {
 				t.Fatalf("got=%+v err=%v", got, err)
 			}
@@ -143,7 +143,7 @@ func TestTextBudgetAndEmptyText(t *testing.T) {
 		t.Fatal("explicit empty text rejected")
 	}
 	out, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
-	_, bErr, err := out.PostLLMHook(testContext(), response(strings.Repeat("x", 257), strings.Repeat("x", 256)), nil)
+	_, bErr, err := out.PostLLMHook(primed(t, out, testContext()), response(strings.Repeat("x", 257), strings.Repeat("x", 256)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestTextBudgetAndEmptyText(t *testing.T) {
 		seen = append(seen, text)
 		return nil, nil
 	})
-	_, bErr, err = separate.PostLLMHook(testContext(), response("one", "two"), nil)
+	_, bErr, err = separate.PostLLMHook(primed(t, separate, testContext()), response("one", "two"), nil)
 	if err != nil || bErr != nil || strings.Join(seen, "|") != "one|two" {
 		t.Fatalf("seen=%v err=%v bErr=%v", seen, err, bErr)
 	}
@@ -168,7 +168,7 @@ func TestExtractionChecksSizeBeforeUTF8(t *testing.T) {
 	}
 	requireCode(t, short.Error, "content_safety_text_too_large")
 	output, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
-	got, bErr, err := output.PostLLMHook(testContext(), response(oversized), nil)
+	got, bErr, err := output.PostLLMHook(primed(t, output, testContext()), response(oversized), nil)
 	if err != nil || got != nil {
 		t.Fatalf("got=%+v err=%v", got, err)
 	}

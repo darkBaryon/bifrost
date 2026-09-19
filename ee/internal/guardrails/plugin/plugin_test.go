@@ -57,6 +57,15 @@ func newPlugin(t *testing.T, rules []guardrails.Rule, d detectorFunc) (*safety.P
 func testContext() *schemas.BifrostContext {
 	return schemas.NewBifrostContext(context.Background(), schemas.NoDeadline)
 }
+
+// primed 让前置 Hook 在 ctx 上留下检查器快照；后置 Hook 只认快照，直接调用会透传。
+func primed(t *testing.T, p *safety.Plugin, ctx *schemas.BifrostContext) *schemas.BifrostContext {
+	t.Helper()
+	if _, short, err := p.PreLLMHook(ctx, request("safe")); err != nil || short != nil {
+		t.Fatalf("priming request rejected: short=%+v err=%v", short, err)
+	}
+	return ctx
+}
 func message(text string) schemas.ChatMessage {
 	return schemas.ChatMessage{Role: schemas.ChatMessageRoleUser, Content: &schemas.ChatMessageContent{ContentStr: schemas.Ptr(text)}}
 }
@@ -95,7 +104,7 @@ func TestInputAndOutputBlocking(t *testing.T) {
 	}
 	output, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
 	resp := response("safe", "unsafe second choice")
-	gotResp, blocked, err := output.PostLLMHook(testContext(), resp, nil)
+	gotResp, blocked, err := output.PostLLMHook(primed(t, output, testContext()), resp, nil)
 	if err != nil || gotResp != nil {
 		t.Fatalf("response leaked: %+v err=%v", gotResp, err)
 	}
@@ -184,6 +193,7 @@ func TestUpstreamErrorAndCancellation(t *testing.T) {
 		t.Fatal("upstream error changed")
 	}
 	ctx, cancel := schemas.NewBifrostContextWithCancel(context.Background())
+	primed(t, p, ctx)
 	cancel()
 	_, bErr, err := p.PostLLMHook(ctx, response("safe"), nil)
 	if err != nil {
@@ -204,8 +214,18 @@ func TestPluginConstruction(t *testing.T) {
 		}
 	}
 	options := safety.Options{StatusCode: 400, DenyMessage: "denied"}
-	if _, err := safety.New(nil, options, log); err == nil {
-		t.Fatal("nil checker accepted")
+	// 未配置时允许以 nil 检查器启动，两个 Hook 都透传。
+	disabled, err := safety.New(nil, options, log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := testContext()
+	if _, short, err := disabled.PreLLMHook(ctx, request("unsafe")); err != nil || short != nil {
+		t.Fatal("nil checker did not pass input through")
+	}
+	resp := response("unsafe")
+	if got, bErr, err := disabled.PostLLMHook(ctx, resp, nil); got != resp || bErr != nil || err != nil {
+		t.Fatal("nil checker did not pass output through")
 	}
 	if _, err := safety.New(e, options, nil); err == nil {
 		t.Fatal("nil logger accepted")

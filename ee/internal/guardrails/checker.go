@@ -1,11 +1,12 @@
 // Package guardrails 负责本地内容检测的规则执行；检测算法和网关协议由调用方接入。
-// 本文件保存规则快照，按阶段执行检查并汇总处置结果。
+// 本文件保存规则快照，按阶段并行执行检查并汇总处置结果。
 package guardrails
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"unicode/utf8"
 )
 
@@ -16,9 +17,12 @@ type Checker struct {
 	maxTextBytes int
 }
 
-// CheckResult 是一次文本检查的最终 Allow/Block 决定及各条规则的执行结果；阻断之后的规则不执行。
+// CheckResult 是一次文本检查的最终 Allow/Block 决定及各条规则的执行结果。
+// 同阶段规则并行执行；任一规则判定拦截即取消其余，被取消而未完成的规则不出现在 RuleEvaluations 中。
 type CheckResult struct {
-	Action          Action
+	Action Action
+	// Blocking 在 Action==Block 且没有框架错误时指向 RuleEvaluations 中决定拦截的元素（多条时取配置顺序最靠前的）；其余情况为 nil。
+	Blocking        *RuleEvaluation
 	RuleEvaluations []RuleEvaluation
 }
 
@@ -26,6 +30,8 @@ type CheckResult struct {
 var (
 	ErrInvalidInput = errors.New("guardrails: invalid input")
 	ErrTextTooLarge = errors.New("guardrails: text exceeds configured limit")
+	// ErrDetectorTextTooLarge 由检测器返回，表示文本超过检测器自身上限；框架记为 TextTooLarge 失败，按规则失败策略处置。
+	ErrDetectorTextTooLarge = errors.New("guardrails: text exceeds detector limit")
 )
 
 // New 校验配置并复制规则和注册表；检测器实例由调用方持有其生命周期，必须并发安全。
@@ -58,7 +64,7 @@ func (c *Checker) HasRules(stage Stage) bool {
 func (c *Checker) MaxTextBytes() int { return c.maxTextBytes }
 
 // Check 检查完整文本。取消、非法输入及超限返回 error；检测器失败则由规则决定，记录为 Failed。
-// 返回 error 时 Action 恒为 Block，RuleEvaluations 保留出错前已完成规则的执行结果，调用方仍可记录。
+// 返回 error 时 Action 恒为 Block、Blocking 为 nil，RuleEvaluations 保留出错前已完成规则的执行结果，调用方仍可记录。
 // 超时依赖检测器协作取消；即使检测器迟返回成功，超过期限的结果也按失败处理。
 func (c *Checker) Check(ctx context.Context, stage Stage, text string) (CheckResult, error) {
 	checkResult := CheckResult{Action: Block}
@@ -75,21 +81,60 @@ func (c *Checker) Check(ctx context.Context, stage Stage, text string) (CheckRes
 	if !utf8.ValidString(text) {
 		return checkResult, ErrInvalidInput
 	}
-	checkResult.Action = Allow
+	return c.runStage(ctx, stage, text)
+}
+
+// runStage 并行执行同阶段规则；blockCtx 只因拦截被取消，父 ctx 取消仍作为框架错误返回。
+func (c *Checker) runStage(parent context.Context, stage Stage, text string) (CheckResult, error) {
+	blockCtx, cancel := context.WithCancel(parent)
+	defer cancel()
+	slots := make([]slot, 0, len(c.rules))
+	var wg sync.WaitGroup
 	for _, rule := range c.rules {
 		if rule.Stage != stage {
 			continue
 		}
-		ruleEvaluation, err := c.evaluateRule(ctx, rule, text)
-		if err != nil {
-			checkResult.Action = Block
-			return checkResult, err
+		slots = append(slots, slot{})
+		wg.Add(1)
+		go func(rule Rule, s *slot) {
+			defer wg.Done()
+			s.evaluation, s.state, s.err = c.evaluateRule(parent, blockCtx, rule, text)
+			if s.state == completed && s.evaluation.Action == Block {
+				cancel()
+			}
+		}(rule, &slots[len(slots)-1])
+	}
+	wg.Wait()
+	checkResult := CheckResult{Action: Allow}
+	for i := range slots {
+		if slots[i].state == completed {
+			checkResult.RuleEvaluations = append(checkResult.RuleEvaluations, slots[i].evaluation)
 		}
-		checkResult.RuleEvaluations = append(checkResult.RuleEvaluations, ruleEvaluation)
-		if ruleEvaluation.Action == Block {
+	}
+	// 父请求取消是框架错误，即使所有检测器都已成功返回也不得放行。
+	if err := parent.Err(); err != nil {
+		checkResult.Action = Block
+		return checkResult, err
+	}
+	for i := range slots {
+		if slots[i].err != nil {
 			checkResult.Action = Block
+			return checkResult, slots[i].err
+		}
+	}
+	for i := range checkResult.RuleEvaluations {
+		if checkResult.RuleEvaluations[i].Action == Block {
+			checkResult.Action = Block
+			checkResult.Blocking = &checkResult.RuleEvaluations[i]
 			break
 		}
 	}
 	return checkResult, nil
+}
+
+// slot 收集单条规则的并行结果，按配置顺序排列。
+type slot struct {
+	evaluation RuleEvaluation
+	state      evaluationState
+	err        error
 }
