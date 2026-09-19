@@ -42,11 +42,14 @@
   - {grep: '/api/guardrails/update', in: ee/internal/rbac/host/routes.txt}
 收敛评审:
   风险等级: L2
-  基线: 1a061b046
+  基线: b9e8752ea
   开发指南:
     - ee/internal/guardrails/README.md
 禁留标记:
   - {grep: 'net/http', in: ee/internal/guardrails}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/detectors}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/config}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/checker.go}
   - {grep: 'core/schemas', in: ee/internal/guardrails/detectors}
   - {grep: 'core/schemas', in: ee/internal/guardrails/config}
   - {grep: 'SkipPluginPipeline', in: ee/internal/app}
