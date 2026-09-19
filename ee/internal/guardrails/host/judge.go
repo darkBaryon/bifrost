@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,7 +87,10 @@ func (m *JudgeModel) Complete(ctx context.Context, system, user string) (string,
 	return text, err
 }
 
-// judgeError 只保留错误类型、代码与状态码，不带 provider 返回的正文。
+// 错误消息只保留前 maxErrorMessageBytes 字节：足够定位鉴权、限流、模型不存在等原因，又不会把长响应体带进日志。
+const maxErrorMessageBytes = 200
+
+// judgeError 保留状态码、错误类型、代码与截断后的消息；不带 provider 返回的完整正文。
 func judgeError(bErr *schemas.BifrostError) error {
 	parts := []string{"judge request failed"}
 	if bErr.StatusCode != nil {
@@ -98,6 +102,12 @@ func judgeError(bErr *schemas.BifrostError) error {
 		}
 		if bErr.Error.Code != nil {
 			parts = append(parts, "code="+*bErr.Error.Code)
+		}
+		if msg := strings.TrimSpace(bErr.Error.Message); msg != "" {
+			if len(msg) > maxErrorMessageBytes {
+				msg = msg[:maxErrorMessageBytes] + "…"
+			}
+			parts = append(parts, "message="+strconv.Quote(msg))
 		}
 	}
 	return errors.New(strings.Join(parts, " "))

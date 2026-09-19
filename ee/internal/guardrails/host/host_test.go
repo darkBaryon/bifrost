@@ -100,12 +100,14 @@ func TestJudgeModelRequest(t *testing.T) {
 	}
 }
 
-func TestJudgeModelErrorsHideBody(t *testing.T) {
+// 错误信息保留截断后的消息用于排障，不带完整响应体。
+func TestJudgeModelErrorsTruncateMessage(t *testing.T) {
 	status := 429
-	client := &fakeClient{err: &schemas.BifrostError{StatusCode: &status, Error: &schemas.ErrorField{Type: schemas.Ptr("rate_limit"), Code: schemas.Ptr("429"), Message: "provider said: 私密回显"}}}
+	long := "rate limited: " + strings.Repeat("x", 300)
+	client := &fakeClient{err: &schemas.BifrostError{StatusCode: &status, Error: &schemas.ErrorField{Type: schemas.Ptr("rate_limit"), Code: schemas.Ptr("429"), Message: long}}}
 	log := &testLogger{}
 	_, err := host.NewJudgeModel(client, "deepseek", "m", log).Complete(context.Background(), "s", "u")
-	if err == nil || strings.Contains(err.Error(), "私密回显") || !strings.Contains(err.Error(), "status=429") || strings.Contains(log.joined(), "私密回显") {
+	if err == nil || !strings.Contains(err.Error(), "status=429") || !strings.Contains(err.Error(), "rate limited") || strings.Contains(err.Error(), strings.Repeat("x", 250)) {
 		t.Fatalf("err=%v logs=%s", err, log.joined())
 	}
 	ctx, cancel := context.WithCancel(context.Background())
