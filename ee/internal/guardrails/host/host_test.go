@@ -14,6 +14,7 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/config"
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/host"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/configstore"
 )
 
 type fakeClient struct {
@@ -45,12 +46,12 @@ func (c *fakeClient) ChatCompletionRequest(ctx *schemas.BifrostContext, req *sch
 
 type fakeProviders struct{ configured map[string]int }
 
-func (p fakeProviders) GetProviderConfig(_ context.Context, provider schemas.ModelProvider) (*schemas.ProviderConfig, error) {
+func (p fakeProviders) GetProviderConfig(_ context.Context, provider schemas.ModelProvider) (*configstore.ProviderConfig, error) {
 	retries, ok := p.configured[string(provider)]
 	if !ok {
 		return nil, errors.New("not found")
 	}
-	return &schemas.ProviderConfig{NetworkConfig: schemas.NetworkConfig{MaxRetries: retries}}, nil
+	return &configstore.ProviderConfig{NetworkConfig: &schemas.NetworkConfig{MaxRetries: retries}}, nil
 }
 
 type testLogger struct {

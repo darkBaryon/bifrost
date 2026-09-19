@@ -56,7 +56,7 @@ func attach(ctx context.Context, s *bifrostServer.BifrostHTTPServer, auth schema
 	if db == nil {
 		return errors.New("ee: config store returned a nil *gorm.DB")
 	}
-	if err := assembleGuardrails(ctx, s, log); err != nil {
+	if err := assembleGuardrails(ctx, s, auth, log); err != nil {
 		return err
 	}
 	// 品牌数据也放在Bifrost的配置数据库里，由品牌模块准备自己的表。

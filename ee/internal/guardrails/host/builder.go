@@ -10,11 +10,12 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/detectors/judge"
 	"github.com/darkBaryon/bifrost/ee/internal/guardrails/detectors/secrets"
 	"github.com/maximhq/bifrost/core/schemas"
+	"github.com/maximhq/bifrost/framework/configstore"
 )
 
 // ProviderLookup 查询网关是否配置了某个 provider；由 configstore.ConfigStore 满足。
 type ProviderLookup interface {
-	GetProviderConfig(ctx context.Context, provider schemas.ModelProvider) (*schemas.ProviderConfig, error)
+	GetProviderConfig(ctx context.Context, provider schemas.ModelProvider) (*configstore.ProviderConfig, error)
 }
 
 // Builder 持有构建检查器所需的网关依赖；可重复用于每次配置更新。
@@ -68,7 +69,7 @@ func (b *Builder) checkProvider(ctx context.Context, j config.Judge) error {
 	if err != nil || pc == nil {
 		return fmt.Errorf("guardrails host: judge provider %q is not configured", j.Provider)
 	}
-	if pc.NetworkConfig.MaxRetries > 0 {
+	if pc.NetworkConfig != nil && pc.NetworkConfig.MaxRetries > 0 {
 		b.log.Warn("content safety judge provider %s has max_retries=%d; judge calls multiply with detector retries", j.Provider, pc.NetworkConfig.MaxRetries)
 	}
 	return nil

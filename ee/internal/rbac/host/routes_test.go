@@ -132,7 +132,7 @@ func TestRouteSourceDigest(t *testing.T) {
 	}
 	sort.Strings(rows)
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(rows, "\n")+"\n")))
-	if len(rows) != 817 || digest != "b5c8bb41457e87e0717855df78067515e578c4315c7a429e69105ec6679e596d" {
+	if len(rows) != 820 || digest != "ca9738de0eaa3c8eca2d4d4d6b2b551509b837c8962089aeea5bf73318311475" {
 		t.Fatalf("route source drift: count=%d digest=%s", len(rows), digest)
 	}
 }

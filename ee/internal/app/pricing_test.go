@@ -12,6 +12,7 @@ import (
 
 	"github.com/darkBaryon/bifrost/ee/internal/pricing"
 	"github.com/fasthttp/router"
+	bifrost "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/modelcatalog"
@@ -29,6 +30,7 @@ type pricingLogger struct {
 
 func (l *pricingLogger) Error(f string, a ...any) { l.errors = append(l.errors, fmt.Sprintf(f, a...)) }
 func (l *pricingLogger) Warn(f string, a ...any)  { l.warns = append(l.warns, fmt.Sprintf(f, a...)) }
+func (l *pricingLogger) Info(string, ...any)      {}
 
 func TestPricingConfigurationOrder(t *testing.T) {
 	for _, raw := range []string{"0", "-1", "garbage", "NaN", "+Inf", ""} {
@@ -103,7 +105,13 @@ func TestAttachPricingFailureCategory(t *testing.T) {
 			if failStore {
 				store.providerError = errors.New("provider storage unavailable")
 			}
-			host := &bifrostServer.BifrostHTTPServer{Config: &lib.Config{ConfigStore: store, ModelCatalog: modelcatalog.NewTestCatalog(nil)}, Router: router.New()}
+			// attach 现在总会注册内容安全插件，需要一个真实的网关客户端。
+			client, e := bifrost.Init(context.Background(), schemas.BifrostConfig{Account: noProviderAccount{}, Logger: bifrost.NewDefaultLogger(schemas.LogLevelError)})
+			if e != nil {
+				t.Fatal(e)
+			}
+			t.Cleanup(client.Shutdown)
+			host := &bifrostServer.BifrostHTTPServer{Ctx: schemas.NewBifrostContext(context.Background(), schemas.NoDeadline), Client: client, Config: &lib.Config{ConfigStore: store, ModelCatalog: modelcatalog.NewTestCatalog(nil)}, Router: router.New()}
 			log := &pricingLogger{}
 			e = attach(context.Background(), host, func(next fasthttp.RequestHandler) fasthttp.RequestHandler { return next }, log)
 			if failStore {
@@ -115,4 +123,15 @@ func TestAttachPricingFailureCategory(t *testing.T) {
 			}
 		})
 	}
+}
+
+// noProviderAccount 供装配测试构造网关客户端；任何 provider 调用都会失败。
+type noProviderAccount struct{}
+
+func (noProviderAccount) GetConfiguredProviders() ([]schemas.ModelProvider, error) { return nil, nil }
+func (noProviderAccount) GetKeysForProvider(context.Context, schemas.ModelProvider) ([]schemas.Key, error) {
+	return nil, errors.New("test must not call a provider")
+}
+func (noProviderAccount) GetConfigForProvider(schemas.ModelProvider) (*schemas.ProviderConfig, error) {
+	return &schemas.ProviderConfig{NetworkConfig: schemas.NetworkConfig{BaseURL: "http://127.0.0.1:1"}}, nil
 }
