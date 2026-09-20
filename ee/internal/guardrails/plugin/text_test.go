@@ -53,9 +53,6 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 		{"message name", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
 			r.ChatRequest.Input[0].Name = schemas.Ptr("unsafe")
 		}},
-		{"reasoning", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
-			r.ChatRequest.Input[0].ChatAssistantMessage = &schemas.ChatAssistantMessage{Reasoning: schemas.Ptr("unsafe")}
-		}},
 		{"tool result", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
 			r.ChatRequest.Input[0].Role = schemas.ChatMessageRoleTool
 		}},
@@ -84,6 +81,46 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 			requireCode(t, short.Error, "content_safety_unsupported_content")
 		})
 	}
+}
+
+// 推理正文和回答一起送检：回答干净、推理里有违规也拦；有 Reasoning 时不重复读 details；加密推理跳过；未知结构拒绝。
+func TestReasoningIsChecked(t *testing.T) {
+	var seen []string
+	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, func(_ context.Context, text string) ([]guardrails.Finding, error) {
+		seen = append(seen, text)
+		if strings.Contains(text, "unsafe") {
+			return []guardrails.Finding{{Level: guardrails.High}}, nil
+		}
+		return nil, nil
+	})
+	r := response("safe answer")
+	r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{
+		Reasoning:        schemas.Ptr("unsafe plan"),
+		ReasoningDetails: []schemas.ChatReasoningDetails{{Type: schemas.BifrostReasoningDetailsTypeText, Text: schemas.Ptr("unsafe plan")}},
+	}
+	_, bErr, err := p.PostLLMHook(primed(t, p, testContext()), r, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireCode(t, bErr, "content_safety_blocked")
+	if strings.Join(seen, "|") != "safe answer\nunsafe plan" {
+		t.Fatalf("seen=%q", seen)
+	}
+
+	seen = nil
+	r = response("safe answer")
+	r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{ReasoningDetails: []schemas.ChatReasoningDetails{
+		{Type: schemas.BifrostReasoningDetailsTypeEncrypted, Data: schemas.Ptr("unsafe")},
+		{Type: schemas.BifrostReasoningDetailsTypeSummary, Summary: schemas.Ptr("summary")},
+	}}
+	if _, bErr, err = p.PostLLMHook(primed(t, p, testContext()), r, nil); err != nil || bErr != nil || strings.Join(seen, "|") != "safe answer\nsummary" {
+		t.Fatalf("seen=%q bErr=%+v err=%v", seen, bErr, err)
+	}
+
+	r = response("safe answer")
+	r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{ReasoningDetails: []schemas.ChatReasoningDetails{{Type: schemas.BifrostReasoningDetailsTypeContentBlocks}}}
+	_, bErr, _ = p.PostLLMHook(primed(t, p, testContext()), r, nil)
+	requireCode(t, bErr, "content_safety_unsupported_content")
 }
 
 func TestUnsupportedOutputCarriers(t *testing.T) {

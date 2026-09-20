@@ -80,12 +80,22 @@ func appendMessage(b *strings.Builder, message schemas.ChatMessage, limit int) e
 	if message.Name != nil || message.ChatToolMessage != nil || message.Role == schemas.ChatMessageRoleTool {
 		return errUnsupported
 	}
-	if a := message.ChatAssistantMessage; a != nil {
-		if a.Refusal != nil || a.Audio != nil || a.Reasoning != nil || len(a.ReasoningDetails) > 0 || len(a.Annotations) > 0 || len(a.ToolCalls) > 0 {
+	a := message.ChatAssistantMessage
+	if a != nil {
+		if a.Refusal != nil || a.Audio != nil || len(a.Annotations) > 0 || len(a.ToolCalls) > 0 {
 			return errUnsupported
 		}
 	}
-	content := message.Content
+	if err := appendContent(b, message.Content, limit); err != nil {
+		return err
+	}
+	if a != nil {
+		return appendReasoning(b, a, limit)
+	}
+	return nil
+}
+
+func appendContent(b *strings.Builder, content *schemas.ChatMessageContent, limit int) error {
 	if content == nil {
 		return errUnsupported
 	}
@@ -107,6 +117,44 @@ func appendMessage(b *strings.Builder, message schemas.ChatMessage, limit int) e
 		}
 	}
 	return nil
+}
+
+// 推理模型（DeepSeek、Qwen3 等）的回答带推理正文，客户端拿得到，所以和回答一起检查。
+// Bifrost 把同一段推理同时放在 Reasoning 和 ReasoningDetails 里，取 Reasoning 就够，避免同一段文本送检两次；
+// 没有 Reasoning 时才读 details 的文本与摘要。加密推理客户端也读不出明文，跳过；其他结构未知，拒绝。
+func appendReasoning(b *strings.Builder, a *schemas.ChatAssistantMessage, limit int) error {
+	if a.Reasoning != nil {
+		return appendSeparated(b, *a.Reasoning, limit)
+	}
+	for _, d := range a.ReasoningDetails {
+		switch d.Type {
+		case schemas.BifrostReasoningDetailsTypeText:
+			if d.Text != nil {
+				if err := appendSeparated(b, *d.Text, limit); err != nil {
+					return err
+				}
+			}
+		case schemas.BifrostReasoningDetailsTypeSummary:
+			if d.Summary != nil {
+				if err := appendSeparated(b, *d.Summary, limit); err != nil {
+					return err
+				}
+			}
+		case schemas.BifrostReasoningDetailsTypeEncrypted:
+		default:
+			return errUnsupported
+		}
+	}
+	return nil
+}
+
+func appendSeparated(b *strings.Builder, text string, limit int) error {
+	if b.Len() > 0 {
+		if err := appendText(b, "\n", limit); err != nil {
+			return err
+		}
+	}
+	return appendText(b, text, limit)
 }
 
 func appendText(b *strings.Builder, text string, limit int) error {
