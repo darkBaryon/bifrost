@@ -5,6 +5,7 @@
   JUDGE_PROVIDER=qwen JUDGE_MODEL=qwen-plus JUDGE_API_KEY=$DASHSCOPE_API_KEY \
   JUDGE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 python3 ee/scripts/guardrails-judge-e2e.py <samples.json>
 JUDGE_BASE_URL 非空时按 OpenAI 兼容自定义 provider 接入。"""
+import hashlib
 import importlib.util
 import json
 import os
@@ -46,6 +47,35 @@ def config(stage, rule):
         'business_rules': [{'id': 'pricing', 'rule': rule, **item()}],
     }
     return c
+
+
+FAKE_CHARSETS = {
+    'alnum': 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789',
+    'hex': '0123456789abcdef',
+    'upperdigit': 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+    'b64': 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/',
+}
+
+
+def fake_secret(name, spec):
+    """与 Go 侧 secrets.fakeSecret 同算法：样本里的假密钥不入库，按名字确定性生成，两边取值必须一致。"""
+    alphabet = FAKE_CHARSETS[spec['charset']]
+    seed = hashlib.sha256(('bifrost-guardrails-fake-secret:' + name).encode()).digest()
+    out, counter = [], 0
+    while len(out) < spec['length']:
+        block = hashlib.sha256(seed + counter.to_bytes(4, 'big')).digest()
+        out.extend(alphabet[v % len(alphabet)] for v in block[:spec['length'] - len(out)])
+        counter += 1
+    return spec['prefix'] + ''.join(out)
+
+
+def expand_fakes(text, fakes):
+    for name, spec in fakes.items():
+        placeholder = '{{' + name + '}}'
+        if placeholder in text:
+            text = text.replace(placeholder, fake_secret(name, spec))
+    assert '{{' not in text, f'样本里有未声明的占位符：{text[:80]}'
+    return text
 
 
 def classify(status, body):
@@ -99,7 +129,12 @@ def main():
             version = state['version']
             for s in [x for x in samples['samples'] if x.get('stage', 'input') == stage]:
                 start = time.perf_counter()
-                status, body, _ = guard_smoke.completion(node, s.get('text', ''), messages=s.get('messages'))
+                fakes = samples.get('fakes', {})
+                text = expand_fakes(s.get('text', ''), fakes)
+                msgs = s.get('messages')
+                if msgs:
+                    msgs = [{**m, 'content': expand_fakes(m['content'], fakes)} for m in msgs]
+                status, body, _ = guard_smoke.completion(node, text, messages=msgs)
                 ms = (time.perf_counter() - start) * 1000
                 got, code = classify(status, body)
                 results.append({'id': s['id'], 'group': s['group'], 'stage': stage, 'expect': s['expect'], 'got': got, 'code': code, 'ms': round(ms), 'status': status})

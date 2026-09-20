@@ -1,5 +1,6 @@
 // 本文件用「硬样本」回归密钥检测器：真实格式的假密钥出现在代码、配置、日志与中文对话里，
 // 以及容易误拦的占位符、环境变量引用、哈希与 UUID。样本见 data/samples-hard.json。
+// 样本里的密钥是 {{名字}} 占位符，运行时按 fakes 规格生成，原因见 fakesecret.go。
 package secrets_test
 
 import (
@@ -17,6 +18,7 @@ var hardSamples []byte
 
 func TestHardSamples(t *testing.T) {
 	var file struct {
+		Fakes   map[string]secrets.FakeSpec                `json:"fakes"`
 		Samples []struct{ ID, Group, Expect, Text string } `json:"samples"`
 	}
 	if err := json.Unmarshal(hardSamples, &file); err != nil {
@@ -27,7 +29,11 @@ func TestHardSamples(t *testing.T) {
 	}
 	d := newDetector(t, secrets.Options{})
 	for _, s := range file.Samples {
-		findings, err := d.Detect(context.Background(), s.Text)
+		text, err := secrets.ExpandFakes(s.Text, file.Fakes)
+		if err != nil {
+			t.Fatalf("%s: %v", s.ID, err)
+		}
+		findings, err := d.Detect(context.Background(), text)
 		if err != nil {
 			t.Fatalf("%s: %v", s.ID, err)
 		}
