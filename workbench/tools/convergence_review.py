@@ -166,7 +166,10 @@ def build_prompt(run: Run, cfg: dict, repo: Path, since: str | None) -> tuple[st
     if since:
         previous = run.phase_dir / f"收敛评审{run.round - 1}.md"
         delta = (f"本轮为差量复核：上一轮候选 {since}，本轮候选 {head}。评审范围是上面列出的差量文件"
-                 f"（git diff {since}..{head}），读这些文件的完整现状，不重做整包评审。")
+                 f"（git diff {since}..{head}），读这些文件的完整现状，不重做整包评审。"
+                 "差量轮的职责是收敛：核上轮修复项是否关闭、修复有没有带来新的结构损伤。"
+                 "上一轮要求的文字修改本身不是本轮的审查对象——对只改了注释、文档或命名的部分不开新的本轮修复项，"
+                 "有意见记入「建议(nit)」栏。同一位置的同类问题跨侧转交只允许一次，第二次出现直接挂账。")
         if previous.exists():
             delta += f"必须读取上一轮记录 {previous.relative_to(repo)}，对其中「本轮修复项」逐条给出处置（已修复 / 有依据撤回 / 仍未关闭），附证据。"
         extra.append(delta)
@@ -174,6 +177,8 @@ def build_prompt(run: Run, cfg: dict, repo: Path, since: str | None) -> tuple[st
         handoff = section(code_review.read_text(encoding="utf-8"), "转收敛评审") if code_review else ""
         if handoff:
             extra.append(f"代码评审记录 {code_review.relative_to(repo)} 的「转收敛评审」栏原文如下，逐条处置（修复 / 撤回 / 挂账）：\n{handoff}")
+    extra.append("记录须含独立的「建议(nit)」栏；本轮修复项为空或已关闭即取 verdict 无碍（有挂账条目取 仅立债挂账），"
+                 "建议栏有条目不影响出口，不得因\"还有话说\"取 有Blocking。")
     extra.append(f"记录 frontmatter 取值：case: {run.case}；phase: {run.phase}；round: {run.round}；"
                  f"created: {datetime.date.today().isoformat()}。启动脚本会把你的最终回复原样保存为 "
                  f"{run.record.relative_to(repo)}。")

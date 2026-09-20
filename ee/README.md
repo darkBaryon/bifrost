@@ -15,7 +15,7 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
 | [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http/、persistence/、hasher/ 分别适配入口、存储和 bcrypt |
 | [internal/pricing/](internal/pricing/README.md) | 国内厂商识别、价格换算与启动同步；persistence/ 适配上游定价覆盖和模型目录 |
-| [internal/guardrails/](internal/guardrails/README.md) | 本地内容安全规则框架及 BF Chat Hook；支持显式开启假检测器联调，真实检测器尚未接入 |
+| [internal/guardrails/](internal/guardrails/README.md) | 内容安全：密钥规则检测器、DeepSeek 等模型判官、BF Chat Hook、配置表与 `POST /api/guardrails/*` 接口 |
 | [internal/rbac/](internal/rbac/README.md) | 角色、权限目录、账号角色分配及对应HTTP接口 |
 | [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、会话路由、WebSocket 重验、配置投影 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
@@ -53,6 +53,10 @@ make -C ee smoke-rbac-postgres # 双节点 PostgreSQL 角色权限冒烟，需�
 ## 角色权限
 
 参见[角色权限接口](docs/角色权限接口.md)。PostgreSQL 冒烟需设置 `RBAC_TEST_POSTGRES_DSN`，例如 `host=localhost user=postgres dbname=postgres sslmode=disable`；使用可创建临时数据库的测试账号。脚本不修改已有业务数据库。
+
+## 内容安全
+
+接口契约（配置字段、版本号语义、400/409 口径、权限）见[包内说明](internal/guardrails/README.md#配置与接口)；期 2 交付管理页面时再补 `docs/` 页面。
 
 ## 文档
 

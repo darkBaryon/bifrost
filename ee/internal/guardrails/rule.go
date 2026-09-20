@@ -37,12 +37,23 @@ const (
 	Observe Action = "observe"
 )
 
+// Scope 表示输入阶段送检的文本范围；输出阶段忽略。
+// 判官类规则只看最后一条消息：历史在它到达时已查过，且被拦的消息会留在客户端历史里，查全部会让之后每条请求都被拦。
+// 密钥这类"发出去即泄露"的检测要看全部消息：历史里的密钥每一轮都在往外发，输出检查兜不住。
+type Scope int
+
+const (
+	LastMessage Scope = iota // 零值：只送最后一条消息
+	AllMessages              // 送全部消息拼接的文本
+)
+
 // Rule 显式指定一次检测的条件和处置；所有字段必填，不隐含失败放行策略。
 type Rule struct {
 	ID         string
 	DetectorID string
 	Category   Category
 	Stage      Stage
+	Scope      Scope // 输入阶段送检范围，见 Scope；输出阶段忽略
 	Threshold  Level
 	OnMatch    Action
 	OnError    Action
@@ -58,6 +69,9 @@ func validateRules(rules []Rule, detectors map[string]Detector) error {
 		ids[rule.ID] = true
 		if !validStage(rule.Stage) || !validCategory(rule.Category) || !validLevel(rule.Threshold) || rule.Timeout <= 0 {
 			return fmt.Errorf("guardrails: invalid stage, category, threshold or timeout in rule %q", rule.ID)
+		}
+		if rule.Scope != LastMessage && rule.Scope != AllMessages {
+			return fmt.Errorf("guardrails: invalid scope in rule %q", rule.ID)
 		}
 		if rule.OnMatch != Block && rule.OnMatch != Observe {
 			return fmt.Errorf("guardrails: invalid match action in rule %q", rule.ID)

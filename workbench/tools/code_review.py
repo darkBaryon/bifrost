@@ -175,7 +175,10 @@ def build_prompt(run: Run, cfg: dict, repo: Path, since: str | None) -> tuple[st
         previous = run.phase_dir / f"代码评审{run.round - 1}.md"
         delta = (f"本轮为差量复核：上一轮候选 {since}，本轮候选 {head}。评审范围是上面列出的差量文件"
                  f"（git diff {since}..{head}），读这些文件的完整现状；只核上一轮意见、声明修改和受影响区域，"
-                 f"无法证明未修改区域不受影响时恢复全量。")
+                 f"无法证明未修改区域不受影响时恢复全量。"
+                 "差量轮的职责是收敛：核上轮意见是否关闭、修复有没有引入行为回归。"
+                 "上一轮要求的文字修改本身不是本轮的审查对象——对只改了注释、文档或命名的部分不开新的本轮修复项，"
+                 "有意见记入「建议(nit)」栏。同一位置的同类问题跨侧转交只允许一次，第二次出现直接挂账。")
         if previous.exists():
             delta += f"必须读取上一轮记录 {previous.relative_to(repo).as_posix()}，对其中「本轮修复项」逐条给出处置（已修复 / 有依据撤回 / 仍未关闭），附证据。"
         extra.append(delta)
@@ -183,7 +186,9 @@ def build_prompt(run: Run, cfg: dict, repo: Path, since: str | None) -> tuple[st
         handoff = section(convergence.read_text(encoding="utf-8"), "转代码评审", level=3) if convergence else ""
         if handoff:
             extra.append(f"收敛评审记录 {convergence.relative_to(repo).as_posix()} 的「转代码评审」栏原文如下，逐条处置（修复 / 撤回 / 挂账），每条给依据：\n{handoff}")
-    extra.append("最终回复按上述 8 段结构直接输出 Markdown，最后单独一行写 `verdict: 通过` / `verdict: 需修改` / `verdict: 驳回`。"
+    extra.append("最终回复按上述结构直接输出 Markdown（含独立的「建议(nit)」栏），"
+                 "最后单独一行写 `verdict: 通过` / `verdict: 需修改` / `verdict: 驳回`；"
+                 "本轮修复项为空即写 `verdict: 通过`，建议栏有条目不影响。"
                  "启动脚本会把你的最终回复原样保存为 " + run.record.relative_to(repo).as_posix() + "。")
     return render_prompt(PROMPT_TEMPLATE.read_text(encoding="utf-8"), values, extra), head
 

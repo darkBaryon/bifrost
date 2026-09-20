@@ -1,4 +1,4 @@
-// 本文件逐个验证全部205个管理接口：最小权限可访问，缺少任一权限或数据库故障时不得执行原handler。
+// 本文件逐个验证全部208个管理接口：最小权限可访问，缺少任一权限或数据库故障时不得执行原handler。
 package host
 
 import (
@@ -108,8 +108,8 @@ func TestEveryManagedRouteAuthorization(t *testing.T) {
 			run(503)
 		})
 	}
-	if checked != 205 {
-		t.Fatalf("managed coverage %d want %d", checked, 205)
+	if checked != 208 {
+		t.Fatalf("managed coverage %d want %d", checked, 208)
 	}
 	t.Logf("verified %d managed method/pattern entries against the full phase-2/3/4 rules; pinned source comparison is in TestRouteSourceDigest", checked)
 }

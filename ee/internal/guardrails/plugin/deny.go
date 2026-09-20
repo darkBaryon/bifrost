@@ -22,14 +22,12 @@ const (
 	checkCanceled           errorCode = "content_safety_canceled"
 )
 
-// HTTP 错误响应范围；本轮不支持用成功状态码伪装成正常模型回答。
-const minErrorStatus, maxErrorStatus = 400, 599
-
-func (p *Plugin) buildDenialError(ctx *schemas.BifrostContext, code errorCode) *schemas.BifrostError {
+// buildDenialError 用请求快照里的拒绝策略构造客户端错误；状态码范围见 guardrails.MinDenyStatus。
+func (p *Plugin) buildDenialError(ctx *schemas.BifrostContext, options Options, code errorCode) *schemas.BifrostError {
 	message := "内容安全检查未完成"
 	switch code {
 	case contentBlocked:
-		message = p.options.DenyMessage
+		message = options.DenyMessage
 	case unsupportedContent:
 		message = "内容安全框架当前仅支持规范化的纯文本 Chat 内容"
 	case unsupportedOutputStream:
@@ -42,7 +40,7 @@ func (p *Plugin) buildDenialError(ctx *schemas.BifrostContext, code errorCode) *
 	p.logger.Info("content safety: request=%q rejected code=%s", requestID(ctx), code)
 	return &schemas.BifrostError{
 		IsBifrostError: true,
-		StatusCode:     schemas.Ptr(p.options.StatusCode),
+		StatusCode:     schemas.Ptr(options.StatusCode),
 		AllowFallbacks: schemas.Ptr(false),
 		Error: &schemas.ErrorField{
 			Type: schemas.Ptr(string(code)), Code: schemas.Ptr(string(code)), Message: message,

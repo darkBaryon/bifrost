@@ -673,6 +673,8 @@ POST /api/branding/update
 @ managed Settings.Manage none ordinary
 DELETE /api/cache/clear-by-key/{cacheKey}
 DELETE /api/cache/clear/{cacheId}
+POST /api/guardrails/reset
+POST /api/guardrails/update
 
 @ managed Settings.Manage settings-input settings-safe
 PUT /api/config
@@ -684,6 +686,9 @@ PUT /api/proxy-config
 @ managed Settings.Manage,Logs.RevealContent none debug-explicit
 GET /api/dev/pprof
 GET /api/dev/pprof/goroutines
+
+@ managed Settings.View none ordinary
+POST /api/guardrails/get
 
 @ managed Settings.View none settings-safe
 GET /api/config

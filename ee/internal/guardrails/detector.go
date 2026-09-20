@@ -1,4 +1,4 @@
-// 本文件定义本地检测器契约、风险结果及其有效性检查。
+// 本文件定义本地检测器契约、风险等级及其名称，以及拦截响应状态码的业务边界。
 package guardrails
 
 import (
@@ -16,10 +16,33 @@ const (
 	High   Level = 3
 )
 
+// 等级在配置、规则数据和判官输出里的字符串名；只在这里定义，各处经 ParseLevel 解析。
+const (
+	levelNameLow    = "low"
+	levelNameMedium = "medium"
+	levelNameHigh   = "high"
+)
+
+// ParseLevel 把等级名（low/medium/high）解析为 Level；未知名称返回 false。
+func ParseLevel(name string) (Level, bool) {
+	switch name {
+	case levelNameLow:
+		return Low, true
+	case levelNameMedium:
+		return Medium, true
+	case levelNameHigh:
+		return High, true
+	}
+	return 0, false
+}
+
+// 拦截时返回给客户端的 HTTP 状态码范围；配置校验与插件构造共用同一对边界。
+const MinDenyStatus, MaxDenyStatus = 400, 599
+
 // Finding 只携带风险等级，不保留命中原文。
 type Finding struct{ Level Level }
 
-// Detector 是本地检测器契约。实现必须支持并发并响应 ctx 取消；调用为同步，框架不强杀 goroutine。
+// Detector 是本地检测器契约。实现必须支持并发并响应 ctx 取消，被取消时返回 ctx.Err()；调用为同步，框架不强杀 goroutine。
 type Detector interface {
 	Detect(ctx context.Context, text string) ([]Finding, error)
 }

@@ -2,19 +2,19 @@
 
 ## 解决什么问题
 
-把身份、角色权限、品牌、定价和开发护栏接到同一个Bifrost应用，共用服务器、路由和配置数据库。
+把身份、角色权限、品牌、定价和内容安全接到同一个Bifrost应用，共用服务器、路由和配置数据库。
 启动时先迁移身份和角色数据，再构造服务和接口；离线恢复也使用相同的身份/角色协作。
 
 ## 代码在哪
 
 | 文件 | 职责 |
 |---|---|
-| [bootstrap.go](bootstrap.go) | 准备身份和角色接入，装配开发护栏、品牌与定价，监听前核对全部接口规则 |
+| [bootstrap.go](bootstrap.go) | 准备身份和角色接入，装配内容安全、品牌与定价，监听前核对全部接口规则 |
 | [identity.go](identity.go) | 读取部署配置、执行身份/角色迁移，构造接口与宿主认证适配 |
 | [rbac.go](rbac.go) | 把身份事务、角色存储及账号操作策略连接起来 |
 | [recovery.go](recovery.go) | 离线恢复前核对迁移完整性，恢复账号并补回主管理员角色 |
-| [guardrails.go](guardrails.go) | 开发假检测器的显式启用、场景装配和 BF 插件注册 |
-| [guardrails_test.go](guardrails_test.go) | 默认关闭与非法开发配置检查 |
+| [guardrails.go](guardrails.go) | 内容安全装配：建配置表、从库构建检查器（失败拒启）、注册插件与三条管理接口；`EE_GUARDRAILS_FAKE` 下改装假检测器 |
+| [guardrails_test.go](guardrails_test.go) | 开发开关校验，以及库中坏配置拒启的回归 |
 | [pricing.go](pricing.go) | 定价环境配置、启动同步与错误分类 |
 | [pricing_test.go](pricing_test.go) | 配置顺序、目录缺失与 attach 失败策略测试 |
 
@@ -26,6 +26,6 @@
 - 角色/账号接口自行检查权限；Bifrost管理接口使用注入的角色规则，推理与协议接口保留各自的认证方式。
 - 共享服务器和数据库连接由宿主创建和关闭，不重复创建或释放。
 
-身份工厂在上游装配前设置；开发护栏、品牌与定价在上游装配后、开始监听前接入。部署配置错误拒绝启动；价格文件或模型目录不可用时，按定价模块约定记录日志并继续启动。
+身份工厂在上游装配前设置；内容安全、品牌与定价在上游装配后、开始监听前接入。部署配置错误拒绝启动；价格文件或模型目录不可用时，按定价模块约定记录日志并继续启动。
 
-开发护栏由 `EE_GUARDRAILS_FAKE` 选择场景，默认关闭且不持久化；详见[护栏联调说明](../guardrails/README.md#开发联调)。真实 HTTP、模型调用次数和重启关闭验证在 `ee/scripts/guardrails-smoke.py`。
+内容安全的配置存在 `ee_guardrails` 表，经 `POST /api/guardrails/*` 读写并热更新；库中配置无法构建（如判官 provider 已删）时拒绝启动。`EE_GUARDRAILS_FAKE` 只用于联调，与库中配置互斥；详见[内容安全说明](../guardrails/README.md)。真实 HTTP 冒烟在 `ee/scripts/guardrails-smoke.py`。

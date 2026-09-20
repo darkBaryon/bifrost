@@ -32,6 +32,37 @@ func mustChecker(t *testing.T, rules []guardrails.Rule, detectors map[string]gua
 	return e
 }
 
+// 规则按 Scope 取文本：AllMessages 拿全部消息，LastMessage 拿最后一条；有规则要 All 而没提供时拒绝，不让它静默查空文本。
+func TestScopeSelectsText(t *testing.T) {
+	var lastSeen, allSeen string
+	all := rule("all")
+	all.Scope = guardrails.AllMessages
+	c := mustChecker(t, []guardrails.Rule{rule("last"), all}, map[string]guardrails.Detector{
+		"last": detectorFunc(func(_ context.Context, text string) ([]guardrails.Finding, error) { lastSeen = text; return nil, nil }),
+		"all":  detectorFunc(func(_ context.Context, text string) ([]guardrails.Finding, error) { allSeen = text; return nil, nil }),
+	})
+	if !c.NeedsAllInput() {
+		t.Fatal("checker with an AllMessages rule must ask for all input")
+	}
+	history := "earlier\nlatest"
+	res, err := c.CheckTexts(context.Background(), guardrails.Input, guardrails.Texts{Last: "latest", All: &history})
+	if err != nil || res.Action != guardrails.Allow || lastSeen != "latest" || allSeen != history {
+		t.Fatalf("res=%+v err=%v last=%q all=%q", res, err, lastSeen, allSeen)
+	}
+	if _, err := c.CheckTexts(context.Background(), guardrails.Input, guardrails.Texts{Last: "latest"}); !errors.Is(err, guardrails.ErrInvalidInput) {
+		t.Fatalf("missing All must be rejected, got %v", err)
+	}
+	only := mustChecker(t, []guardrails.Rule{rule("last")}, map[string]guardrails.Detector{"last": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, nil })})
+	if only.NeedsAllInput() {
+		t.Fatal("checker without AllMessages rules must not ask for all input")
+	}
+	bad := rule("bad")
+	bad.Scope = guardrails.Scope(7)
+	if _, err := guardrails.New([]guardrails.Rule{bad}, map[string]guardrails.Detector{"bad": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, nil })}, 1024); err == nil {
+		t.Fatal("unknown scope must be rejected")
+	}
+}
+
 func TestRuleActionsAndThreshold(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -58,21 +89,27 @@ func TestRuleActionsAndThreshold(t *testing.T) {
 	}
 }
 
-func TestOrderShortCircuitAndStages(t *testing.T) {
-	var calls []string
+// 同阶段规则并行执行，结果按配置顺序；其他阶段的规则不执行。
+func TestParallelStagesAndOrder(t *testing.T) {
+	var mu sync.Mutex
+	calls := map[string]bool{}
 	detectors := map[string]guardrails.Detector{}
-	for _, id := range []string{"observe", "block", "never", "output"} {
+	for _, id := range []string{"observe", "second", "output"} {
 		detectors[id] = detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
-			calls = append(calls, id)
+			mu.Lock()
+			calls[id] = true
+			mu.Unlock()
 			return []guardrails.Finding{{Level: guardrails.High}}, nil
 		})
 	}
-	rules := []guardrails.Rule{rule("observe"), rule("output"), rule("block"), rule("never")}
+	rules := []guardrails.Rule{rule("observe"), rule("output"), rule("second")}
 	rules[0].OnMatch = guardrails.Observe
 	rules[1].Stage = guardrails.Output
+	rules[2].OnMatch = guardrails.Observe
 	e := mustChecker(t, rules, detectors)
 	result, err := e.Check(context.Background(), guardrails.Input, "")
-	if err != nil || result.Action != guardrails.Block || strings.Join(calls, ",") != "observe,block" {
+	if err != nil || result.Action != guardrails.Allow || result.Blocking != nil || len(result.RuleEvaluations) != 2 ||
+		result.RuleEvaluations[0].RuleID != "observe" || result.RuleEvaluations[1].RuleID != "second" || calls["output"] {
 		t.Fatalf("calls=%v result=%+v err=%v", calls, result, err)
 	}
 	if !e.HasRules(guardrails.Output) || e.MaxTextBytes() != 1024 {
@@ -109,17 +146,23 @@ func TestDetectorFailures(t *testing.T) {
 	}
 }
 
+// 失败放行的规则先完成，再由另一条规则拦截：两条评估都保留。用屏障固定顺序，不依赖调度。
 func TestAllowFailureContinuesToBlockingRule(t *testing.T) {
+	failed := make(chan struct{})
 	r := rule("broken")
 	r.OnError = guardrails.Allow
 	e := mustChecker(t, []guardrails.Rule{r, rule("block")}, map[string]guardrails.Detector{
-		"broken": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, errors.New("failed") }),
+		"broken": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			defer close(failed)
+			return nil, errors.New("failed")
+		}),
 		"block": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
+			<-failed
 			return []guardrails.Finding{{Level: guardrails.High}}, nil
 		}),
 	})
 	result, err := e.Check(context.Background(), guardrails.Input, "text")
-	if err != nil || result.Action != guardrails.Block || len(result.RuleEvaluations) != 2 {
+	if err != nil || result.Action != guardrails.Block || len(result.RuleEvaluations) != 2 || result.RuleEvaluations[0].Outcome != guardrails.Failed || result.Blocking == nil || result.Blocking.RuleID != "block" {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
@@ -239,7 +282,7 @@ func TestUninitializedCheckerAndContext(t *testing.T) {
 	}
 }
 
-// 超限和取消必须先于线性 UTF-8 扫描；出错不能丢失此前已完成的规则执行结果。
+// 超限和取消必须先于线性 UTF-8 扫描。
 func TestCheckErrorPrecedenceAndRuleEvaluations(t *testing.T) {
 	e := mustChecker(t, nil, nil)
 	oversized := strings.Repeat("x", 1024) + string([]byte{0xff})
@@ -251,21 +294,5 @@ func TestCheckErrorPrecedenceAndRuleEvaluations(t *testing.T) {
 	if _, err := e.Check(ctx, guardrails.Input, oversized); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancellation must precede text validation: %v", err)
 	}
-	ctx, cancel = context.WithCancel(context.Background())
-	defer cancel()
-	first, second := rule("first"), rule("second")
-	first.OnMatch = guardrails.Observe
-	e = mustChecker(t, []guardrails.Rule{first, second}, map[string]guardrails.Detector{
-		"first": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
-			return []guardrails.Finding{{Level: guardrails.High}}, nil
-		}),
-		"second": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) {
-			cancel()
-			return nil, context.Canceled
-		}),
-	})
-	result, err := e.Check(ctx, guardrails.Input, "text")
-	if !errors.Is(err, context.Canceled) || result.Action != guardrails.Block || len(result.RuleEvaluations) != 1 || result.RuleEvaluations[0].Action != guardrails.Observe {
-		t.Fatalf("completed rule evaluation lost: result=%+v err=%v", result, err)
-	}
+	// 已完成评估在父取消时的保留见 parallel_test.go 的确定性用例。
 }

@@ -1,4 +1,4 @@
-// 本文件验证纯文本提取覆盖全部消息和候选，未知载体与超限不能静默通过。
+// 本文件验证纯文本提取只取最后一条输入消息、覆盖全部输出候选，未知载体与超限不能静默通过。
 package plugin_test
 
 import (
@@ -10,16 +10,17 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
-func TestAllHistoryAndTextBlocks(t *testing.T) {
+// 只有最后一条消息送检：历史里被拦过的那句不会让之后每条请求都被拦；最后一条的多个文本块拼成一段。
+func TestLastMessageOnlyAndTextBlocks(t *testing.T) {
 	var seen string
 	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, func(_ context.Context, text string) ([]guardrails.Finding, error) { seen = text; return nil, nil })
 	req := request("system text")
 	req.ChatRequest.Input[0].Role = schemas.ChatMessageRoleSystem
 	m := message("")
 	m.Content = &schemas.ChatMessageContent{ContentBlocks: []schemas.ChatContentBlock{{Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("un")}, {Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("safe")}}}
-	req.ChatRequest.Input = append(req.ChatRequest.Input, m, message("last message"))
+	req.ChatRequest.Input = append(req.ChatRequest.Input, message("[guardrails-test] blocked earlier"), m)
 	_, short, err := p.PreLLMHook(testContext(), req)
-	if err != nil || short != nil || seen != "system text\nunsafe\nlast message" {
+	if err != nil || short != nil || seen != "unsafe" {
 		t.Fatalf("seen=%q short=%+v err=%v", seen, short, err)
 	}
 }
@@ -52,9 +53,6 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 		{"message name", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
 			r.ChatRequest.Input[0].Name = schemas.Ptr("unsafe")
 		}},
-		{"reasoning", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
-			r.ChatRequest.Input[0].ChatAssistantMessage = &schemas.ChatAssistantMessage{Reasoning: schemas.Ptr("unsafe")}
-		}},
 		{"tool result", func(r *schemas.BifrostRequest, _ *schemas.BifrostContext) {
 			r.ChatRequest.Input[0].Role = schemas.ChatMessageRoleTool
 		}},
@@ -83,6 +81,66 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 			requireCode(t, short.Error, "content_safety_unsupported_content")
 		})
 	}
+}
+
+// AllMessages 的规则（密钥）看全部历史：历史里有密钥就拦，直到客户端删掉它；LastMessage 的规则不受历史影响。
+func TestAllMessagesScopeSeesHistory(t *testing.T) {
+	req := request("unsafe key pasted earlier")
+	req.ChatRequest.Input = append(req.ChatRequest.Input, message("hello again"))
+
+	all := testRule(guardrails.Input)
+	all.Scope = guardrails.AllMessages
+	p, _ := newPlugin(t, []guardrails.Rule{all}, matchingDetector)
+	_, short, err := p.PreLLMHook(testContext(), req)
+	if err != nil || short == nil {
+		t.Fatalf("short=%+v err=%v", short, err)
+	}
+	requireCode(t, short.Error, "content_safety_blocked")
+
+	last, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
+	if _, short, err := last.PreLLMHook(testContext(), req); err != nil || short != nil {
+		t.Fatalf("last-message rule must ignore history: short=%+v err=%v", short, err)
+	}
+}
+
+// 推理正文和回答一起送检：回答干净、推理里有违规也拦；有 Reasoning 时不重复读 details；加密推理跳过；未知结构拒绝。
+func TestReasoningIsChecked(t *testing.T) {
+	var seen []string
+	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, func(_ context.Context, text string) ([]guardrails.Finding, error) {
+		seen = append(seen, text)
+		if strings.Contains(text, "unsafe") {
+			return []guardrails.Finding{{Level: guardrails.High}}, nil
+		}
+		return nil, nil
+	})
+	r := response("safe answer")
+	r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{
+		Reasoning:        schemas.Ptr("unsafe plan"),
+		ReasoningDetails: []schemas.ChatReasoningDetails{{Type: schemas.BifrostReasoningDetailsTypeText, Text: schemas.Ptr("unsafe plan")}},
+	}
+	_, bErr, err := p.PostLLMHook(primed(t, p, testContext()), r, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireCode(t, bErr, "content_safety_blocked")
+	if strings.Join(seen, "|") != "safe answer\nunsafe plan" {
+		t.Fatalf("seen=%q", seen)
+	}
+
+	seen = nil
+	r = response("safe answer")
+	r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{ReasoningDetails: []schemas.ChatReasoningDetails{
+		{Type: schemas.BifrostReasoningDetailsTypeEncrypted, Data: schemas.Ptr("unsafe")},
+		{Type: schemas.BifrostReasoningDetailsTypeSummary, Summary: schemas.Ptr("summary")},
+	}}
+	if _, bErr, err = p.PostLLMHook(primed(t, p, testContext()), r, nil); err != nil || bErr != nil || strings.Join(seen, "|") != "safe answer\nsummary" {
+		t.Fatalf("seen=%q bErr=%+v err=%v", seen, bErr, err)
+	}
+
+	r = response("safe answer")
+	r.ChatResponse.Choices[0].Message.ChatAssistantMessage = &schemas.ChatAssistantMessage{ReasoningDetails: []schemas.ChatReasoningDetails{{Type: schemas.BifrostReasoningDetailsTypeContentBlocks}}}
+	_, bErr, _ = p.PostLLMHook(primed(t, p, testContext()), r, nil)
+	requireCode(t, bErr, "content_safety_unsupported_content")
 }
 
 func TestUnsupportedOutputCarriers(t *testing.T) {
@@ -121,7 +179,7 @@ func TestUnsupportedOutputCarriers(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := response("safe")
 			tc.mutate(r)
-			got, bErr, err := p.PostLLMHook(testContext(), r, nil)
+			got, bErr, err := p.PostLLMHook(primed(t, p, testContext()), r, nil)
 			if got != nil || err != nil {
 				t.Fatalf("got=%+v err=%v", got, err)
 			}
@@ -132,8 +190,9 @@ func TestUnsupportedOutputCarriers(t *testing.T) {
 
 func TestTextBudgetAndEmptyText(t *testing.T) {
 	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
-	r := request(strings.Repeat("x", 256))
-	r.ChatRequest.Input = append(r.ChatRequest.Input, message(strings.Repeat("x", 256)))
+	// 只有最后一条消息计入预算：历史里的长消息不算，最后一条自己超限才拒。
+	r := request(strings.Repeat("x", 1024))
+	r.ChatRequest.Input = append(r.ChatRequest.Input, message(strings.Repeat("x", 513)))
 	_, short, err := p.PreLLMHook(testContext(), r)
 	if err != nil || short == nil {
 		t.Fatalf("short=%+v err=%v", short, err)
@@ -143,7 +202,7 @@ func TestTextBudgetAndEmptyText(t *testing.T) {
 		t.Fatal("explicit empty text rejected")
 	}
 	out, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
-	_, bErr, err := out.PostLLMHook(testContext(), response(strings.Repeat("x", 257), strings.Repeat("x", 256)), nil)
+	_, bErr, err := out.PostLLMHook(primed(t, out, testContext()), response(strings.Repeat("x", 257), strings.Repeat("x", 256)), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +212,7 @@ func TestTextBudgetAndEmptyText(t *testing.T) {
 		seen = append(seen, text)
 		return nil, nil
 	})
-	_, bErr, err = separate.PostLLMHook(testContext(), response("one", "two"), nil)
+	_, bErr, err = separate.PostLLMHook(primed(t, separate, testContext()), response("one", "two"), nil)
 	if err != nil || bErr != nil || strings.Join(seen, "|") != "one|two" {
 		t.Fatalf("seen=%v err=%v bErr=%v", seen, err, bErr)
 	}
@@ -168,7 +227,7 @@ func TestExtractionChecksSizeBeforeUTF8(t *testing.T) {
 	}
 	requireCode(t, short.Error, "content_safety_text_too_large")
 	output, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Output)}, matchingDetector)
-	got, bErr, err := output.PostLLMHook(testContext(), response(oversized), nil)
+	got, bErr, err := output.PostLLMHook(primed(t, output, testContext()), response(oversized), nil)
 	if err != nil || got != nil {
 		t.Fatalf("got=%+v err=%v", got, err)
 	}

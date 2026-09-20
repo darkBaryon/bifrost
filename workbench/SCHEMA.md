@@ -32,8 +32,8 @@
 | `开发蓝图` | `case`, `relates` | 同方案状态机 |
 | `方案` | `case`, `phase`, `version`, `relates` | `草拟中 → 待评审 → 需修改 → 已通过 → 已实施 → 已归档` |
 | `方案评审` | `case`, `phase`, `round` | 无状态机，必填 `verdict`（通过/需修改/驳回） |
-| `代码评审` | `case`, `phase`, `round` | 同上 |
-| `收敛评审` | `case`, `phase`, `round` | 无状态机，必填 `verdict`（无碍/仅立债挂账/有Blocking）——三态出口见 规范/流程/收敛评审.md；L1 不建单独文档 |
+| `代码评审` | `case`, `phase`, `round` | 同上；本轮修复项为空即 `通过`，建议(nit)不阻塞 |
+| `收敛评审` | `case`, `phase`, `round` | 无状态机，必填 `verdict`（无碍/仅立债挂账/有Blocking）——三态出口见 规范/流程/收敛评审.md；只有阻塞项才用 `有Blocking`，建议(nit)不影响出口；L1 不建单独文档 |
 | `验收记录` | `case`, `phase` | 无状态机 |
 
 - `relates`：列表，元素为需求 `id`；蓝图/方案必填，评审/验收可省（沿用所属方案的关联）。

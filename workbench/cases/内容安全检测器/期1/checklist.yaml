@@ -1,0 +1,60 @@
+必过命令:
+  - name: ee-vet
+    run: cd ee && GOWORK=off go vet ./...
+  - name: ee-race
+    run: cd ee && GOWORK=off go test -race ./...
+  - name: ee-build
+    run: cd ee && GOWORK=off go build -o tmp/bifrost-http ./cmd/bifrost-http
+  - name: guardrails-format
+    run: gofmt -l ee/internal/guardrails ee/internal/app
+    expect_empty: true
+  - name: guardrails-file-size
+    run: find ee/internal/guardrails ee/internal/app -name '*.go' -exec awk 'END{if(NR>500)print FILENAME}' {} \;
+    expect_empty: true
+  - name: guardrails-root-stdlib
+    run: find ee/internal/guardrails -maxdepth 1 -name '*.go' -exec grep -l 'fasthttp\|core/schemas\|net/http' {} \;
+    expect_empty: true
+  - name: diff-check
+    run: git diff --check
+  - name: workbench-views
+    run: python3 workbench/tools/build_views.py --check
+  - name: guardrails-http
+    run: python3 ee/scripts/guardrails-smoke.py
+必存产物:
+  - ee/internal/guardrails/README.md
+  - ee/internal/guardrails/detectors/secrets/detector.go
+  - ee/internal/guardrails/detectors/secrets/data/rules.json
+  - ee/internal/guardrails/detectors/secrets/data/NOTICE
+  - ee/internal/guardrails/detectors/judge/detector.go
+  - ee/internal/guardrails/detectors/judge/prompts
+  - ee/internal/guardrails/config
+  - ee/internal/guardrails/host/judge.go
+  - ee/internal/guardrails/persistence/migration.go
+  - ee/internal/guardrails/http/handler.go
+  - ee/internal/app/guardrails.go
+  - ee/scripts/secrets-rules-convert.py
+必含符号:
+  - {grep: 'func New', in: ee/internal/guardrails/detectors/secrets}
+  - {grep: 'func New', in: ee/internal/guardrails/detectors/judge}
+  - {grep: 'sk-bf-', in: ee/internal/guardrails/detectors/secrets}
+  - {grep: 'Blocking', in: ee/internal/guardrails}
+  - {grep: 'TextTooLarge', in: ee/internal/guardrails}
+  - {grep: 'func (p \*Plugin) Swap', in: ee/internal/guardrails/plugin}
+  - {grep: 'PrepareContextForInternalRequest', in: ee/internal/guardrails/host}
+  - {grep: 'ee_guardrails', in: ee/internal/guardrails/persistence}
+  - {grep: '/api/guardrails/update', in: ee/internal/rbac/host/routes.txt}
+收敛评审:
+  风险等级: L2
+  基线: b9e8752ea
+  开发指南:
+    - ee/internal/guardrails/README.md
+禁留标记:
+  - {grep: 'net/http', in: ee/internal/guardrails}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/detectors}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/config}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/persistence}
+  - {grep: 'fasthttp', in: ee/internal/guardrails/host}
+  - {grep: 'core/schemas', in: ee/internal/guardrails/detectors}
+  - {grep: 'core/schemas', in: ee/internal/guardrails/config}
+  - {grep: 'SkipPluginPipeline', in: ee/internal/app}
+  - {grep: 'gitleaks/v8', in: ee/go.mod}
