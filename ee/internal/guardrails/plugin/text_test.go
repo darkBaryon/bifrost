@@ -1,4 +1,4 @@
-// 本文件验证纯文本提取覆盖全部消息和候选，未知载体与超限不能静默通过。
+// 本文件验证纯文本提取只取最后一条输入消息、覆盖全部输出候选，未知载体与超限不能静默通过。
 package plugin_test
 
 import (
@@ -10,16 +10,17 @@ import (
 	"github.com/maximhq/bifrost/core/schemas"
 )
 
-func TestAllHistoryAndTextBlocks(t *testing.T) {
+// 只有最后一条消息送检：历史里被拦过的那句不会让之后每条请求都被拦；最后一条的多个文本块拼成一段。
+func TestLastMessageOnlyAndTextBlocks(t *testing.T) {
 	var seen string
 	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, func(_ context.Context, text string) ([]guardrails.Finding, error) { seen = text; return nil, nil })
 	req := request("system text")
 	req.ChatRequest.Input[0].Role = schemas.ChatMessageRoleSystem
 	m := message("")
 	m.Content = &schemas.ChatMessageContent{ContentBlocks: []schemas.ChatContentBlock{{Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("un")}, {Type: schemas.ChatContentBlockTypeText, Text: schemas.Ptr("safe")}}}
-	req.ChatRequest.Input = append(req.ChatRequest.Input, m, message("last message"))
+	req.ChatRequest.Input = append(req.ChatRequest.Input, message("[guardrails-test] blocked earlier"), m)
 	_, short, err := p.PreLLMHook(testContext(), req)
-	if err != nil || short != nil || seen != "system text\nunsafe\nlast message" {
+	if err != nil || short != nil || seen != "unsafe" {
 		t.Fatalf("seen=%q short=%+v err=%v", seen, short, err)
 	}
 }
@@ -132,8 +133,9 @@ func TestUnsupportedOutputCarriers(t *testing.T) {
 
 func TestTextBudgetAndEmptyText(t *testing.T) {
 	p, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
-	r := request(strings.Repeat("x", 256))
-	r.ChatRequest.Input = append(r.ChatRequest.Input, message(strings.Repeat("x", 256)))
+	// 只有最后一条消息计入预算：历史里的长消息不算，最后一条自己超限才拒。
+	r := request(strings.Repeat("x", 1024))
+	r.ChatRequest.Input = append(r.ChatRequest.Input, message(strings.Repeat("x", 513)))
 	_, short, err := p.PreLLMHook(testContext(), r)
 	if err != nil || short == nil {
 		t.Fatalf("short=%+v err=%v", short, err)
