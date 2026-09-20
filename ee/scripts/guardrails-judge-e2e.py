@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""通过真实 EE 网关 + 真实 DeepSeek 判官跑判官实验样本：记录拦截结果、延迟与判官日志。业务模型用本地替身（回显）。"""
+"""通过真实 EE 网关 + 真实判官模型跑判官实验样本：记录拦截结果、延迟与判官日志。业务模型用本地替身（回显）。
+
+判官默认 DeepSeek（需 DEEPSEEK_API_KEY）。要换判官，设 JUDGE_PROVIDER / JUDGE_MODEL / JUDGE_API_KEY / JUDGE_BASE_URL：
+  JUDGE_PROVIDER=qwen JUDGE_MODEL=qwen-plus JUDGE_API_KEY=$DASHSCOPE_API_KEY \
+  JUDGE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1 python3 ee/scripts/guardrails-judge-e2e.py <samples.json>
+JUDGE_BASE_URL 非空时按 OpenAI 兼容自定义 provider 接入。"""
 import importlib.util
 import json
 import os
@@ -26,13 +31,16 @@ def load(name, path):
 identity_smoke = load('identity_smoke', REPO / 'ee/scripts/identity-smoke.py')
 guard_smoke = load('guard_smoke', REPO / 'ee/scripts/guardrails-smoke.py')
 MODEL = guard_smoke.MODEL
+JUDGE_PROVIDER = os.environ.get('JUDGE_PROVIDER', 'deepseek')
+JUDGE_MODEL = os.environ.get('JUDGE_MODEL', 'deepseek-v4-flash')
+JUDGE_BASE_URL = os.environ.get('JUDGE_BASE_URL', '')
 
 
 def config(stage, rule):
     item = lambda: {'enabled': True, 'stages': [stage], 'threshold': 'medium', 'on_match': 'block', 'on_error': 'block'}
     c = {
         'deny': {'status': 400, 'message': '内容未通过安全检查'},
-        'judge': {'provider': 'deepseek', 'model': 'deepseek-v4-flash', 'retries': 3, 'timeout_ms': 20000},
+        'judge': {'provider': JUDGE_PROVIDER, 'model': JUDGE_MODEL, 'retries': 3, 'timeout_ms': 20000},
         'secrets': {'enabled': stage == 'input', 'stages': ['input'], 'threshold': 'medium', 'on_match': 'block', 'on_error': 'block'},
         'harmful': item(), 'prompt_attack': {**item(), 'enabled': stage == 'input'},
         'business_rules': [{'id': 'pricing', 'rule': rule, **item()}],
@@ -55,7 +63,7 @@ def classify(status, body):
 
 
 def main():
-    key = os.environ['DEEPSEEK_API_KEY']
+    key = os.environ.get('JUDGE_API_KEY') or os.environ['DEEPSEEK_API_KEY']
     sample_file = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO / 'product/需求/内容安全/判官实验/samples.json'
     samples = json.loads(sample_file.read_text())
     root = Path(tempfile.mkdtemp(prefix='ee-judge-e2e-'))
@@ -66,7 +74,12 @@ def main():
     password = secrets.token_urlsafe(24)
     cfg = guard_smoke.node_config(root, base, 'judge-e2e', password)
     # key 须列出判官模型，否则网关按"没有支持该模型的 key"拒绝判官请求。
-    cfg['providers']['deepseek'] = {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': ['deepseek-v4-flash']}], 'network_config': {'max_retries': 0}}
+    judge = {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': [JUDGE_MODEL]}], 'network_config': {'max_retries': 0}}
+    if JUDGE_BASE_URL:
+        judge['network_config']['base_url'] = JUDGE_BASE_URL
+        # 不写 allowed_requests：一旦写了，未显式开启的操作（含 chat_completion）都会被拒。
+        judge['custom_provider_config'] = {'base_provider_type': 'openai'}
+    cfg['providers'][JUDGE_PROVIDER] = judge
     node = identity_smoke.Node(str(REPO / 'ee/tmp/bifrost-http'), root / 'node', cfg, '')
     results = []
     error = None
