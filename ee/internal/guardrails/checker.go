@@ -63,10 +63,43 @@ func (c *Checker) HasRules(stage Stage) bool {
 // MaxTextBytes 返回配置的单次完整文本字节上限，供入口在拼接文本前限长。
 func (c *Checker) MaxTextBytes() int { return c.maxTextBytes }
 
-// Check 检查完整文本。取消、非法输入及超限返回 error；检测器失败则由规则决定，记录为 Failed。
+// Texts 是一次检查的送检文本：Last 只含最后一条消息，All 含全部消息拼接。
+// 规则按 Scope 取其一；All 只在有规则需要时才由入口提取，用指针区分"未提供"与空文本。输出阶段只用 Last。
+type Texts struct {
+	Last string
+	All  *string
+}
+
+func (t Texts) forRule(rule Rule) string {
+	if rule.Stage == Input && rule.Scope == AllMessages {
+		return *t.All
+	}
+	return t.Last
+}
+
+// NeedsAllInput 报告是否有输入规则要求全部消息文本，供入口决定要不要提取。
+func (c *Checker) NeedsAllInput() bool {
+	if c == nil {
+		return false
+	}
+	for _, rule := range c.rules {
+		if rule.Stage == Input && rule.Scope == AllMessages {
+			return true
+		}
+	}
+	return false
+}
+
+// Check 用同一段文本检查该阶段的全部规则，等价于 Last 与 All 相同的 CheckTexts。
+func (c *Checker) Check(ctx context.Context, stage Stage, text string) (CheckResult, error) {
+	return c.CheckTexts(ctx, stage, Texts{Last: text, All: &text})
+}
+
+// CheckTexts 检查完整文本。取消、非法输入及超限返回 error；检测器失败则由规则决定，记录为 Failed。
+// 有规则要求全部消息而 All 未提供时按非法输入拒绝，不让该规则静默检查空文本。
 // 返回 error 时 Action 恒为 Block、Blocking 为 nil，RuleEvaluations 保留出错前已完成规则的执行结果，调用方仍可记录。
 // 超时依赖检测器协作取消；即使检测器迟返回成功，超过期限的结果也按失败处理。
-func (c *Checker) Check(ctx context.Context, stage Stage, text string) (CheckResult, error) {
+func (c *Checker) CheckTexts(ctx context.Context, stage Stage, texts Texts) (CheckResult, error) {
 	checkResult := CheckResult{Action: Block}
 	if c == nil || c.maxTextBytes <= 0 || ctx == nil || !validStage(stage) {
 		return checkResult, ErrInvalidInput
@@ -74,18 +107,27 @@ func (c *Checker) Check(ctx context.Context, stage Stage, text string) (CheckRes
 	if err := ctx.Err(); err != nil {
 		return checkResult, err
 	}
-	if len(text) > c.maxTextBytes {
-		return checkResult, ErrTextTooLarge
-	}
-	// 先判取消和长度，再做线性的 UTF-8 扫描，避免超限输入消耗扫描成本。
-	if !utf8.ValidString(text) {
+	if stage == Input && texts.All == nil && c.NeedsAllInput() {
 		return checkResult, ErrInvalidInput
 	}
-	return c.runStage(ctx, stage, text)
+	candidates := []string{texts.Last}
+	if texts.All != nil {
+		candidates = append(candidates, *texts.All)
+	}
+	for _, text := range candidates {
+		if len(text) > c.maxTextBytes {
+			return checkResult, ErrTextTooLarge
+		}
+		// 先判取消和长度，再做线性的 UTF-8 扫描，避免超限输入消耗扫描成本。
+		if !utf8.ValidString(text) {
+			return checkResult, ErrInvalidInput
+		}
+	}
+	return c.runStage(ctx, stage, texts)
 }
 
 // runStage 并行执行同阶段规则；blockCtx 只因拦截被取消，父 ctx 取消仍作为框架错误返回。
-func (c *Checker) runStage(parent context.Context, stage Stage, text string) (CheckResult, error) {
+func (c *Checker) runStage(parent context.Context, stage Stage, texts Texts) (CheckResult, error) {
 	blockCtx, cancel := context.WithCancel(parent)
 	defer cancel()
 	var staged []Rule
@@ -101,7 +143,7 @@ func (c *Checker) runStage(parent context.Context, stage Stage, text string) (Ch
 		wg.Add(1)
 		go func(rule Rule, s *slot) {
 			defer wg.Done()
-			s.evaluation, s.state, s.err = c.evaluateRule(parent, blockCtx, rule, text)
+			s.evaluation, s.state, s.err = c.evaluateRule(parent, blockCtx, rule, texts.forRule(rule))
 			if s.state == completed && s.evaluation.Action == Block {
 				cancel()
 			}

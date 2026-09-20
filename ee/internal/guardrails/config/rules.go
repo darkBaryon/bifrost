@@ -42,7 +42,10 @@ func (c Config) Expand() Plan {
 	if c.Secrets.Enabled {
 		p.NeedsSecrets = true
 		for _, stage := range c.Secrets.Stages {
-			p.Rules = append(p.Rules, rule(itemSecrets+":"+stage, SecretsDetectorID, guardrails.Credentials, stage, c.Secrets.Item, c.SecretsTimeout()))
+			r := rule(itemSecrets+":"+stage, SecretsDetectorID, guardrails.Credentials, stage, c.Secrets.Item, c.SecretsTimeout())
+			// 密钥留在历史里每一轮都在往外发，所以扫全部消息；判官类规则只看最后一条（见 guardrails.Scope）。
+			r.Scope = guardrails.AllMessages
+			p.Rules = append(p.Rules, r)
 		}
 	}
 	addJudge := func(item, ruleID, ruleText string, category guardrails.Category, it Item) {

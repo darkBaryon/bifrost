@@ -32,6 +32,37 @@ func mustChecker(t *testing.T, rules []guardrails.Rule, detectors map[string]gua
 	return e
 }
 
+// 规则按 Scope 取文本：AllMessages 拿全部消息，LastMessage 拿最后一条；有规则要 All 而没提供时拒绝，不让它静默查空文本。
+func TestScopeSelectsText(t *testing.T) {
+	var lastSeen, allSeen string
+	all := rule("all")
+	all.Scope = guardrails.AllMessages
+	c := mustChecker(t, []guardrails.Rule{rule("last"), all}, map[string]guardrails.Detector{
+		"last": detectorFunc(func(_ context.Context, text string) ([]guardrails.Finding, error) { lastSeen = text; return nil, nil }),
+		"all":  detectorFunc(func(_ context.Context, text string) ([]guardrails.Finding, error) { allSeen = text; return nil, nil }),
+	})
+	if !c.NeedsAllInput() {
+		t.Fatal("checker with an AllMessages rule must ask for all input")
+	}
+	history := "earlier\nlatest"
+	res, err := c.CheckTexts(context.Background(), guardrails.Input, guardrails.Texts{Last: "latest", All: &history})
+	if err != nil || res.Action != guardrails.Allow || lastSeen != "latest" || allSeen != history {
+		t.Fatalf("res=%+v err=%v last=%q all=%q", res, err, lastSeen, allSeen)
+	}
+	if _, err := c.CheckTexts(context.Background(), guardrails.Input, guardrails.Texts{Last: "latest"}); !errors.Is(err, guardrails.ErrInvalidInput) {
+		t.Fatalf("missing All must be rejected, got %v", err)
+	}
+	only := mustChecker(t, []guardrails.Rule{rule("last")}, map[string]guardrails.Detector{"last": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, nil })})
+	if only.NeedsAllInput() {
+		t.Fatal("checker without AllMessages rules must not ask for all input")
+	}
+	bad := rule("bad")
+	bad.Scope = guardrails.Scope(7)
+	if _, err := guardrails.New([]guardrails.Rule{bad}, map[string]guardrails.Detector{"bad": detectorFunc(func(context.Context, string) ([]guardrails.Finding, error) { return nil, nil })}, 1024); err == nil {
+		t.Fatal("unknown scope must be rejected")
+	}
+}
+
 func TestRuleActionsAndThreshold(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

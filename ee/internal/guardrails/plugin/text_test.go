@@ -83,6 +83,26 @@ func TestUnsupportedInputCarriers(t *testing.T) {
 	}
 }
 
+// AllMessages 的规则（密钥）看全部历史：历史里有密钥就拦，直到客户端删掉它；LastMessage 的规则不受历史影响。
+func TestAllMessagesScopeSeesHistory(t *testing.T) {
+	req := request("unsafe key pasted earlier")
+	req.ChatRequest.Input = append(req.ChatRequest.Input, message("hello again"))
+
+	all := testRule(guardrails.Input)
+	all.Scope = guardrails.AllMessages
+	p, _ := newPlugin(t, []guardrails.Rule{all}, matchingDetector)
+	_, short, err := p.PreLLMHook(testContext(), req)
+	if err != nil || short == nil {
+		t.Fatalf("short=%+v err=%v", short, err)
+	}
+	requireCode(t, short.Error, "content_safety_blocked")
+
+	last, _ := newPlugin(t, []guardrails.Rule{testRule(guardrails.Input)}, matchingDetector)
+	if _, short, err := last.PreLLMHook(testContext(), req); err != nil || short != nil {
+		t.Fatalf("last-message rule must ignore history: short=%+v err=%v", short, err)
+	}
+}
+
 // 推理正文和回答一起送检：回答干净、推理里有违规也拦；有 Reasoning 时不重复读 details；加密推理跳过；未知结构拒绝。
 func TestReasoningIsChecked(t *testing.T) {
 	var seen []string

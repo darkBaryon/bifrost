@@ -45,12 +45,15 @@ GUARDRAILS = {
 def main():
     key = os.environ['DEEPSEEK_API_KEY']
     root = Path(tempfile.mkdtemp(prefix='ee-playground-'))
-    # 定价/参数同步地址指向本地替身，免得启动时去拉外网；业务模型本身走真实 DeepSeek。
+    # 本地替身只用于 MCP 库地址；业务模型与判官都走真实 DeepSeek。
     stub = ThreadingHTTPServer(('127.0.0.1', 0), guard_smoke.ModelHandler)
     stub.calls = stub.judge_calls = 0
     threading.Thread(target=stub.serve_forever, daemon=True).start()
     password = secrets.token_urlsafe(12)
     cfg = guard_smoke.node_config(root, f'http://127.0.0.1:{stub.server_port}', USER, password)
+    # 定价与模型参数目录走上游真实数据表（控制台的参数面板靠它生成 stream 等开关）；MCP 库仍指向替身。
+    cfg['framework']['pricing'].pop('pricing_url', None)
+    cfg['framework']['pricing'].pop('model_parameters_url', None)
     # 网关只把请求路由到 models 里列出的型号（空列表 = 一个都不支持）；控制台的模型下拉列的是 DeepSeek /models 返回的全部型号，都要登记。
     cfg['providers'] = {'deepseek': {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': MODELS}],
                                      'network_config': {'max_retries': 0}}}

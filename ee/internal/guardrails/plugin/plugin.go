@@ -102,11 +102,20 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		return reject(code)
 	}
 	if input {
-		text, err := extractInputText(req.ChatRequest, checker.MaxTextBytes())
+		last, err := extractInputText(req.ChatRequest, checker.MaxTextBytes())
 		if err != nil {
 			return reject(mapCheckError(err, unsupportedContent))
 		}
-		if code := p.checkText(ctx, checker, guardrails.Input, text); code != "" {
+		texts := guardrails.Texts{Last: last}
+		// 全部消息只在有规则需要（密钥）时才提取，判官类规则不因历史里的旧消息改判。
+		if checker.NeedsAllInput() {
+			all, err := extractAllInputText(req.ChatRequest, checker.MaxTextBytes())
+			if err != nil {
+				return reject(mapCheckError(err, unsupportedContent))
+			}
+			texts.All = &all
+		}
+		if code := p.checkTexts(ctx, checker, guardrails.Input, texts); code != "" {
 			return reject(code)
 		}
 	}
@@ -125,7 +134,7 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, resp *schemas.BifrostR
 		return nil, p.buildDenialError(ctx, st.options, mapCheckError(err, unsupportedContent)), nil
 	}
 	for _, text := range texts {
-		if code := p.checkText(ctx, st.checker, guardrails.Output, text); code != "" {
+		if code := p.checkTexts(ctx, st.checker, guardrails.Output, guardrails.Texts{Last: text}); code != "" {
 			return nil, p.buildDenialError(ctx, st.options, code), nil
 		}
 	}
@@ -167,11 +176,11 @@ func validateRequest(ctx *schemas.BifrostContext, checker *guardrails.Checker, r
 	return ""
 }
 
-func (p *Plugin) checkText(ctx *schemas.BifrostContext, checker *guardrails.Checker, stage guardrails.Stage, text string) errorCode {
+func (p *Plugin) checkTexts(ctx *schemas.BifrostContext, checker *guardrails.Checker, stage guardrails.Stage, texts guardrails.Texts) errorCode {
 	if ctx == nil {
 		return checkFailed
 	}
-	checkResult, err := checker.Check(ctx, stage, text)
+	checkResult, err := checker.CheckTexts(ctx, stage, texts)
 	for _, ruleEvaluation := range checkResult.RuleEvaluations {
 		p.logger.Info("content safety: request=%q rule=%q detector=%q category=%s stage=%s outcome=%s action=%s failure=%s level=%d",
 			requestID(ctx), ruleEvaluation.RuleID, ruleEvaluation.DetectorID, ruleEvaluation.Category,

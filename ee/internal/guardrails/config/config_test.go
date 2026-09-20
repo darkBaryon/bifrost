@@ -43,7 +43,7 @@ func TestParseDefaultsAndExpand(t *testing.T) {
 	if last.OnMatch != guardrails.Observe || last.OnError != guardrails.Allow || last.Timeout != 10*time.Second || last.Category != guardrails.BusinessRule || last.Stage != guardrails.Output {
 		t.Fatalf("rule %+v", last)
 	}
-	if plan.Rules[0].Timeout != 500*time.Millisecond || plan.Rules[0].Category != guardrails.Credentials {
+	if plan.Rules[0].Timeout != 500*time.Millisecond || plan.Rules[0].Category != guardrails.Credentials || plan.Rules[0].Scope != guardrails.AllMessages {
 		t.Fatalf("secrets rule %+v", plan.Rules[0])
 	}
 	if js := plan.Judges[4]; js.Item != config.ItemBusinessRule || js.RuleID != "pricing" || js.RuleText != "不得透露底价" || js.Stage != guardrails.Output {

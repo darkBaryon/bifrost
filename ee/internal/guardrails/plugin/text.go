@@ -38,7 +38,8 @@ func unsupportedRequest(ctx *schemas.BifrostContext, req *schemas.BifrostChatReq
 	return false
 }
 
-// 输入只检查最后一条消息。客户端会把被拦的消息留在历史里，检查全部历史会让之后每一条请求都被同一句话拦下；
+// extractInputText 取最后一条消息，供 Scope 为 LastMessage 的规则（判官类）使用。
+// 客户端会把被拦的消息留在历史里，判官查全部历史会让之后每一条请求都被同一句话拦下；
 // 历史里的每条消息在它作为最后一条到达时都已经检查过。这也是 Higress、Portkey、Azure 的默认做法。
 func extractInputText(req *schemas.BifrostChatRequest, limit int) (string, error) {
 	if len(req.Input) == 0 {
@@ -47,6 +48,26 @@ func extractInputText(req *schemas.BifrostChatRequest, limit int) (string, error
 	var b strings.Builder
 	if err := appendMessage(&b, req.Input[len(req.Input)-1], limit); err != nil {
 		return "", err
+	}
+	return b.String(), nil
+}
+
+// extractAllInputText 拼接全部消息，供 Scope 为 AllMessages 的规则（密钥）使用：历史里的密钥每一轮都在往外发。
+// 任一消息不受支持即拒绝，不把未知结构当作空文本。
+func extractAllInputText(req *schemas.BifrostChatRequest, limit int) (string, error) {
+	if len(req.Input) == 0 {
+		return "", errUnsupported
+	}
+	var b strings.Builder
+	for i, message := range req.Input {
+		if i > 0 {
+			if err := appendText(&b, "\n", limit); err != nil {
+				return "", err
+			}
+		}
+		if err := appendMessage(&b, message, limit); err != nil {
+			return "", err
+		}
 	}
 	return b.String(), nil
 }
