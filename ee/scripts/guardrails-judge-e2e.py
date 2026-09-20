@@ -81,6 +81,8 @@ def main():
         judge['custom_provider_config'] = {'base_provider_type': 'openai'}
     cfg['providers'][JUDGE_PROVIDER] = judge
     node = identity_smoke.Node(str(REPO / 'ee/tmp/bifrost-http'), root / 'node', cfg, '')
+    # 判官预算 20s，真实模型偶发 10s+ 慢响应；客户端必须等得比网关久，否则慢的那条会被记成整轮中断。
+    node.timeout = 60
     results = []
     error = None
 
@@ -97,7 +99,7 @@ def main():
             version = state['version']
             for s in [x for x in samples['samples'] if x.get('stage', 'input') == stage]:
                 start = time.perf_counter()
-                status, body, _ = guard_smoke.completion(node, s['text'])
+                status, body, _ = guard_smoke.completion(node, s.get('text', ''), messages=s.get('messages'))
                 ms = (time.perf_counter() - start) * 1000
                 got, code = classify(status, body)
                 results.append({'id': s['id'], 'group': s['group'], 'stage': stage, 'expect': s['expect'], 'got': got, 'code': code, 'ms': round(ms), 'status': status})

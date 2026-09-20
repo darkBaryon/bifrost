@@ -58,6 +58,7 @@ def main():
     cfg['providers'] = {'deepseek': {'keys': [{'name': 'real', 'value': key, 'weight': 1, 'models': MODELS}],
                                      'network_config': {'max_retries': 0}}}
     node = identity_smoke.Node(str(REPO / 'ee/tmp/bifrost-http'), root / 'node', cfg, '')
+    node.timeout = 60
     try:
         node.start()
         node.login(USER, password)

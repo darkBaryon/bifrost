@@ -71,9 +71,10 @@ class ModelHandler(BaseHTTPRequestHandler):
                             'usage': {'prompt_tokens': 1, 'completion_tokens': 1, 'total_tokens': 2}})
 
 
-def completion(node, text, stream=False):
+def completion(node, text, stream=False, messages=None):
+    """messages 给定时按原样发送（多轮/带 system 的样本），否则把 text 当单条 user 消息。"""
     return node.call('/v1/chat/completions', {
-        'model': 'openai/' + MODEL, 'messages': [{'role': 'user', 'content': text}], 'stream': stream,
+        'model': 'openai/' + MODEL, 'messages': messages or [{'role': 'user', 'content': text}], 'stream': stream,
     })
 
 

@@ -43,6 +43,9 @@ class Node:
         self.client = self.new_client(self.cookies)
         self.process = None
         self.log = None
+        # 等待响应的秒数。默认对本地替身够用；接真实模型的脚本要调大到超过网关自身的检测预算，
+        # 否则网关还在等判官、客户端先超时，整轮会被误判成失败。
+        self.timeout = 12
         with socket.socket() as s:
             s.bind(('127.0.0.1', 0))
             self.port = s.getsockname()[1]
@@ -102,7 +105,7 @@ class Node:
         req = urllib.request.Request(self.url + path, body, h, method=method)
         client = self.new_client() if anonymous or token else self.client
         try:
-            response = client.open(req, timeout=12)
+            response = client.open(req, timeout=self.timeout)
         except urllib.error.HTTPError as e:
             response = e
         with response:
