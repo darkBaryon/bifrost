@@ -64,6 +64,7 @@ func (a *AuthAdapter) serveConsoleBootstrap(c *fasthttp.RequestCtx) {
 		identityhttp.Error(c, identity.ErrUnavailable)
 		return
 	}
+	// 连接状态与环境标识对齐 transports/bifrost-http/handlers/config.go 的同名字段语义；合并上游时须同步核对。
 	config := a.host.Config
 	response := consoleBootstrapResponse{IsDBConnected: config.ConfigStore != nil, IsLogsConnected: config.LogsStore != nil}
 	if config.EnvLabel != "" {
@@ -73,6 +74,7 @@ func (a *AuthAdapter) serveConsoleBootstrap(c *fasthttp.RequestCtx) {
 	if config.ConfigStore != nil {
 		restart, err := config.ConfigStore.GetRestartRequiredConfig(ctx)
 		if err != nil {
+			// 重启标记是附属状态，读取失败时省略，避免阻挡工作台进入。
 			if a.consoleLog != nil {
 				_, requestID := identity.DiagnosticOperation(ctx)
 				a.consoleLog.Warn("EE console bootstrap reason=restart_read_failed request_id=%s", requestID)

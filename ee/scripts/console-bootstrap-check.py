@@ -67,6 +67,7 @@ def temporary_root(raw=None):
 
 
 def dependencies(repo, explicit=None):
+    # 仓库及同级依赖目录是本机便利兜底；其他环境应通过 --node-modules 显式指定。
     candidates = [explicit, os.environ.get("CONSOLE_UI_NODE_MODULES"), repo / "ui/node_modules",
                   repo.parent / "bifrost/ui/node_modules", repo.parent / "bifrost-permissions/ui/node_modules"]
     for raw in candidates:

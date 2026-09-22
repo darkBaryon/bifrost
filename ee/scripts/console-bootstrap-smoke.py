@@ -17,6 +17,8 @@ import uuid
 
 HELPER = runpy.run_path(str(Path(__file__).with_name("console-bootstrap-check.py")), run_name="console_check_helpers")
 FIXTURE = HELPER["FIXTURE"]
+# 用户现有服务使用此端口，隔离测试不可占用。
+RESERVED_USER_PORT = 59817
 
 
 def tool_environment():
@@ -27,6 +29,7 @@ def cli_command(explicit=None):
     if explicit:
         path = Path(explicit).expanduser().resolve()
         return ["node", str(path)] if path.suffix == ".js" else [str(path)]
+    # 以下是本机便利兜底；其他环境应通过 --playwright-cli 显式指定 CLI。
     cached = sorted((Path.home() / ".npm/_npx").glob("*/node_modules/@playwright/cli/playwright-cli.js"))
     if cached:
         return ["node", str(cached[-1])]
@@ -124,7 +127,7 @@ def start_fixture(repo, binary, root):
                 raise RuntimeError("Owned EE fixture failed to become ready; not a baseline UI red")
             time.sleep(.2)
         summary = json.loads((fixture_root / "summary.json").read_text())
-        if summary["settings_granted"] or summary["port"] == 59817 or not summary["both_password_changes_completed"]:
+        if summary["settings_granted"] or summary["port"] == RESERVED_USER_PORT or not summary["both_password_changes_completed"]:
             raise RuntimeError("Invalid fixture authority or reserved port")
         return process, log, fixture_root, summary
     except BaseException:

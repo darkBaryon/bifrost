@@ -284,3 +284,18 @@ triggered_by: [角色权限后端]
 evidence: "rbac/host/response.go 将上游错误转换成 EE 错误体；rbac/http/protocol.go 的 FromStatus 对表外状态保留原 HTTP 状态、code 取 unavailable，因而 500/422/429 不一定对应 503；尚无客户端按此 code 分支的证据。来源：期4收敛评审1，接口指南已说明现状。"
 convert_when: "前端接入角色权限或出现按 error.code 分支的调用方时，统一上游错误转换口径，并同步接口指南"
 ```
+
+## 工作台基础信息解耦（2026-09-23，收敛评审1）
+
+```yaml
+id: FIND-031
+status: 观察中
+triggered_by: [工作台基础信息解耦]
+evidence: "ee/scripts/console-bootstrap-check.py 的 FIXTURE 指向另一个 case 的 workbench/evidence/控制台登录与权限接入-期1-外层配置验证/fixture.py，console-bootstrap-smoke.py 将它作为进程夹具运行；代码树依赖历史证据树，未来修改夹具或整理证据容易漏掉运行依赖。来源：本案收敛评审1 F2。当前文件已跟踪，README已明确位置，失败有诊断，不影响产品行为。"
+convert_when: "下次修改这两脚本的夹具启动/账号场景逻辑，或第二个 case 需要同一真实 EE/UI/角色夹具时，把长期实现迁至 ee/scripts；evidence保留历史快照，同步引用与README。本轮注释和等值常量收尾不改变夹具逻辑。"
+```
+
+- 收敛评审1 F1（投影漂移）：当轮补宿主投影来源注释及同步上游核对项，不再新增待办；上游修改同名连接/重启字段时按登记核对。
+- FIND-015 / FIND-028：本案脚本的本机路径是显式参数之外的便利兜底，已补说明；没有依赖用户数据或固定绑定端口。夹具归属的具体问题由 FIND-031 跟踪，不改两条既有问题的状态或触发条件。
+- FIND-024：后续迁移 internal/host 时须单独判断 console.go 的宿主基础状态投影归属，不能因它当前是AuthAdapter方法就机械迁入identity。
+- FIND-025：本次增加的是窄Logger基础设施注入，不新增鉴权合作者；现状按三个合作者接缝加一个logger计算，不改变原重构触发条件。

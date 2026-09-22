@@ -173,4 +173,4 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
 
 需要公共调用点的原因：现有 enterprise 覆盖只能替换预留导入，三个外壳组件原来直接调用完整配置 query。具体 EE 数据读取实现在 `ee/ui/`；`GET /api/config` 的 `Settings.View` 权限与路由规则业务组件不改。
 
-同步上游时核对三个调用点仍使用覆盖入口，并回归 EE 普通账号基础信息200/完整配置403、OSS原配置、公共/临时页面跳过、退出入口及重启提示。验证入口：`python3 ee/scripts/console-bootstrap-check.py`、`python3 ee/scripts/console-bootstrap-smoke.py`，具体参数与证据以接口说明和本案记录为准。
+同步上游时核对三个调用点仍使用覆盖入口，并对照 `transports/bifrost-http/handlers/config.go` 检查 `ee/internal/host/console.go` 的连接状态、环境标识和 restart 投影语义是否漂移；回归 EE 普通账号基础信息200/完整配置403、OSS原配置、公共/临时页面跳过、退出入口及重启提示。验证入口：`python3 ee/scripts/console-bootstrap-check.py`、`python3 ee/scripts/console-bootstrap-smoke.py`，具体参数与证据以接口说明和本案记录为准。
