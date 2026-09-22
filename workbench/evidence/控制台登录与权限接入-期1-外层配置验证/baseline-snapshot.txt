@@ -1,0 +1,93 @@
+### Page
+- Page URL: http://127.0.0.1:63602/workspace/routing-rules
+- Page Title: Bifrost
+- Console: 12 errors, 0 warnings
+### Snapshot
+```yaml
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - generic [ref=e3]:
+    - generic [ref=e6]:
+      - generic [ref=e8]:
+        - link [ref=e9] [cursor=pointer]:
+          - /url: /workspace/logs
+          - img "Bifrost" [ref=e10]
+        - button "收起侧边栏" [ref=e11]
+      - generic [ref=e16]:
+        - textbox "搜索侧边栏导航" [ref=e20]:
+          - /placeholder: 搜索…
+        - generic:
+          - generic: ⌘
+          - generic: K
+      - list [ref=e24]:
+        - listitem [ref=e25]:
+          - button "可观测性" [ref=e26] [cursor=pointer]
+        - listitem [ref=e40]:
+          - button "模型" [ref=e41] [cursor=pointer]
+          - list [ref=e50]:
+            - listitem [ref=e51]:
+              - link "模型目录" [ref=e52] [cursor=pointer]:
+                - /url: /workspace/model-catalog
+            - listitem [ref=e60]:
+              - link "模型供应商" [ref=e61] [cursor=pointer]:
+                - /url: /workspace/providers
+            - listitem [ref=e74]:
+              - link "预算与限额" [ref=e75] [cursor=pointer]:
+                - /url: /workspace/model-limits
+            - listitem [ref=e81]:
+              - link "路由规则" [ref=e82] [cursor=pointer]:
+                - /url: /workspace/routing-rules
+            - listitem [ref=e90]:
+              - link "复杂度路由" [ref=e91] [cursor=pointer]:
+                - /url: /workspace/complexity-router
+            - listitem [ref=e101]:
+              - link "熔断器" [ref=e102] [cursor=pointer]:
+                - /url: /workspace/circuit-breaker
+            - listitem [ref=e111]:
+              - link "定价覆盖" [ref=e112] [cursor=pointer]:
+                - /url: /workspace/custom-pricing/overrides
+            - listitem [ref=e116]:
+              - link "模型设置" [ref=e117] [cursor=pointer]:
+                - /url: /workspace/custom-pricing
+        - listitem [ref=e123]:
+          - button "MCP 客户端图标 MCP 网关" [ref=e124] [cursor=pointer]:
+            - generic [ref=e126]:
+              - img "MCP 客户端图标" [ref=e127]
+              - generic [ref=e130]: MCP 网关
+        - listitem [ref=e133]:
+          - link "插件" [ref=e134] [cursor=pointer]:
+            - /url: /workspace/plugins
+        - listitem [ref=e140]:
+          - button "告警" [ref=e141] [cursor=pointer]
+        - listitem [ref=e152]:
+          - button "治理" [ref=e153] [cursor=pointer]
+        - listitem [ref=e161]:
+          - button "护栏" [ref=e162] [cursor=pointer]
+        - listitem [ref=e173]:
+          - link "Webhook" [ref=e174] [cursor=pointer]:
+            - /url: /workspace/webhooks
+        - listitem [ref=e182]:
+          - button "Edge 管控" [ref=e183] [cursor=pointer]
+        - listitem [ref=e191]:
+          - link "集群配置" [ref=e192] [cursor=pointer]:
+            - /url: /workspace/cluster
+        - listitem [ref=e201]:
+          - button "自适应路由" [ref=e202] [cursor=pointer]
+        - listitem [ref=e214]:
+          - button "设置" [ref=e215] [cursor=pointer]
+    - generic [ref=e225]:
+      - banner [ref=e226]:
+        - heading "路由规则" [level=1] [ref=e228]
+        - button "通知" [ref=e238] [cursor=pointer]
+        - button "切换主题" [ref=e229] [cursor=pointer]
+        - button "打开菜单" [ref=e231] [cursor=pointer]
+      - main [ref=e234]:
+        - region [ref=e244]:
+          - heading "无法连接到控制台" [level=1] [ref=e253]
+          - paragraph [ref=e254]: Bifrost 未返回配置。这通常是短暂中断,尤其是在 Bifrost 升级期间。
+          - generic [ref=e255]:
+            - button "重试" [ref=e256] [cursor=pointer]
+            - paragraph [ref=e257]: 你的设置与数据不受影响。
+```
+### Events
+- New console entries: .playwright-cli/console-2026-09-22T17-42-50-068Z.log#L1-L12

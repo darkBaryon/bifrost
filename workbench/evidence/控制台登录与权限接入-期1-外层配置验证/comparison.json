@@ -1,0 +1,19 @@
+{
+  "fixture_kind": "console-real-config-auth-v1",
+  "phase": "settings-granted",
+  "same_account": true,
+  "only_permission_added": "Settings.View",
+  "before": {
+    "config_status": 403,
+    "routing_status": 200,
+    "routing_count": 0
+  },
+  "after": {
+    "config_status": 200,
+    "routing_status": 200,
+    "is_db_connected": true,
+    "is_logs_connected": true,
+    "routing_count": 0
+  },
+  "routing_storage": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-real-console-s82macys/fixture/routing-settings.storage.json"
+}

@@ -1,0 +1,29 @@
+### Result
+{
+  "http": [
+    {
+      "path": "/api/config",
+      "status": 403
+    },
+    {
+      "path": "/api/routing/rules?limit=25&offset=0",
+      "status": 200
+    }
+  ],
+  "permissionStatus": 200,
+  "permissions": [
+    "RoutingRules.View"
+  ],
+  "configUnreachable": true,
+  "main": "无法连接到控制台\n\nBifrost 未返回配置。这通常是短暂中断,尤其是在 Bifrost 升级期间。\n\n重试\n\n你的设置与数据不受影响。"
+}
+### Ran Playwright code
+```js
+await page.evaluate('async () => { const paths=["/api/config","/api/routing/rules?limit=25&offset=0"]; const http=await Promise.all(paths.map(async path=>({path,status:(await fetch(path)).status}))); const response=await fetch("/api/permissions/me",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); const permissions=await response.json(); return {http,permissionStatus:response.status,permissions:permissions.permissions.map(p=>p.code),configUnreachable:!!document.querySelector("[data-testid=config-unreachable]"),main:document.querySelector("main")?.innerText}; }');
+```
+### Page
+- Page URL: http://127.0.0.1:63602/workspace/routing-rules
+- Page Title: Bifrost
+- Console: 15 errors, 0 warnings
+### Events
+- New console entries: .playwright-cli/console-2026-09-22T17-42-50-068Z.log#L13-L15

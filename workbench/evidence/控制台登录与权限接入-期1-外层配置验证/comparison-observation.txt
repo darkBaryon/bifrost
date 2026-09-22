@@ -1,0 +1,30 @@
+### Result
+{
+  "http": [
+    {
+      "path": "/api/config",
+      "status": 200
+    },
+    {
+      "path": "/api/routing/rules?limit=25&offset=0",
+      "status": 200
+    }
+  ],
+  "permissionStatus": 200,
+  "permissions": [
+    "RoutingRules.View",
+    "Settings.View"
+  ],
+  "configUnreachable": false,
+  "main": "路由规则用 CEL 条件调度请求\n创建基于 CEL 的规则,按模型、供应商、预算或自定义属性路由请求,控制由哪个供应商/模型处理每个请求。\n阅读更多\n新建规则"
+}
+### Ran Playwright code
+```js
+await page.evaluate('async () => { const paths=["/api/config","/api/routing/rules?limit=25&offset=0"]; const http=await Promise.all(paths.map(async path=>({path,status:(await fetch(path)).status}))); const response=await fetch("/api/permissions/me",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); const permissions=await response.json(); return {http,permissionStatus:response.status,permissions:permissions.permissions.map(p=>p.code),configUnreachable:!!document.querySelector("[data-testid=config-unreachable]"),main:document.querySelector("main")?.innerText}; }');
+```
+### Page
+- Page URL: http://127.0.0.1:63602/workspace/routing-rules
+- Page Title: Bifrost
+- Console: 19 errors, 0 warnings
+### Events
+- New console entries: .playwright-cli/console-2026-09-22T17-44-55-062Z.log#L14-L19
