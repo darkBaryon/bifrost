@@ -1,0 +1,60 @@
+{
+  "status": "expected-baseline-red",
+  "provenance": {
+    "mode": "baseline-only",
+    "binary": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-real-console-s82macys/bifrost-http",
+    "binary_sha256": "281a1a97d119d668908f024e2654761cbcc7fcef7c9403e5542a93d5c83e398e"
+  },
+  "evidence": "/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-console-check-yzyxdnxn/output/playwright",
+  "observation": {
+    "configStatus": 403,
+    "routingStatus": 200,
+    "permissionsStatus": 200,
+    "permissionCodes": [
+      "RoutingRules.View"
+    ],
+    "configUnreachable": true,
+    "routingVisible": false,
+    "path": "/workspace/routing-rules"
+  },
+  "page_requests_before_probes": [
+    {
+      "path": "/api/version",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/config",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/notifications",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/session/ws-ticket",
+      "method": "POST",
+      "status": 403
+    },
+    {
+      "path": "/api/branding/get",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "path": "/api/session/ws-ticket",
+      "method": "POST",
+      "status": 403
+    }
+  ],
+  "fixture": {
+    "port": 50953,
+    "password_change_completed": true,
+    "settings_granted": false
+  },
+  "failed_assertion": "routing-only account must not render config-unreachable",
+  "owned_services_stopped": true,
+  "private_session_files_removed": true
+}

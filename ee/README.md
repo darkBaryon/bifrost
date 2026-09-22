@@ -54,6 +54,10 @@ make -C ee smoke-rbac-postgres # 双节点 PostgreSQL 角色权限冒烟，需�
 
 参见[角色权限接口](docs/角色权限接口.md)。PostgreSQL 冒烟需设置 `RBAC_TEST_POSTGRES_DSN`，例如 `host=localhost user=postgres dbname=postgres sslmode=disable`；使用可创建临时数据库的测试账号。脚本不修改已有业务数据库。
 
+## 工作台基础信息
+
+[工作台基础信息接口](docs/工作台基础信息接口.md)提供登录用户可见的连接状态、环境标识和重启标记，公共外壳通过 EE 覆盖 hook 读取。完整 `/api/config` 仍要求 `Settings.View`。这个接入不等于登录表单、个人账号菜单或前端权限矩阵已完成；这些仍属于后续前端接入。
+
 ## 内容安全
 
 接口契约（配置字段、版本号语义、400/409 口径、权限）见[包内说明](internal/guardrails/README.md#配置与接口)；期 2 交付管理页面时再补 `docs/` 页面。

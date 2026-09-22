@@ -10,7 +10,7 @@
 | 文件 | 职责 |
 |---|---|
 | [bootstrap.go](bootstrap.go) | 准备身份和角色接入，装配内容安全、品牌与定价，监听前核对全部接口规则 |
-| [identity.go](identity.go) | 读取部署配置、执行身份/角色迁移，构造接口与宿主认证适配 |
+| [identity.go](identity.go) | 读取部署配置、执行身份/角色迁移，构造接口与宿主认证适配并注入基础状态诊断logger |
 | [rbac.go](rbac.go) | 把身份事务、角色存储及账号操作策略连接起来 |
 | [recovery.go](recovery.go) | 离线恢复前核对迁移完整性，恢复账号并补回主管理员角色 |
 | [guardrails.go](guardrails.go) | 内容安全装配：建配置表、从库构建检查器（失败拒启）、注册插件与三条管理接口；`EE_GUARDRAILS_FAKE` 下改装假检测器 |

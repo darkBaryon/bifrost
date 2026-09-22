@@ -85,6 +85,7 @@ type AuthAdapter struct {
 	access     ConsoleAccess
 	additional AdditionalRoutes
 	anchor     func(context.Context) (identity.Account, error)
+	consoleLog ConsoleLogger
 }
 
 // NewAuthAdapter 接收身份模块的登录检查、HTTP处理器和可选配置，供Bifrost注册和保护管理接口。
@@ -184,9 +185,10 @@ func validateLegacyFile(appDir string) error {
 	return nil
 }
 
-// RegisterSessionRoutes 注册EE身份接口，替换Bifrost旧会话接口；传入角色接口时也一起注册。
+// RegisterSessionRoutes 注册EE身份和基础状态接口，替换Bifrost旧会话接口；传入角色接口时也一起注册。
 func (a *AuthAdapter) RegisterSessionRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
 	a.http.RegisterRoutes(r, m...)
+	a.registerConsoleRoutes(r, m...)
 	if a.additional != nil {
 		a.additional.RegisterRoutes(r, m...)
 	}
@@ -250,7 +252,7 @@ func (a *AuthAdapter) authorizeTemporary(c *fasthttp.RequestCtx) error {
 	return nil
 }
 
-// APIMiddleware 在Bifrost处理管理请求前检查登录；身份和角色接口交给各自模块检查，公开接口直接放行。
+// APIMiddleware 在Bifrost处理管理请求前检查登录；身份、角色和基础状态接口自行检查，公开接口直接放行。
 // 注入角色组件时按接口权限检查；未注入时沿用身份模块的管理员策略。原有临时令牌入口保持原规则。
 // WebSocket连接会再次检查登录，配置接口还会限制旧认证字段的读写。
 func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
@@ -261,7 +263,7 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			c.RemoveUserValue(principalKey{})
 			c.RemoveUserValue(handlers.WebSocketAuthorizeContextKey)
 			method, path := string(c.Method()), string(c.Path())
-			if public(method, path) || identityhttp.OwnsRoute(method, path) || (a.additional != nil && a.additional.OwnsRoute(method, path)) {
+			if public(method, path) || ownsConsoleRoute(method, path) || identityhttp.OwnsRoute(method, path) || (a.additional != nil && a.additional.OwnsRoute(method, path)) {
 				next(c)
 				return
 			}

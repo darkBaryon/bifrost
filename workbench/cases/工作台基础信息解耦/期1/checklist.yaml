@@ -1,0 +1,20 @@
+必过命令:
+  - { name: workbench, run: "python3 -B workbench/tools/build_views.py --check" }
+  - { name: ee-vet, run: "cd ee && GOWORK=off go vet ./..." }
+  - { name: console-tests, run: "cd ee && GOWORK=off go test -race ./internal/host/... ./internal/identity/http/... ./internal/rbac/host/... ./internal/app/..." }
+  # smoke 默认先调用 console-bootstrap-check 完成双构建、类型、格式和单测，再跑真实浏览器。
+  - { name: console-smoke, run: "python3 ee/scripts/console-bootstrap-smoke.py" }
+必存产物:
+  - ee/internal/host/console.go
+  - ee/ui/app/enterprise/hooks/useConsoleConfig.ts
+  - ee/docs/工作台基础信息接口.md
+  - workbench/evidence/工作台基础信息解耦-期1-验证.md
+必含符号:
+  - { grep: "/api/console/bootstrap", in: "ee/internal/host" }
+收敛评审:
+  风险等级: L3
+  基线: fa3eacedc28891cc45bc5107c350457cf196e42e
+  开发指南:
+    - ee/docs/工作台基础信息接口.md
+禁留标记:
+  - { grep: 'console.log("DEBUG', in: "ee/ui" }

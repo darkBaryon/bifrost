@@ -23,7 +23,7 @@ const CookieName = "ee_session"
 const (
 	legacyCookieName   = "token" // 旧共享管理员 Cookie，只清除，绝不读取
 	deleteCookieMaxAge = -1      // fasthttp 用负数表示立即删除 Cookie
-	// MaxBodyBytes 是身份和角色接口的正文上限；宿主配置接口另有自己的限制。
+	// MaxBodyBytes 是身份、角色及复用严格JSON协议的接口正文上限；完整宿主配置另有自己的限制。
 	MaxBodyBytes = 16 << 10
 	maxJSONDepth = 64 // 对象与数组的嵌套深度上限
 )
@@ -189,6 +189,10 @@ func ValidateJSONObject(body []byte) error {
 	}
 	return nil
 }
+
+// DecodeJSONObject 要求非空的单个JSON对象，并复用媒体类型、大小、重复键及未知字段检查。
+// v应为请求DTO的指针；传入空结构体指针时只接受空对象。
+func DecodeJSONObject(c *fasthttp.RequestCtx, v any) error { return decode(c, v, false) }
 
 // decode 限制正文大小、要求 JSON 媒体类型并拒绝未知字段；allowEmpty 只对已声明的旧会话接口把空正文视为 {}。
 func decode(c *fasthttp.RequestCtx, v any, allowEmpty bool) error {
