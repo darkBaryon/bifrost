@@ -1,0 +1,19 @@
+{
+  "candidate": "fe626961c86acda99a7fddd394f51f137989cd3b",
+  "actual_head": "fe626961c86acda99a7fddd394f51f137989cd3b",
+  "manifest_head_metadata": "030c362a57ff2b0e538b87ac3549af7b9cad6ded",
+  "manifest": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-console-check-xvdoydq7/build/build-manifest.json",
+  "manifest_complete": true,
+  "file_count": 2796,
+  "source_sha256": "99206cf7f5d30e389d1e11393f9641cf9239e391b2a2b0790e4c03130477d901",
+  "manifest_source_sha256": "99206cf7f5d30e389d1e11393f9641cf9239e391b2a2b0790e4c03130477d901",
+  "complete_source_inventory_matches": true,
+  "current_file_mismatches": [],
+  "candidate_blob_mismatches": [],
+  "build_snapshot_mismatches": [],
+  "binary_sha256": "90799d2fb73d375ad7f191cb4f4560261ffa7fa7f5ca08dfc2bfd5cba4e0c604",
+  "binary_matches": true,
+  "worktree_before": "",
+  "passed": true,
+  "metadata_note": "manifest head records 030c362a before final commit; exact source file/blob/snapshot hashes establish final candidate provenance"
+}

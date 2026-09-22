@@ -1,0 +1,6 @@
+- generic [ref=e2]:
+  - region "Notifications alt+T"
+  - main [ref=e4]:
+    - generic [ref=e6]:
+      - heading "认证成功" [level=1] [ref=e11]
+      - paragraph [ref=e12]: 凭证已保存,可关闭此页返回 MCP 客户端——后续请求将自动使用该凭证。

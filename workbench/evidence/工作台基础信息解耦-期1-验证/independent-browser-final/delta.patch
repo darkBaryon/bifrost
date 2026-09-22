@@ -1,0 +1,87 @@
+diff --git a/ee/README.md b/ee/README.md
+index 9b3dd16a1..dc28024db 100644
+--- a/ee/README.md
++++ b/ee/README.md
+@@ -58,6 +58,10 @@ make -C ee smoke-rbac-postgres # 双节点 PostgreSQL 角色权限冒烟，需
+ 
+ [工作台基础信息接口](docs/工作台基础信息接口.md)提供登录用户可见的连接状态、环境标识和重启标记，公共外壳通过 EE 覆盖 hook 读取。完整 `/api/config` 仍要求 `Settings.View`。这个接入不等于登录表单、个人账号菜单或前端权限矩阵已完成；这些仍属于后续前端接入。
+ 
++验证入口：[console-bootstrap-check.py](scripts/console-bootstrap-check.py) 在隔离副本检查 EE/OSS 构建、类型与组件测试，`--build-binary` 同时构建 EE 可执行文件；[console-bootstrap-smoke.py](scripts/console-bootstrap-smoke.py) 运行真实临时服务与浏览器场景，可用 `--build-manifest` 复用同轮构建。构建依赖可用 `--node-modules` 指定，浏览器 CLI 可用 `--playwright-cli` 指定；本机自动发现仅作为便利兜底。
++
++本案场景夹具仍在 [workbench/evidence/控制台登录与权限接入-期1-外层配置验证/fixture.py](../workbench/evidence/控制台登录与权限接入-期1-外层配置验证/fixture.py)。它复用 `scripts/identity-smoke.py` 的 Node 进程工具，但属于本案场景夹具，与通用身份冒烟场景不同；本轮不迁移其目录。
++
+ ## 内容安全
+ 
+ 接口契约（配置字段、版本号语义、400/409 口径、权限）见[包内说明](internal/guardrails/README.md#配置与接口)；期 2 交付管理页面时再补 `docs/` 页面。
+diff --git a/ee/internal/host/console.go b/ee/internal/host/console.go
+index 7cf7686ab..d2fdc699f 100644
+--- a/ee/internal/host/console.go
++++ b/ee/internal/host/console.go
+@@ -64,6 +64,7 @@ func (a *AuthAdapter) serveConsoleBootstrap(c *fasthttp.RequestCtx) {
+ 		identityhttp.Error(c, identity.ErrUnavailable)
+ 		return
+ 	}
++	// 连接状态与环境标识对齐 transports/bifrost-http/handlers/config.go 的同名字段语义；合并上游时须同步核对。
+ 	config := a.host.Config
+ 	response := consoleBootstrapResponse{IsDBConnected: config.ConfigStore != nil, IsLogsConnected: config.LogsStore != nil}
+ 	if config.EnvLabel != "" {
+@@ -73,6 +74,7 @@ func (a *AuthAdapter) serveConsoleBootstrap(c *fasthttp.RequestCtx) {
+ 	if config.ConfigStore != nil {
+ 		restart, err := config.ConfigStore.GetRestartRequiredConfig(ctx)
+ 		if err != nil {
++			// 重启标记是附属状态，读取失败时省略，避免阻挡工作台进入。
+ 			if a.consoleLog != nil {
+ 				_, requestID := identity.DiagnosticOperation(ctx)
+ 				a.consoleLog.Warn("EE console bootstrap reason=restart_read_failed request_id=%s", requestID)
+diff --git a/ee/scripts/console-bootstrap-check.py b/ee/scripts/console-bootstrap-check.py
+index 8539099ce..186ec7ca0 100755
+--- a/ee/scripts/console-bootstrap-check.py
++++ b/ee/scripts/console-bootstrap-check.py
+@@ -67,6 +67,7 @@ def temporary_root(raw=None):
+ 
+ 
+ def dependencies(repo, explicit=None):
++    # 仓库及同级依赖目录是本机便利兜底；其他环境应通过 --node-modules 显式指定。
+     candidates = [explicit, os.environ.get("CONSOLE_UI_NODE_MODULES"), repo / "ui/node_modules",
+                   repo.parent / "bifrost/ui/node_modules", repo.parent / "bifrost-permissions/ui/node_modules"]
+     for raw in candidates:
+diff --git a/ee/scripts/console-bootstrap-smoke.py b/ee/scripts/console-bootstrap-smoke.py
+index 14cb6cb03..e6f54eb06 100755
+--- a/ee/scripts/console-bootstrap-smoke.py
++++ b/ee/scripts/console-bootstrap-smoke.py
+@@ -17,6 +17,8 @@ import uuid
+ 
+ HELPER = runpy.run_path(str(Path(__file__).with_name("console-bootstrap-check.py")), run_name="console_check_helpers")
+ FIXTURE = HELPER["FIXTURE"]
++# 用户现有服务使用此端口，隔离测试不可占用。
++RESERVED_USER_PORT = 59817
+ 
+ 
+ def tool_environment():
+@@ -27,6 +29,7 @@ def cli_command(explicit=None):
+     if explicit:
+         path = Path(explicit).expanduser().resolve()
+         return ["node", str(path)] if path.suffix == ".js" else [str(path)]
++    # 以下是本机便利兜底；其他环境应通过 --playwright-cli 显式指定 CLI。
+     cached = sorted((Path.home() / ".npm/_npx").glob("*/node_modules/@playwright/cli/playwright-cli.js"))
+     if cached:
+         return ["node", str(cached[-1])]
+@@ -124,7 +127,7 @@ def start_fixture(repo, binary, root):
+                 raise RuntimeError("Owned EE fixture failed to become ready; not a baseline UI red")
+             time.sleep(.2)
+         summary = json.loads((fixture_root / "summary.json").read_text())
+-        if summary["settings_granted"] or summary["port"] == 59817 or not summary["both_password_changes_completed"]:
++        if summary["settings_granted"] or summary["port"] == RESERVED_USER_PORT or not summary["both_password_changes_completed"]:
+             raise RuntimeError("Invalid fixture authority or reserved port")
+         return process, log, fixture_root, summary
+     except BaseException:
+diff --git "a/product/\344\270\212\346\270\270\346\224\271\345\212\250/README.md" "b/product/\344\270\212\346\270\270\346\224\271\345\212\250/README.md"
+index 998a32b33..eb5f1cbd1 100644
+--- "a/product/\344\270\212\346\270\270\346\224\271\345\212\250/README.md"
++++ "b/product/\344\270\212\346\270\270\346\224\271\345\212\250/README.md"
+@@ -173,4 +173,4 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
+ 
+ 需要公共调用点的原因：现有 enterprise 覆盖只能替换预留导入，三个外壳组件原来直接调用完整配置 query。具体 EE 数据读取实现在 `ee/ui/`；`GET /api/config` 的 `Settings.View` 权限与路由规则业务组件不改。
+ 
+-同步上游时核对三个调用点仍使用覆盖入口，并回归 EE 普通账号基础信息200/完整配置403、OSS原配置、公共/临时页面跳过、退出入口及重启提示。验证入口：`python3 ee/scripts/console-bootstrap-check.py`、`python3 ee/scripts/console-bootstrap-smoke.py`，具体参数与证据以接口说明和本案记录为准。
++同步上游时核对三个调用点仍使用覆盖入口，并对照 `transports/bifrost-http/handlers/config.go` 检查 `ee/internal/host/console.go` 的连接状态、环境标识和 restart 投影语义是否漂移；回归 EE 普通账号基础信息200/完整配置403、OSS原配置、公共/临时页面跳过、退出入口及重启提示。验证入口：`python3 ee/scripts/console-bootstrap-check.py`、`python3 ee/scripts/console-bootstrap-smoke.py`，具体参数与证据以接口说明和本案记录为准。

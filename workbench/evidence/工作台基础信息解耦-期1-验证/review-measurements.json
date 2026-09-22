@@ -1,0 +1,46 @@
+[
+  {
+    "review": "代码评审1",
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "candidate": "030c362a57ff2b0e538b87ac3549af7b9cad6ded",
+    "started": "2026-09-23T02:57:00+08:00",
+    "finished": "2026-09-23T03:10:10+08:00",
+    "usage": {
+      "input_tokens": 7426121,
+      "cached_input_tokens": 7216640,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 15918,
+      "reasoning_output_tokens": 4931
+    }
+  },
+  {
+    "review": "收敛评审1",
+    "model": "claude-opus-5",
+    "effort": "high",
+    "candidate": "030c362a57ff2b0e538b87ac3549af7b9cad6ded",
+    "started": "2026-09-23T02:57:03+08:00",
+    "finished": "2026-09-23T03:11:48+08:00",
+    "usage": {
+      "input_tokens": 150,
+      "cache_creation_input_tokens": 260073,
+      "cache_read_input_tokens": 12168692,
+      "output_tokens": 63801
+    }
+  },
+  {
+    "review": "代码评审2",
+    "model": "gpt-6-astra",
+    "effort": "high",
+    "candidate": "fe626961c86acda99a7fddd394f51f137989cd3b",
+    "started": "2026-09-23T03:24:38+08:00",
+    "finished": "2026-09-23T03:34:39+08:00",
+    "usage": {
+      "input_tokens": 3158970,
+      "cached_input_tokens": 3006208,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 15326,
+      "reasoning_output_tokens": 3392
+    }
+  }
+]

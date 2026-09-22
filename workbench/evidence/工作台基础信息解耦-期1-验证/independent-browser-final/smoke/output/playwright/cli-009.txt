@@ -1,0 +1,11 @@
+{
+  "configStatus": 403,
+  "routingStatus": 200,
+  "permissionsStatus": 200,
+  "permissionCodes": [
+    "RoutingRules.View"
+  ],
+  "configUnreachable": false,
+  "routingVisible": true,
+  "path": "/workspace/routing-rules"
+}
