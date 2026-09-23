@@ -10,7 +10,8 @@ templates/代码评审提示词.md 与 checklist.yaml 的「收敛评审」段�
 声明修改与受影响区域，并把最新收敛评审记录的「转代码评审」栏原样交给评审者处置。每轮都是新会话，
 模型与推理强度固定为 gpt-6-astra / high。
 
-评审者以 workspace-write 沙箱运行（开 network_access 才能跑本地 HTTP 冒烟，产物写到本轮 TMPDIR）；结束时
+评审者以 workspace-write 沙箱运行（开 network_access 才能跑本地 HTTP 冒烟，产物写到本轮 TMPDIR 即运行目录下的
+scratch/，每轮可达数 GB；记录成功落盘后自动删除，失败时保留供排查，作废重跑时随运行目录一起删除）；结束时
 校验工作树干净且候选到 HEAD 之间 workbench 之外零差异，评审者一旦改动了跟踪文件，本轮判失败、记录不落盘。
 实施方在评审期间提交 workbench 过程记录不影响校验。
 
@@ -288,6 +289,9 @@ def finalize(run: Run, meta: dict) -> int:
     except (ValueError, FileExistsError) as e:
         meta.update(status="failed", reason=str(e))
     run.save(meta)
+    if meta["status"] == "done":
+        # 记录已落盘，构建与冒烟产物不再需要；prompt、stream、last 等小文件保留。
+        shutil.rmtree(run.scratch, ignore_errors=True)
     return 0 if meta["status"] == "done" else 1
 
 
