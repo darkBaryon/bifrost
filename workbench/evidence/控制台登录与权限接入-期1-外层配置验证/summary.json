@@ -1,0 +1,26 @@
+{
+  "fixture_kind": "console-real-config-auth-v1",
+  "phase": "baseline-ready",
+  "port": 63602,
+  "base_url": "http://127.0.0.1:63602",
+  "public_origin": "http://127.0.0.1:63602",
+  "binary_sha256": "281a1a97d119d668908f024e2654761cbcc7fcef7c9403e5542a93d5c83e398e",
+  "owner_pid": 95471,
+  "server_pid": 95480,
+  "baseline": {
+    "config_status": 403,
+    "routing_status": 200,
+    "routing_count": 0
+  },
+  "admin": {
+    "config_status": 200,
+    "routing_status": 200,
+    "is_db_connected": true,
+    "is_logs_connected": true,
+    "routing_count": 0
+  },
+  "admin_storage": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-real-console-s82macys/fixture/admin.storage.json",
+  "routing_storage": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-real-console-s82macys/fixture/routing.storage.json",
+  "both_password_changes_completed": true,
+  "settings_granted": false
+}

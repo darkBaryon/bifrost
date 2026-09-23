@@ -72,8 +72,9 @@ import { HIDDEN_UNTIL_NAV_COOKIE, REMIND_LATER_COOKIE, useOnboardingChecklist } 
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { useBranding } from "@/lib/hooks/useBranding";
-import { useGetCoreConfigQuery, useGetLatestReleaseQuery, useGetVersionQuery } from "@/lib/store";
+import { useGetLatestReleaseQuery, useGetVersionQuery } from "@/lib/store";
 import PoweredByBifrost from "@enterprise/components/branding/poweredByBifrost";
+import { CONSOLE_ONBOARDING_ENABLED, useConsoleConfigQuery } from "@enterprise/hooks/useConsoleConfig";
 import { RbacOperation, RbacResource, useRbac } from "@enterprise/lib";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
@@ -570,7 +571,7 @@ export default function AppSidebar() {
 		hasAccessProfilesAccess ||
 		hasProjectsAccess ||
 		hasGovernanceLegacyAccess;
-	const { data: coreConfig } = useGetCoreConfigQuery({});
+	const { data: coreConfig } = useConsoleConfigQuery();
 	const isDbConnected = coreConfig?.is_db_connected ?? false;
 	const envLabel = coreConfig?.env_label ?? null;
 
@@ -581,13 +582,14 @@ export default function AppSidebar() {
 		skippedIds: onboardingSkippedIds,
 		checklistReady: onboardingChecklistReady,
 		isDismissedForAll: isOnboardingDismissedForAll,
-	} = useOnboardingChecklist({ skip: !isDbConnected });
+	} = useOnboardingChecklist({ skip: !CONSOLE_ONBOARDING_ENABLED || !isDbConnected });
 	const onboardingDoneCount = onboardingSteps.filter((step) => step.complete || onboardingSkippedIds.includes(step.id)).length;
 	const isOnboardingIncomplete = onboardingChecklistReady && onboardingDoneCount < onboardingSteps.length;
 	// The widget itself hides via these two cookies (X close / "Remind me
 	// later"); "I accept the risk - hide for everyone" is a deliberate
 	// permanent opt-out and should not resurrect this card.
 	const showOnboardingResumeCard =
+		CONSOLE_ONBOARDING_ENABLED &&
 		isDbConnected &&
 		isOnboardingIncomplete &&
 		!isOnboardingDismissedForAll &&

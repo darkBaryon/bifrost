@@ -1,0 +1,167 @@
+{
+  "status": "passed",
+  "provenance": {
+    "mode": "candidate",
+    "binary": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-console-check-xvdoydq7/build/bifrost-http",
+    "binary_sha256": "90799d2fb73d375ad7f191cb4f4560261ffa7fa7f5ca08dfc2bfd5cba4e0c604",
+    "build_manifest": "/private/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-console-check-xvdoydq7/build/build-manifest.json",
+    "source_fingerprint": {
+      "sha256": "99206cf7f5d30e389d1e11393f9641cf9239e391b2a2b0790e4c03130477d901",
+      "file_count": 2796
+    }
+  },
+  "evidence": "/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-console-check-xvdoydq7/output/playwright",
+  "observation": {
+    "configStatus": 403,
+    "routingStatus": 200,
+    "permissionsStatus": 200,
+    "permissionCodes": [
+      "RoutingRules.View"
+    ],
+    "configUnreachable": false,
+    "routingVisible": true,
+    "path": "/workspace/routing-rules"
+  },
+  "page_requests_before_probes": [
+    {
+      "path": "/api/session/ws-ticket",
+      "method": "POST",
+      "status": 403
+    },
+    {
+      "path": "/api/version",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/session/is-auth-enabled",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/notifications",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/console/bootstrap",
+      "method": "POST",
+      "status": 200,
+      "emptyBody": true
+    },
+    {
+      "path": "/api/branding/get",
+      "method": "POST",
+      "status": 200
+    },
+    {
+      "path": "/api/routing/rules",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/keys",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/providers",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/routing/rules",
+      "method": "GET",
+      "status": 200
+    },
+    {
+      "path": "/api/providers",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/keys",
+      "method": "GET",
+      "status": 403
+    },
+    {
+      "path": "/api/session/ws-ticket",
+      "method": "POST",
+      "status": 403
+    }
+  ],
+  "fixture": {
+    "port": 55823,
+    "password_change_completed": true,
+    "settings_granted": false
+  },
+  "logout_entry": true,
+  "fault_injection": {
+    "injected_status": 503,
+    "unreachable_visible": true,
+    "retry_with_real_backend": true
+  },
+  "mock_shell_branches": {
+    "kind": "bootstrap-response-mocks",
+    "scope": "shell-render-only; logs data authorization not asserted",
+    "cases": [
+      {
+        "case": "missing-stores",
+        "path": "/workspace/routing-rules",
+        "bootstrap_response": {
+          "is_db_connected": false,
+          "is_logs_connected": false,
+          "env_label": null
+        },
+        "visible_test_id": "config-store-documentation-link",
+        "missingStoreBanner": true,
+        "unreachable": false
+      },
+      {
+        "case": "logs-only",
+        "path": "/workspace/logs",
+        "bootstrap_response": {
+          "is_db_connected": false,
+          "is_logs_connected": true,
+          "env_label": null
+        },
+        "visible_test_id": "logs-refresh-btn",
+        "missingStoreBanner": false,
+        "unreachable": false
+      },
+      {
+        "case": "restart-without-reason",
+        "path": "/workspace/routing-rules",
+        "bootstrap_response": {
+          "is_db_connected": true,
+          "is_logs_connected": false,
+          "env_label": null,
+          "restart_required": {
+            "required": true
+          }
+        },
+        "visible_test_id": "routing-rules-empty-state",
+        "missingStoreBanner": false,
+        "unreachable": false,
+        "generic_restart_visible": true
+      }
+    ],
+    "route_removed": true,
+    "real_bootstrap_restored": true
+  },
+  "excluded_pages": [
+    {
+      "path": "/workspace/mcp-sessions/auth-success",
+      "bootstrap_requests": 0,
+      "mode": "anonymous-public-or-temp"
+    },
+    {
+      "path": "/workspace/mcp-sessions/auth",
+      "bootstrap_requests": 0,
+      "mode": "anonymous-public-or-temp"
+    }
+  ],
+  "private_session_files_removed": true,
+  "owned_services_stopped": true,
+  "owned_browser_closed": true
+}

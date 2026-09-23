@@ -1,0 +1,133 @@
+- generic:
+  - generic:
+    - region "Notifications alt+T"
+    - generic [aria-hidden]:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - link:
+                  - /url: /workspace/logs
+                - button
+            - generic:
+              - generic:
+                - textbox:
+                  - /placeholder: 搜索…
+                - generic:
+                  - generic: ⌘
+                  - generic: K
+            - generic:
+              - generic:
+                - generic:
+                  - list:
+                    - listitem:
+                      - button:
+                        - generic: 可观测性
+                    - listitem:
+                      - button:
+                        - generic: 模型
+                      - list:
+                        - listitem:
+                          - link:
+                            - /url: /workspace/model-catalog
+                            - generic: 模型目录
+                        - listitem:
+                          - link:
+                            - /url: /workspace/providers
+                            - generic: 模型供应商
+                        - listitem:
+                          - link:
+                            - /url: /workspace/model-limits
+                            - generic: 预算与限额
+                        - listitem:
+                          - link:
+                            - /url: /workspace/routing-rules
+                            - generic: 路由规则
+                        - listitem:
+                          - link:
+                            - /url: /workspace/complexity-router
+                            - generic: 复杂度路由
+                        - listitem:
+                          - link:
+                            - /url: /workspace/circuit-breaker
+                            - generic: 熔断器
+                        - listitem:
+                          - link:
+                            - /url: /workspace/custom-pricing/overrides
+                            - generic: 定价覆盖
+                        - listitem:
+                          - link:
+                            - /url: /workspace/custom-pricing
+                            - generic: 模型设置
+                    - listitem:
+                      - button:
+                        - generic: MCP 网关
+                    - listitem:
+                      - link:
+                        - /url: /workspace/plugins
+                        - generic: 插件
+                    - listitem:
+                      - button:
+                        - generic: 告警
+                    - listitem:
+                      - button:
+                        - generic: 治理
+                    - listitem:
+                      - button:
+                        - generic: 护栏
+                    - listitem:
+                      - link:
+                        - /url: /workspace/webhooks
+                        - generic: Webhook
+                    - listitem:
+                      - button:
+                        - generic: Edge 管控
+                    - listitem:
+                      - link:
+                        - /url: /workspace/cluster
+                        - generic: 集群配置
+                    - listitem:
+                      - button:
+                        - generic: 自适应路由
+                    - listitem:
+                      - link:
+                        - /url: /workspace/prompt-repo
+                        - generic: 提示词仓库
+                    - listitem:
+                      - link:
+                        - /url: /workspace/skills-repo
+                        - generic: 技能仓库
+                    - listitem:
+                      - button:
+                        - generic: 设置
+      - generic:
+        - banner:
+          - generic:
+            - heading [level=1]: 路由规则
+          - button
+          - button:
+            - generic: 切换主题
+          - button [expanded]
+        - generic:
+          - main:
+            - generic:
+              - generic:
+                - generic:
+                  - heading [level=1]: 路由规则用 CEL 条件调度请求
+                  - generic: 创建基于 CEL 的规则,按模型、供应商、预算或自定义属性路由请求,控制由哪个供应商/模型处理每个请求。
+                  - generic:
+                    - button: 阅读更多
+                    - button: 新建规则
+  - menu "打开菜单" [active] [ref=e301]:
+    - group [ref=e302]:
+      - menuitem "Discord 服务器" [ref=e303] [cursor=pointer]
+      - menuitem "GitHub 仓库" [ref=e305] [cursor=pointer]
+      - menuitem "报告问题" [ref=e307] [cursor=pointer]
+      - menuitem "完整文档" [ref=e309] [cursor=pointer]
+    - separator [ref=e311]
+    - menuitem "退出登录" [ref=e312] [cursor=pointer]
+    - separator [ref=e314]
+    - generic [ref=e315]:
+      - generic [ref=e316]: 版本
+      - generic [ref=e317]: v2.0.0-ee.0

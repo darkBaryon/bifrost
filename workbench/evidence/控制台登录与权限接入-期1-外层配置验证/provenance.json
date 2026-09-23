@@ -1,0 +1,13 @@
+{
+  "baseline": "d93fa8ad2082c716f76c55720b2272e718a7f649",
+  "source_worktree": "/Users/xinyue/VSCode/ws_2026/bifrost-console-ui",
+  "isolated_source": "/var/folders/m3/56qrlvk11xs7nc4cxjnw1b700000gn/T/bifrost-real-console-s82macys/source",
+  "UI": "Original complete application with standard EE overlay; no component/hook edits",
+  "binary_sha256": "281a1a97d119d668908f024e2654761cbcc7fcef7c9403e5542a93d5c83e398e",
+  "go_version": "go version go1.27.1 darwin/arm64",
+  "node_version": "v26.5.0",
+  "builds": [
+    "vite build --configLoader runner",
+    "GOWORK=off GOMAXPROCS=2 go build -mod=readonly -p 2 -buildvcs=false -o <temporary>/bifrost-http ./cmd/bifrost-http"
+  ]
+}

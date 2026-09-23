@@ -1,0 +1,87 @@
+- generic [ref=f2e2]:
+  - region "Notifications alt+T"
+  - generic [ref=f2e3]:
+    - generic [ref=f2e6]:
+      - generic [ref=f2e8]:
+        - link [ref=f2e9] [cursor=pointer]:
+          - /url: /workspace/logs
+          - img "Bifrost" [ref=f2e10]
+        - button "收起侧边栏" [ref=f2e11]
+      - generic [ref=f2e16]:
+        - textbox "搜索侧边栏导航" [ref=f2e20]:
+          - /placeholder: 搜索…
+        - generic:
+          - generic: ⌘
+          - generic: K
+      - list [ref=f2e24]:
+        - listitem [ref=f2e25]:
+          - button "可观测性" [ref=f2e26] [cursor=pointer]
+        - listitem [ref=f2e40]:
+          - button "模型" [ref=f2e41] [cursor=pointer]
+          - list [ref=f2e50]:
+            - listitem [ref=f2e51]:
+              - link "模型目录" [ref=f2e52] [cursor=pointer]:
+                - /url: /workspace/model-catalog
+            - listitem [ref=f2e60]:
+              - link "模型供应商" [ref=f2e61] [cursor=pointer]:
+                - /url: /workspace/providers
+            - listitem [ref=f2e74]:
+              - link "预算与限额" [ref=f2e75] [cursor=pointer]:
+                - /url: /workspace/model-limits
+            - listitem [ref=f2e81]:
+              - link "路由规则" [ref=f2e82] [cursor=pointer]:
+                - /url: /workspace/routing-rules
+            - listitem [ref=f2e90]:
+              - link "复杂度路由" [ref=f2e91] [cursor=pointer]:
+                - /url: /workspace/complexity-router
+            - listitem [ref=f2e101]:
+              - link "熔断器" [ref=f2e102] [cursor=pointer]:
+                - /url: /workspace/circuit-breaker
+            - listitem [ref=f2e111]:
+              - link "定价覆盖" [ref=f2e112] [cursor=pointer]:
+                - /url: /workspace/custom-pricing/overrides
+            - listitem [ref=f2e116]:
+              - link "模型设置" [ref=f2e117] [cursor=pointer]:
+                - /url: /workspace/custom-pricing
+        - listitem [ref=f2e123]:
+          - button "MCP 客户端图标 MCP 网关" [ref=f2e124] [cursor=pointer]:
+            - generic [ref=f2e126]:
+              - img "MCP 客户端图标" [ref=f2e127]
+              - generic [ref=f2e130]: MCP 网关
+        - listitem [ref=f2e133]:
+          - link "插件" [ref=f2e134] [cursor=pointer]:
+            - /url: /workspace/plugins
+        - listitem [ref=f2e140]:
+          - button "告警" [ref=f2e141] [cursor=pointer]
+        - listitem [ref=f2e152]:
+          - button "治理" [ref=f2e153] [cursor=pointer]
+        - listitem [ref=f2e161]:
+          - button "护栏" [ref=f2e162] [cursor=pointer]
+        - listitem [ref=f2e173]:
+          - link "Webhook" [ref=f2e174] [cursor=pointer]:
+            - /url: /workspace/webhooks
+        - listitem [ref=f2e182]:
+          - button "Edge 管控" [ref=f2e183] [cursor=pointer]
+        - listitem [ref=f2e191]:
+          - link "集群配置" [ref=f2e192] [cursor=pointer]:
+            - /url: /workspace/cluster
+        - listitem [ref=f2e201]:
+          - button "自适应路由" [ref=f2e202] [cursor=pointer]
+        - listitem [ref=f2e214]:
+          - button "设置" [ref=f2e215] [cursor=pointer]
+    - generic [ref=f2e225]:
+      - banner [ref=f2e226]:
+        - heading "路由规则" [level=1] [ref=f2e228]
+        - button "通知" [ref=f2e229] [cursor=pointer]
+        - button "切换主题" [ref=f2e234] [cursor=pointer]
+        - button "打开菜单" [ref=f2e236] [cursor=pointer]
+      - main [ref=f2e239]:
+        - alert [ref=f2e242]:
+          - generic [ref=f2e243]: 缺少配置库设置。
+          - generic [ref=f2e248]:
+            - generic [ref=f2e249]: 控制台需要数据库连接来存储配置,当前未配置数据库。
+            - generic [ref=f2e250]:
+              - text: To enable the UI, please add the database settings to your config.json (see
+              - link "文档" [ref=f2e251] [cursor=pointer]:
+                - /url: https://www.getmaxim.ai/bifrost/docs/quickstart/gateway/setting-up#two-configuration-modes
+              - text: ).

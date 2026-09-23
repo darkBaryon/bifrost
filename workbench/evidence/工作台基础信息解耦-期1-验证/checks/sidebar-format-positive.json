@@ -1,0 +1,281 @@
+{
+  "baseline_commit": "fa3eacedc28891cc45bc5107c350457cf196e42e",
+  "comparison": "exact changed-line blocks, including multiplicity; no context or line numbers",
+  "baseline_blocks": [
+    [
+      [
+        "\tconst buttonClassName = `group/nav-item relative h-7.5 cursor-pointer rounded-sm border px-3 transition-all duration-200 ${isHighlighted\n"
+      ],
+      [
+        "\tconst buttonClassName = `group/nav-item relative h-7.5 cursor-pointer rounded-sm border px-3 transition-all duration-200 ${\n",
+        "\t\tisHighlighted\n"
+      ]
+    ],
+    [
+      [
+        "\t\t} `;\n"
+      ],
+      [
+        "\t} `;\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\tconst subItemClassName = `h-7 cursor-pointer rounded-sm px-2 transition-all duration-200 ${isSubItemHighlighted\n"
+      ],
+      [
+        "\t\t\t\t\t\tconst subItemClassName = `h-7 cursor-pointer rounded-sm px-2 transition-all duration-200 ${\n",
+        "\t\t\t\t\t\t\tisSubItemHighlighted\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\t\t}`;\n"
+      ],
+      [
+        "\t\t\t\t\t\t}`;\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t{\n",
+        "\t\t\t\t\t\ttitle: \"Prompt Repository\",\n",
+        "\t\t\t\t\t\turl: \"/workspace/prompt-repo\",\n",
+        "\t\t\t\t\t\ticon: FolderGit,\n",
+        "\t\t\t\t\t\tdescription: \"Prompt repository\",\n",
+        "\t\t\t\t\t\thasAccess: hasPromptRepositoryAccess,\n",
+        "\t\t\t\t\t},\n",
+        "\t\t\t\t\t{\n",
+        "\t\t\t\t\t\ttitle: \"Skills Repository\",\n",
+        "\t\t\t\t\t\turl: \"/workspace/skills-repo\",\n",
+        "\t\t\t\t\t\ticon: BookOpenText,\n",
+        "\t\t\t\t\t\tdescription: \"Skills repository\",\n",
+        "\t\t\t\t\t\thasAccess: hasSkillsRepositoryAccess,\n",
+        "\t\t\t\t\t},\n",
+        "\t\t\t\t]\n"
+      ],
+      [
+        "\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\ttitle: \"Prompt Repository\",\n",
+        "\t\t\t\t\t\t\turl: \"/workspace/prompt-repo\",\n",
+        "\t\t\t\t\t\t\ticon: FolderGit,\n",
+        "\t\t\t\t\t\t\tdescription: \"Prompt repository\",\n",
+        "\t\t\t\t\t\t\thasAccess: hasPromptRepositoryAccess,\n",
+        "\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\ttitle: \"Skills Repository\",\n",
+        "\t\t\t\t\t\t\turl: \"/workspace/skills-repo\",\n",
+        "\t\t\t\t\t\t\ticon: BookOpenText,\n",
+        "\t\t\t\t\t\t\tdescription: \"Skills repository\",\n",
+        "\t\t\t\t\t\t\thasAccess: hasSkillsRepositoryAccess,\n",
+        "\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t]\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\ttitle: \"Proxy\",\n",
+        "\t\t\t\t\t\t\t\turl: \"/workspace/config/proxy\",\n",
+        "\t\t\t\t\t\t\t\ticon: Globe,\n",
+        "\t\t\t\t\t\t\t\tdescription: \"Proxy configuration\",\n",
+        "\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t]\n"
+      ],
+      [
+        "\t\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\t\ttitle: \"Proxy\",\n",
+        "\t\t\t\t\t\t\t\t\turl: \"/workspace/config/proxy\",\n",
+        "\t\t\t\t\t\t\t\t\ticon: Globe,\n",
+        "\t\t\t\t\t\t\t\t\tdescription: \"Proxy configuration\",\n",
+        "\t\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t]\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\ttitle: \"Branding\",\n",
+        "\t\t\t\t\t\t\t\turl: \"/workspace/config/branding\",\n",
+        "\t\t\t\t\t\t\t\ticon: Palette,\n",
+        "\t\t\t\t\t\t\t\tdescription: \"Custom logo and icon\",\n",
+        "\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\ttitle: \"License Info\",\n",
+        "\t\t\t\t\t\t\t\turl: \"/workspace/config/license\",\n",
+        "\t\t\t\t\t\t\t\ticon: BadgeInfo,\n",
+        "\t\t\t\t\t\t\t\tdescription: \"Enterprise license information\",\n",
+        "\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t]\n"
+      ],
+      [
+        "\t\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\t\ttitle: \"Branding\",\n",
+        "\t\t\t\t\t\t\t\t\turl: \"/workspace/config/branding\",\n",
+        "\t\t\t\t\t\t\t\t\ticon: Palette,\n",
+        "\t\t\t\t\t\t\t\t\tdescription: \"Custom logo and icon\",\n",
+        "\t\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\t\ttitle: \"License Info\",\n",
+        "\t\t\t\t\t\t\t\t\turl: \"/workspace/config/license\",\n",
+        "\t\t\t\t\t\t\t\t\ticon: BadgeInfo,\n",
+        "\t\t\t\t\t\t\t\t\tdescription: \"Enterprise license information\",\n",
+        "\t\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t]\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t<SidebarGroup className=\"custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-3 pt-0.5\">\n"
+      ],
+      [
+        "\t\t\t\t<SidebarGroup className=\"custom-scrollbar min-h-0 flex-1 overflow-y-auto pt-0.5 pr-3\">\n"
+      ]
+    ]
+  ],
+  "candidate_blocks": [
+    [
+      [
+        "\tconst buttonClassName = `group/nav-item relative h-7.5 cursor-pointer rounded-sm border px-3 transition-all duration-200 ${isHighlighted\n"
+      ],
+      [
+        "\tconst buttonClassName = `group/nav-item relative h-7.5 cursor-pointer rounded-sm border px-3 transition-all duration-200 ${\n",
+        "\t\tisHighlighted\n"
+      ]
+    ],
+    [
+      [
+        "\t\t} `;\n"
+      ],
+      [
+        "\t} `;\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\tconst subItemClassName = `h-7 cursor-pointer rounded-sm px-2 transition-all duration-200 ${isSubItemHighlighted\n"
+      ],
+      [
+        "\t\t\t\t\t\tconst subItemClassName = `h-7 cursor-pointer rounded-sm px-2 transition-all duration-200 ${\n",
+        "\t\t\t\t\t\t\tisSubItemHighlighted\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\t\t}`;\n"
+      ],
+      [
+        "\t\t\t\t\t\t}`;\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t{\n",
+        "\t\t\t\t\t\ttitle: \"Prompt Repository\",\n",
+        "\t\t\t\t\t\turl: \"/workspace/prompt-repo\",\n",
+        "\t\t\t\t\t\ticon: FolderGit,\n",
+        "\t\t\t\t\t\tdescription: \"Prompt repository\",\n",
+        "\t\t\t\t\t\thasAccess: hasPromptRepositoryAccess,\n",
+        "\t\t\t\t\t},\n",
+        "\t\t\t\t\t{\n",
+        "\t\t\t\t\t\ttitle: \"Skills Repository\",\n",
+        "\t\t\t\t\t\turl: \"/workspace/skills-repo\",\n",
+        "\t\t\t\t\t\ticon: BookOpenText,\n",
+        "\t\t\t\t\t\tdescription: \"Skills repository\",\n",
+        "\t\t\t\t\t\thasAccess: hasSkillsRepositoryAccess,\n",
+        "\t\t\t\t\t},\n",
+        "\t\t\t\t]\n"
+      ],
+      [
+        "\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\ttitle: \"Prompt Repository\",\n",
+        "\t\t\t\t\t\t\turl: \"/workspace/prompt-repo\",\n",
+        "\t\t\t\t\t\t\ticon: FolderGit,\n",
+        "\t\t\t\t\t\t\tdescription: \"Prompt repository\",\n",
+        "\t\t\t\t\t\t\thasAccess: hasPromptRepositoryAccess,\n",
+        "\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\ttitle: \"Skills Repository\",\n",
+        "\t\t\t\t\t\t\turl: \"/workspace/skills-repo\",\n",
+        "\t\t\t\t\t\t\ticon: BookOpenText,\n",
+        "\t\t\t\t\t\t\tdescription: \"Skills repository\",\n",
+        "\t\t\t\t\t\t\thasAccess: hasSkillsRepositoryAccess,\n",
+        "\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t]\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\ttitle: \"Proxy\",\n",
+        "\t\t\t\t\t\t\t\turl: \"/workspace/config/proxy\",\n",
+        "\t\t\t\t\t\t\t\ticon: Globe,\n",
+        "\t\t\t\t\t\t\t\tdescription: \"Proxy configuration\",\n",
+        "\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t]\n"
+      ],
+      [
+        "\t\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\t\ttitle: \"Proxy\",\n",
+        "\t\t\t\t\t\t\t\t\turl: \"/workspace/config/proxy\",\n",
+        "\t\t\t\t\t\t\t\t\ticon: Globe,\n",
+        "\t\t\t\t\t\t\t\t\tdescription: \"Proxy configuration\",\n",
+        "\t\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t]\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\ttitle: \"Branding\",\n",
+        "\t\t\t\t\t\t\t\turl: \"/workspace/config/branding\",\n",
+        "\t\t\t\t\t\t\t\ticon: Palette,\n",
+        "\t\t\t\t\t\t\t\tdescription: \"Custom logo and icon\",\n",
+        "\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\ttitle: \"License Info\",\n",
+        "\t\t\t\t\t\t\t\turl: \"/workspace/config/license\",\n",
+        "\t\t\t\t\t\t\t\ticon: BadgeInfo,\n",
+        "\t\t\t\t\t\t\t\tdescription: \"Enterprise license information\",\n",
+        "\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t]\n"
+      ],
+      [
+        "\t\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\t\ttitle: \"Branding\",\n",
+        "\t\t\t\t\t\t\t\t\turl: \"/workspace/config/branding\",\n",
+        "\t\t\t\t\t\t\t\t\ticon: Palette,\n",
+        "\t\t\t\t\t\t\t\t\tdescription: \"Custom logo and icon\",\n",
+        "\t\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t\t{\n",
+        "\t\t\t\t\t\t\t\t\ttitle: \"License Info\",\n",
+        "\t\t\t\t\t\t\t\t\turl: \"/workspace/config/license\",\n",
+        "\t\t\t\t\t\t\t\t\ticon: BadgeInfo,\n",
+        "\t\t\t\t\t\t\t\t\tdescription: \"Enterprise license information\",\n",
+        "\t\t\t\t\t\t\t\t\thasAccess: hasSettingsAccess,\n",
+        "\t\t\t\t\t\t\t\t},\n",
+        "\t\t\t\t\t\t\t]\n"
+      ]
+    ],
+    [
+      [
+        "\t\t\t\t<SidebarGroup className=\"custom-scrollbar min-h-0 flex-1 overflow-y-auto pr-3 pt-0.5\">\n"
+      ],
+      [
+        "\t\t\t\t<SidebarGroup className=\"custom-scrollbar min-h-0 flex-1 overflow-y-auto pt-0.5 pr-3\">\n"
+      ]
+    ]
+  ],
+  "new_blocks": []
+}

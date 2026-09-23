@@ -1,0 +1,214 @@
+- generic [ref=f3e2]:
+  - region "Notifications alt+T"
+  - generic [ref=f3e3]:
+    - generic [ref=f3e6]:
+      - generic [ref=f3e8]:
+        - link [ref=f3e9] [cursor=pointer]:
+          - /url: /workspace/logs
+          - img "Bifrost" [ref=f3e10]
+        - button "收起侧边栏" [ref=f3e11]
+      - generic [ref=f3e16]:
+        - textbox "搜索侧边栏导航" [ref=f3e20]:
+          - /placeholder: 搜索…
+        - generic:
+          - generic: ⌘
+          - generic: K
+      - list [ref=f3e24]:
+        - listitem [ref=f3e25]:
+          - button "可观测性" [ref=f3e26] [cursor=pointer]
+          - list [ref=f3e40]:
+            - listitem [ref=f3e41]:
+              - link "仪表盘" [ref=f3e42] [cursor=pointer]:
+                - /url: /workspace/dashboard
+            - listitem [ref=f3e49]:
+              - link "LLM 日志" [ref=f3e50] [cursor=pointer]:
+                - /url: /workspace/logs
+            - listitem [ref=f3e54]:
+              - link "MCP 客户端图标 MCP 日志" [ref=f3e55] [cursor=pointer]:
+                - /url: /workspace/mcp-logs
+                - generic [ref=f3e56]:
+                  - img "MCP 客户端图标" [ref=f3e57]
+                  - generic [ref=f3e60]: MCP 日志
+            - listitem [ref=f3e61]:
+              - link "连接器" [ref=f3e62] [cursor=pointer]:
+                - /url: /workspace/observability
+            - listitem [ref=f3e68]:
+              - link "日志设置" [ref=f3e69] [cursor=pointer]:
+                - /url: /workspace/config/logging
+        - listitem [ref=f3e75]:
+          - button "模型" [ref=f3e76] [cursor=pointer]
+        - listitem [ref=f3e85]:
+          - button "MCP 客户端图标 MCP 网关" [ref=f3e86] [cursor=pointer]:
+            - generic [ref=f3e88]:
+              - img "MCP 客户端图标" [ref=f3e89]
+              - generic [ref=f3e92]: MCP 网关
+        - listitem [ref=f3e95]:
+          - link "插件" [ref=f3e96] [cursor=pointer]:
+            - /url: /workspace/plugins
+        - listitem [ref=f3e102]:
+          - button "告警" [ref=f3e103] [cursor=pointer]
+        - listitem [ref=f3e114]:
+          - button "治理" [ref=f3e115] [cursor=pointer]
+        - listitem [ref=f3e123]:
+          - button "护栏" [ref=f3e124] [cursor=pointer]
+        - listitem [ref=f3e135]:
+          - link "Webhook" [ref=f3e136] [cursor=pointer]:
+            - /url: /workspace/webhooks
+        - listitem [ref=f3e144]:
+          - button "Edge 管控" [ref=f3e145] [cursor=pointer]
+        - listitem [ref=f3e153]:
+          - link "集群配置" [ref=f3e154] [cursor=pointer]:
+            - /url: /workspace/cluster
+        - listitem [ref=f3e163]:
+          - button "自适应路由" [ref=f3e164] [cursor=pointer]
+        - listitem [ref=f3e176]:
+          - button "设置" [ref=f3e177] [cursor=pointer]
+    - generic [ref=f3e187]:
+      - banner [ref=f3e188]:
+        - heading "LLM 日志" [level=1] [ref=f3e190]
+        - button "通知" [ref=f3e191] [cursor=pointer]
+        - button "切换主题" [ref=f3e196] [cursor=pointer]
+        - button "打开菜单" [ref=f3e198] [cursor=pointer]
+      - main [ref=f3e201]:
+        - generic [ref=f3e204]:
+          - generic [ref=f3e205]:
+            - generic [ref=f3e206]:
+              - generic [ref=f3e207]: 筛选
+              - button "隐藏筛选" [ref=f3e209] [cursor=pointer]
+            - generic [ref=f3e213]:
+              - generic [ref=f3e214]:
+                - button "状态" [expanded] [ref=f3e215] [cursor=pointer]
+                - generic [ref=f3e220]:
+                  - generic [ref=f3e221] [cursor=pointer]:
+                    - checkbox "成功" [ref=f3e222]
+                    - generic [ref=f3e223]: 成功
+                  - generic [ref=f3e224] [cursor=pointer]:
+                    - checkbox "错误" [ref=f3e225]
+                    - generic [ref=f3e226]: 错误
+                  - generic [ref=f3e227] [cursor=pointer]:
+                    - checkbox "处理中" [ref=f3e228]
+                    - generic [ref=f3e229]: 处理中
+                  - generic [ref=f3e230] [cursor=pointer]:
+                    - checkbox "已取消" [ref=f3e231]
+                    - generic [ref=f3e232]: 已取消
+              - generic [ref=f3e233]:
+                - button "模型" [expanded] [ref=f3e234] [cursor=pointer]
+                - generic [ref=f3e239]:
+                  - textbox "搜索或添加模型" [ref=f3e241]
+                  - generic [ref=f3e242]: 暂无数据
+              - button "已选密钥" [ref=f3e244] [cursor=pointer]
+              - button "虚拟密钥" [ref=f3e249] [cursor=pointer]
+              - button "供应商" [ref=f3e254] [cursor=pointer]
+              - button "应用" [ref=f3e259] [cursor=pointer]
+              - button "类型" [ref=f3e264] [cursor=pointer]
+              - button "别名" [ref=f3e269] [cursor=pointer]
+              - button "路由引擎" [ref=f3e274] [cursor=pointer]
+              - button "路由规则" [ref=f3e279] [cursor=pointer]
+              - button "复杂度层级" [ref=f3e284] [cursor=pointer]
+              - button "Complexity Mechanism" [ref=f3e289] [cursor=pointer]
+              - button "本地缓存" [ref=f3e294] [cursor=pointer]
+              - button "用户" [ref=f3e299] [cursor=pointer]
+              - button "团队" [ref=f3e304] [cursor=pointer]
+              - button "客户" [ref=f3e309] [cursor=pointer]
+              - button "业务单元" [ref=f3e314] [cursor=pointer]
+              - button "Projects" [ref=f3e319] [cursor=pointer]
+              - button "会话" [ref=f3e324] [cursor=pointer]
+              - button "成本" [ref=f3e329] [cursor=pointer]
+              - button "停止原因" [ref=f3e334] [cursor=pointer]
+              - button "元数据" [ref=f3e339] [cursor=pointer]
+          - generic [ref=f3e343]:
+            - generic [ref=f3e345]:
+              - button "刷新" [ref=f3e346] [cursor=pointer]
+              - button "实时" [ref=f3e347] [cursor=pointer]
+              - button "分组" [ref=f3e348] [cursor=pointer]
+              - textbox "Search logs or paste a request ID" [ref=f3e353]
+              - button "最近 1 小时" [ref=f3e355] [cursor=pointer]
+              - button [ref=f3e357] [cursor=pointer]
+              - button "列配置" [ref=f3e358] [cursor=pointer]
+            - generic [ref=f3e359]:
+              - generic [ref=f3e360]:
+                - generic [ref=f3e361]: 总请求数
+                - generic "These statistics could not be loaded" [ref=f3e362]: N/A
+              - generic [ref=f3e364]:
+                - generic [ref=f3e365]: 成功率
+                - generic "These statistics could not be loaded" [ref=f3e366]: N/A
+              - generic [ref=f3e368]:
+                - generic [ref=f3e369]: User Success
+                - generic "These statistics could not be loaded" [ref=f3e370]: N/A
+              - generic [ref=f3e372]:
+                - generic [ref=f3e373]: 平均延迟
+                - generic "These statistics could not be loaded" [ref=f3e374]: N/A
+              - generic [ref=f3e376]:
+                - generic [ref=f3e377]: 总 Token
+                - generic "These statistics could not be loaded" [ref=f3e378]: N/A
+              - generic [ref=f3e380]:
+                - generic [ref=f3e381]: 总成本
+                - generic "These statistics could not be loaded" [ref=f3e382]: N/A
+            - generic [ref=f3e386]:
+              - generic [ref=f3e387]:
+                - button "请求量" [expanded] [ref=f3e388]
+                - generic [ref=f3e393]:
+                  - generic [ref=f3e394]: 成功
+                  - generic [ref=f3e397]: 错误
+                  - generic [ref=f3e400]: 已取消
+              - application [ref=f3e407]
+            - alert [ref=f3e411]:
+              - generic [ref=f3e414]: Not_found
+            - generic [ref=f3e416]:
+              - table [ref=f3e419]:
+                - rowgroup [ref=f3e420]:
+                  - row [ref=f3e421]:
+                    - columnheader [ref=f3e422]:
+                      - button "列操作" [ref=f3e423] [cursor=pointer]
+                    - columnheader [ref=f3e424]:
+                      - generic [ref=f3e425]:
+                        - button "时间" [ref=f3e427] [cursor=pointer]
+                        - button "列操作" [ref=f3e428] [cursor=pointer]
+                    - columnheader "类型 列操作" [ref=f3e429]:
+                      - generic [ref=f3e430]:
+                        - generic [ref=f3e431]: 类型
+                        - button "列操作" [ref=f3e432] [cursor=pointer]
+                    - columnheader "消息 列操作" [ref=f3e433]:
+                      - generic [ref=f3e434]:
+                        - generic [ref=f3e435]: 消息
+                        - button "列操作" [ref=f3e436] [cursor=pointer]
+                    - columnheader "模型 列操作" [ref=f3e437]:
+                      - generic [ref=f3e438]:
+                        - generic [ref=f3e439]: 模型
+                        - button "列操作" [ref=f3e440] [cursor=pointer]
+                    - columnheader "应用 列操作" [ref=f3e441]:
+                      - generic [ref=f3e442]:
+                        - generic [ref=f3e443]: 应用
+                        - button "列操作" [ref=f3e444] [cursor=pointer]
+                    - columnheader [ref=f3e445]:
+                      - generic [ref=f3e446]:
+                        - button "延迟" [ref=f3e448] [cursor=pointer]
+                        - button "列操作" [ref=f3e449] [cursor=pointer]
+                    - columnheader [ref=f3e450]:
+                      - generic [ref=f3e451]:
+                        - button "Token 数" [ref=f3e453] [cursor=pointer]
+                        - button "列操作" [ref=f3e454] [cursor=pointer]
+                    - columnheader [ref=f3e455]:
+                      - generic [ref=f3e456]:
+                        - button "成本" [ref=f3e458] [cursor=pointer]
+                        - button "列操作" [ref=f3e459] [cursor=pointer]
+                    - columnheader [ref=f3e460]
+                - rowgroup [ref=f3e461]:
+                  - row [ref=f3e462]:
+                    - cell "等待新日志…" [ref=f3e463]
+                  - row [ref=f3e470]:
+                    - cell "未找到结果,请调整筛选条件或时间范围。" [ref=f3e471]
+              - generic [ref=f3e472]:
+                - generic [ref=f3e473]: 0-0 共 0 条
+                - generic [ref=f3e474]:
+                  - generic [ref=f3e475]:
+                    - generic [ref=f3e476]: 每页行数
+                    - combobox [ref=f3e477] [cursor=pointer]:
+                      - generic [ref=f3e478]: "25"
+                  - generic [ref=f3e480]:
+                    - button "上一页" [disabled]
+                    - generic [ref=f3e481]:
+                      - generic [ref=f3e482]: 页
+                      - generic [ref=f3e483]: "0"
+                      - generic [ref=f3e484]: 共 0
+                    - button "下一页" [disabled]

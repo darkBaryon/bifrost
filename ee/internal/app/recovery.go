@@ -37,34 +37,13 @@ func RecoverAdmin(args []string) error {
 	if flags.Parse(args[1:]) != nil || *dir == "" || flags.NArg() != 0 {
 		return errors.New("expected --app-dir and no password arguments")
 	}
-	data, e := os.ReadFile(filepath.Join(*dir, "config.json"))
+	storeConfig, e := recoveryStoreConfig(*dir)
 	if e != nil {
-		return errors.New("cannot read existing config.json")
-	}
-	var config struct {
-		Store *configstore.Config `json:"config_store"`
-	}
-	if json.Unmarshal(data, &config) != nil {
-		return errors.New("invalid config.json")
-	}
-	if config.Store == nil {
-		path := filepath.Join(*dir, "config.db")
-		if _, e = os.Stat(path); e != nil {
-			return errors.New("existing config.db is required")
-		}
-		config.Store = &configstore.Config{Enabled: true, Type: configstore.ConfigStoreTypeSQLite, Config: &configstore.SQLiteConfig{Path: path}}
-	}
-	if !config.Store.Enabled {
-		return errors.New("database config store is required")
-	}
-	if sqliteConfig, ok := config.Store.Config.(*configstore.SQLiteConfig); ok {
-		if info, err := os.Stat(sqliteConfig.Path); err != nil || !info.Mode().IsRegular() {
-			return errors.New("existing SQLite configuration database is required")
-		}
+		return e
 	}
 	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.recover-admin")
 	log := bifrost.NewDefaultLogger(schemas.LogLevelError)
-	store, e := configstore.NewConfigStore(ctx, config.Store, log)
+	store, e := configstore.NewConfigStore(ctx, storeConfig, log)
 	if e != nil {
 		return errors.New("cannot open recovery database")
 	}
@@ -102,4 +81,36 @@ func RecoverAdmin(args []string) error {
 	}
 	fmt.Fprintln(os.Stdout, "Administrator password updated; previous sessions revoked.")
 	return nil
+}
+
+// recoveryStoreConfig 按 app-dir/config.json 找到实例使用的配置库；config.json 不存在或未配置 config_store 时，
+// 与宿主启动规则（transports/bifrost-http/lib/config.go 的 LoadConfig）一致，使用目录下现存的 config.db。
+// 只接受已存在的数据库，恢复命令不创建新库。
+func recoveryStoreConfig(dir string) (*configstore.Config, error) {
+	var config struct {
+		Store *configstore.Config `json:"config_store"`
+	}
+	data, e := os.ReadFile(filepath.Join(dir, "config.json"))
+	if e != nil && !os.IsNotExist(e) {
+		return nil, errors.New("cannot read existing config.json")
+	}
+	if e == nil && json.Unmarshal(data, &config) != nil {
+		return nil, errors.New("invalid config.json")
+	}
+	if config.Store == nil {
+		path := filepath.Join(dir, "config.db")
+		if _, e = os.Stat(path); e != nil {
+			return nil, errors.New("existing config.db is required")
+		}
+		config.Store = &configstore.Config{Enabled: true, Type: configstore.ConfigStoreTypeSQLite, Config: &configstore.SQLiteConfig{Path: path}}
+	}
+	if !config.Store.Enabled {
+		return nil, errors.New("database config store is required")
+	}
+	if sqliteConfig, ok := config.Store.Config.(*configstore.SQLiteConfig); ok {
+		if info, err := os.Stat(sqliteConfig.Path); err != nil || !info.Mode().IsRegular() {
+			return nil, errors.New("existing SQLite configuration database is required")
+		}
+	}
+	return config.Store, nil
 }

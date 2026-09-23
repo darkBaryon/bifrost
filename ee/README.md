@@ -54,6 +54,14 @@ make -C ee smoke-rbac-postgres # 双节点 PostgreSQL 角色权限冒烟，需�
 
 参见[角色权限接口](docs/角色权限接口.md)。PostgreSQL 冒烟需设置 `RBAC_TEST_POSTGRES_DSN`，例如 `host=localhost user=postgres dbname=postgres sslmode=disable`；使用可创建临时数据库的测试账号。脚本不修改已有业务数据库。
 
+## 工作台基础信息
+
+[工作台基础信息接口](docs/工作台基础信息接口.md)提供登录用户可见的连接状态、环境标识和重启标记，公共外壳通过 EE 覆盖 hook 读取。完整 `/api/config` 仍要求 `Settings.View`。这个接入不等于登录表单、个人账号菜单或前端权限矩阵已完成；这些仍属于后续前端接入。
+
+验证入口：[console-bootstrap-check.py](scripts/console-bootstrap-check.py) 在隔离副本检查 EE/OSS 构建、类型与组件测试，`--build-binary` 同时构建 EE 可执行文件；[console-bootstrap-smoke.py](scripts/console-bootstrap-smoke.py) 运行真实临时服务与浏览器场景，可用 `--build-manifest` 复用同轮构建。构建依赖可用 `--node-modules` 指定，浏览器 CLI 可用 `--playwright-cli` 指定；本机自动发现仅作为便利兜底。
+
+本案场景夹具仍在 [workbench/evidence/控制台登录与权限接入-期1-外层配置验证/fixture.py](../workbench/evidence/控制台登录与权限接入-期1-外层配置验证/fixture.py)。它复用 `scripts/identity-smoke.py` 的 Node 进程工具，但属于本案场景夹具，与通用身份冒烟场景不同；本轮不迁移其目录。
+
 ## 内容安全
 
 接口契约（配置字段、版本号语义、400/409 口径、权限）见[包内说明](internal/guardrails/README.md#配置与接口)；期 2 交付管理页面时再补 `docs/` 页面。

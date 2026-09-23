@@ -157,3 +157,20 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
 ### 凭据发送目标权限（用户授权的验收修正）
 
 新增可选 `ConsoleProviderConfigPolicy`、`ConsoleProviderKeyPolicy`、`ConsoleMCPUpdatePolicy`。厂商配置在完整合并后、写入/模型发现前检查；Key创建/更新在合并后、保存前检查；MCP在TLS、OAuth和Headers解析后、临时连接验证前检查。`consolepolicy.go` 定义类型，调用点位于 `providers.go`、`provider_keys.go`、`mcp.go`，普通回归位于 `consolepolicy_test.go`。业务判断仍在EE，未注入时维持原流程。MCP已注入策略时由策略决定是否允许保留旧secret改变OAuth地址；没有注入时保留原必须重填的限制。
+
+
+## 工作台基础信息扩展（2026-09-23，功能分支待验收）
+
+依据：[工作台基础信息解耦方案 §4.3](../../workbench/cases/工作台基础信息解耦/期1/方案v1.md)。用户已批准，尚未通过最终验收或合入主线。
+
+| 文件 | 扩展及默认行为 |
+|---|---|
+| `ui/app/clientLayout.tsx` | 基础状态读取改为 `@enterprise/hooks/useConsoleConfig`；默认仍读原 config。保留公共/临时页面跳过查询、加载/重试及已有缓存逻辑；向导使用可选开关。 |
+| `ui/components/sidebar.tsx` | 使用同一基础状态 hook 保留数据库状态、环境标识与重启提示；EE 关闭旧向导时通过已有 skip 停止其附属查询。 |
+| `ui/components/topbar.tsx` | 认证开关改由可覆盖 hook 提供；默认仍读原 config，EE 复用既有会话状态接口；退出行为保持。 |
+| `ui/lib/types/console.ts`（新增） | 仅定义公共外壳所需的窄配置与查询合同，不把完整设置作为工作台前置条件。 |
+| `ui/app/_fallbacks/enterprise/hooks/useConsoleConfig.ts`（新增） | 覆盖点的默认实现，保留 OSS 数据源与旧向导。 |
+
+需要公共调用点的原因：现有 enterprise 覆盖只能替换预留导入，三个外壳组件原来直接调用完整配置 query。具体 EE 数据读取实现在 `ee/ui/`；`GET /api/config` 的 `Settings.View` 权限与路由规则业务组件不改。
+
+同步上游时核对三个调用点仍使用覆盖入口，并对照 `transports/bifrost-http/handlers/config.go` 检查 `ee/internal/host/console.go` 的连接状态、环境标识和 restart 投影语义是否漂移；回归 EE 普通账号基础信息200/完整配置403、OSS原配置、公共/临时页面跳过、退出入口及重启提示。验证入口：`python3 ee/scripts/console-bootstrap-check.py`、`python3 ee/scripts/console-bootstrap-smoke.py`，具体参数与证据以接口说明和本案记录为准。

@@ -19,6 +19,7 @@ import (
 type kind string
 
 const (
+	kindConsoleService  kind = "console-service"
 	kindIdentityService kind = "identity-service"
 	kindInference       kind = "inference"
 	kindManaged         kind = "managed"
@@ -116,7 +117,7 @@ func decodeRouteManifest(raw []byte) ([]routeEntry, error) {
 					group.Permissions = append(group.Permissions, permission)
 				}
 			}
-			if !slices.Contains([]kind{kindIdentityService, kindInference, kindManaged, kindOauthProtocol, kindPublic, kindRbacService, kindStatic, kindVkSelf}, group.Kind) ||
+			if !slices.Contains([]kind{kindConsoleService, kindIdentityService, kindInference, kindManaged, kindOauthProtocol, kindPublic, kindRbacService, kindStatic, kindVkSelf}, group.Kind) ||
 				!slices.Contains([]guard{guardBrandingService, guardLogsQuery, guardNone, guardNotificationPolicy, guardPluginMutation, guardProviderInput, guardSettingsInput, guardVkExport, guardWebhookInput, guardWebsocket}, group.Guard) ||
 				!slices.Contains([]projection{projectionBrandingSafe, projectionDebugExplicit, projectionGovernanceNestedVk, projectionKeyMetadata, projectionLogsContent, projectionMcpSafe, projectionMessageFilter, projectionNotificationPolicy, projectionOrdinary, projectionPluginSafe, projectionPromptContent, projectionProtocol, projectionProtocolScoped, projectionProviderSafe, projectionRoutingSafe, projectionSettingsSafe, projectionSkillContent, projectionVkValues, projectionWebhookSafe}, group.Projection) {
 				return nil, invalid()

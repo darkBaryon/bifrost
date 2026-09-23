@@ -12,8 +12,9 @@ import { useNotificationSync } from "@/hooks/useNotificationSync";
 import { useStoreSync } from "@/hooks/useStoreSync";
 import { WebSocketProvider } from "@/hooks/useWebSocket";
 import { TopbarProvider } from "@/lib/contexts/topbarContext";
-import { getErrorMessage, ReduxProvider, useGetCoreConfigQuery, useIsAuthEnabledQuery } from "@/lib/store";
-import { BifrostConfig } from "@/lib/types/config";
+import { getErrorMessage, ReduxProvider, useIsAuthEnabledQuery } from "@/lib/store";
+import type { ConsoleConfig } from "@/lib/types/console";
+import { CONSOLE_ONBOARDING_ENABLED, useConsoleConfigQuery } from "@enterprise/hooks/useConsoleConfig";
 import { RbacProvider, useRbacContext } from "@enterprise/lib/contexts/rbacContext";
 import { useLocation, useMatches } from "@tanstack/react-router";
 import { RefreshCw, WifiOff } from "lucide-react";
@@ -77,12 +78,9 @@ function AppContent({ children }: { children: React.ReactNode }) {
 		isLoading,
 		isFetching,
 		refetch,
-	} = useGetCoreConfigQuery(
-		{},
-		{
-			skip: publicShell || useMinimalShell || (tempTokenScoped && authLoading),
-		},
-	);
+	} = useConsoleConfigQuery({
+		skip: publicShell || useMinimalShell || (tempTokenScoped && authLoading),
+	});
 
 	// Permissions are restored from sessionStorage (async) and refreshed from the
 	// API. Until that first resolve, useRbac() returns false for everything, which
@@ -143,7 +141,7 @@ function AppContent({ children }: { children: React.ReactNode }) {
 										</FullPage>
 									)}
 								</main>
-								{bifrostConfig?.is_db_connected && <OnboardingWidget />}
+								{CONSOLE_ONBOARDING_ENABLED && bifrostConfig?.is_db_connected && <OnboardingWidget />}
 							</div>
 						</div>
 					</SidebarProvider>
@@ -174,7 +172,7 @@ function FullPage({
 	onRetry,
 	children,
 }: {
-	config: BifrostConfig | undefined;
+	config: ConsoleConfig | undefined;
 	hasError: boolean;
 	isRetrying: boolean;
 	onRetry: () => void;

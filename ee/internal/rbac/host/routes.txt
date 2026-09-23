@@ -1,6 +1,9 @@
 # 每组：@ 接口归属 权限（逗号分隔，-表示无） 请求检查 响应处理
 # 组内每行列出方法和完整路径；同一路径的多个方法用逗号分隔。
 
+@ console-service - none protocol
+POST /api/console/bootstrap
+
 @ identity-service - none protocol
 POST /api/accounts/create
 POST /api/accounts/delete

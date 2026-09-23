@@ -1,0 +1,13 @@
+{
+  "owned_pids": {
+    "33269": "absent",
+    "33271": "absent",
+    "33462": "absent",
+    "34991": "absent",
+    "35242": "absent"
+  },
+  "port": 56518,
+  "owned_port_closed": true,
+  "private_session_files_present": [],
+  "reserved_port_59817_not_used": true
+}

@@ -23,6 +23,7 @@
 |---|---|
 | [authorization.go](authorization.go) | 请求处理入口：读取权限、调用前后检查、记录失败位置 |
 | [routes.go](routes.go) / [routes.txt](routes.txt) | 登记每个方法和路径的权限，启动时检查是否漏了接口 |
+| [consoleroutes_test.go](consoleroutes_test.go) / [routes_test.go](routes_test.go) | 精确基础状态路由、未知路径和方法拒绝，以及原路由摘要不变 |
 | [request.go](request.go) | 把请求分给对应检查，并把保存前的检查传给原handler |
 | [response.go](response.go) | 把返回内容分给对应处理，共用地址隐藏规则，拒绝无法识别的结构 |
 | [providers.go](providers.go) | 隐藏厂商凭据，更新时保留原值；检查厂商、密钥和厂商代理的凭据目标变化 |
@@ -36,8 +37,8 @@
 
 ## 修改时要知道
 
-- `managed`接口由本包检查；身份、角色、推理和协议接口仍由各自处理器负责。
-- 清单登记818条已知路由，其中205条使用本包的角色授权；运行时只匹配实际注册的路由。漏登记会阻止启动，不按GET/POST猜权限。
+- `managed`接口由本包检查；身份、角色、基础状态、推理和协议接口仍由各自处理器负责。`console-service` 只登记 `POST /api/console/bootstrap`，由宿主认证适配器自行检查个人会话和来源。
+- 清单登记822条已知路由，其中208条使用本包的角色授权；运行时只匹配实际注册的路由。漏登记会阻止启动，不按GET/POST猜权限。
 - 清单选择检查和返回处理策略；具体字段及列表/详情/更新等分支仍在各功能文件中。新增接口要核对对应策略能否处理其请求与响应，不能只在清单增加一行。
 - `/metrics` 需要 Logs.View，保留 Prometheus 文本格式；指标未启用时沿用上游 404。
 - 检查必须早于保存或投递；无法理解的敏感响应不能直接返回。

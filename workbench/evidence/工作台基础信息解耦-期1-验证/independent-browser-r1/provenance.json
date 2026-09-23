@@ -1,0 +1,15 @@
+{
+  "candidate": "030c362a57ff2b0e538b87ac3549af7b9cad6ded",
+  "actual_head": "030c362a57ff2b0e538b87ac3549af7b9cad6ded",
+  "manifest": "/Users/xinyue/VSCode/ws_2026/bifrost-console-ui/workbench/tmp/codereview/工作台基础信息解耦-期1-代码评审1/scratch/bifrost-console-check-b6eip3bj/build/build-manifest.json",
+  "manifest_complete": true,
+  "file_count": 2796,
+  "source_sha256": "f14a38c938cb10d046c933ac410abc92385e6f6474e6379e518891d2a2b81b56",
+  "manifest_source_sha256": "f14a38c938cb10d046c933ac410abc92385e6f6474e6379e518891d2a2b81b56",
+  "current_file_mismatches": [],
+  "candidate_blob_mismatches": [],
+  "binary_sha256": "597b7d9a699ed96d115bae901fb5ba493cbc1b6d63f5962bf82ee1be1a594d6e",
+  "binary_matches": true,
+  "worktree_before": " M \"workbench/evidence/\\345\\267\\245\\344\\275\\234\\345\\217\\260\\345\\237\\272\\347\\241\\200\\344\\277\\241\\346\\201\\257\\350\\247\\243\\350\\200\\246-\\346\\234\\2371-\\351\\252\\214\\350\\257\\201.md\"\n",
+  "passed": true
+}

@@ -1,0 +1,88 @@
+- generic [ref=f1e2]:
+  - region "Notifications alt+T":
+    - list:
+      - listitem [ref=f1e3]:
+        - button "Close toast" [ref=f1e4] [cursor=pointer]
+        - generic [ref=f1e11]: 发生意外错误
+  - generic [ref=f1e13]:
+    - generic [ref=f1e16]:
+      - generic [ref=f1e18]:
+        - link [ref=f1e19] [cursor=pointer]:
+          - /url: /workspace/logs
+          - img "Bifrost" [ref=f1e20]
+        - button "收起侧边栏" [ref=f1e21]
+      - generic [ref=f1e26]:
+        - textbox "搜索侧边栏导航" [ref=f1e30]:
+          - /placeholder: 搜索…
+        - generic:
+          - generic: ⌘
+          - generic: K
+      - list [ref=f1e34]:
+        - listitem [ref=f1e35]:
+          - button "可观测性" [ref=f1e36] [cursor=pointer]
+        - listitem [ref=f1e50]:
+          - button "模型" [ref=f1e51] [cursor=pointer]
+          - list [ref=f1e60]:
+            - listitem [ref=f1e61]:
+              - link "模型目录" [ref=f1e62] [cursor=pointer]:
+                - /url: /workspace/model-catalog
+            - listitem [ref=f1e70]:
+              - link "模型供应商" [ref=f1e71] [cursor=pointer]:
+                - /url: /workspace/providers
+            - listitem [ref=f1e84]:
+              - link "预算与限额" [ref=f1e85] [cursor=pointer]:
+                - /url: /workspace/model-limits
+            - listitem [ref=f1e91]:
+              - link "路由规则" [ref=f1e92] [cursor=pointer]:
+                - /url: /workspace/routing-rules
+            - listitem [ref=f1e100]:
+              - link "复杂度路由" [ref=f1e101] [cursor=pointer]:
+                - /url: /workspace/complexity-router
+            - listitem [ref=f1e111]:
+              - link "熔断器" [ref=f1e112] [cursor=pointer]:
+                - /url: /workspace/circuit-breaker
+            - listitem [ref=f1e121]:
+              - link "定价覆盖" [ref=f1e122] [cursor=pointer]:
+                - /url: /workspace/custom-pricing/overrides
+            - listitem [ref=f1e126]:
+              - link "模型设置" [ref=f1e127] [cursor=pointer]:
+                - /url: /workspace/custom-pricing
+        - listitem [ref=f1e133]:
+          - button "MCP 客户端图标 MCP 网关" [ref=f1e134] [cursor=pointer]:
+            - generic [ref=f1e136]:
+              - img "MCP 客户端图标" [ref=f1e137]
+              - generic [ref=f1e140]: MCP 网关
+        - listitem [ref=f1e143]:
+          - link "插件" [ref=f1e144] [cursor=pointer]:
+            - /url: /workspace/plugins
+        - listitem [ref=f1e150]:
+          - button "告警" [ref=f1e151] [cursor=pointer]
+        - listitem [ref=f1e162]:
+          - button "治理" [ref=f1e163] [cursor=pointer]
+        - listitem [ref=f1e171]:
+          - button "护栏" [ref=f1e172] [cursor=pointer]
+        - listitem [ref=f1e183]:
+          - link "Webhook" [ref=f1e184] [cursor=pointer]:
+            - /url: /workspace/webhooks
+        - listitem [ref=f1e192]:
+          - button "Edge 管控" [ref=f1e193] [cursor=pointer]
+        - listitem [ref=f1e201]:
+          - link "集群配置" [ref=f1e202] [cursor=pointer]:
+            - /url: /workspace/cluster
+        - listitem [ref=f1e211]:
+          - button "自适应路由" [ref=f1e212] [cursor=pointer]
+        - listitem [ref=f1e224]:
+          - button "设置" [ref=f1e225] [cursor=pointer]
+    - generic [ref=f1e235]:
+      - banner [ref=f1e236]:
+        - heading "路由规则" [level=1] [ref=f1e238]
+        - button "通知" [ref=f1e239] [cursor=pointer]
+        - button "切换主题" [ref=f1e244] [cursor=pointer]
+        - button "打开菜单" [ref=f1e246] [cursor=pointer]
+      - main [ref=f1e249]:
+        - region [ref=f1e251]:
+          - heading "无法连接到控制台" [level=1] [ref=f1e260]
+          - paragraph [ref=f1e261]: Bifrost 未返回配置。这通常是短暂中断,尤其是在 Bifrost 升级期间。
+          - generic [ref=f1e262]:
+            - button "重试" [ref=f1e263] [cursor=pointer]
+            - paragraph [ref=f1e264]: 你的设置与数据不受影响。

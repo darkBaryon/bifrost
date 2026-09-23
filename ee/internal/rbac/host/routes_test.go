@@ -106,10 +106,16 @@ func TestOptionalHandlerRegistrationProfiles(t *testing.T) {
 	}
 }
 
-// 除已批准的metrics修复和新增账号删除路由外，原规则应与固定候选b38493b07一致。
+// 除已批准的metrics修复、新增账号删除和基础状态路由外，原规则应与固定候选b38493b07一致。
 func TestRouteSourceDigest(t *testing.T) {
 	var rows []string
 	for _, r := range manifest() {
+		if r.Method == "POST" && r.Pattern == "/api/console/bootstrap" {
+			if r.Kind != kindConsoleService || r.Guard != guardNone || r.Projection != projectionProtocol || len(r.Permissions) != 0 {
+				t.Fatal("bootstrap route must use console service authorization")
+			}
+			continue
+		}
 		if r.Method == "POST" && r.Pattern == "/api/accounts/delete" {
 			if r.Kind != kindIdentityService || r.Guard != guardNone || r.Projection != projectionProtocol || len(r.Permissions) != 0 {
 				t.Fatal("delete route must use identity service authorization")

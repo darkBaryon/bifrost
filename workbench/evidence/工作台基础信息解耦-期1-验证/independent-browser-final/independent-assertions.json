@@ -1,0 +1,24 @@
+{
+  "status": "passed",
+  "checks": {
+    "manifest_final_candidate_worktree_snapshot_match": true,
+    "routing_only_permission": true,
+    "full_config_denied": true,
+    "real_routing_allowed": true,
+    "real_automatic_bootstrap": true,
+    "no_automatic_full_config": true,
+    "routing_rendered_without_unreachable": true,
+    "logout_entry_snapshot": true,
+    "injected_503_error_snapshot": true,
+    "real_retry_recovery_snapshot": true,
+    "mock_missing_store_snapshot": true,
+    "mock_logs_mount_snapshot": true,
+    "mock_generic_restart_snapshot": true,
+    "real_bootstrap_after_mocks": true,
+    "public_anon_skip": true,
+    "temp_anon_skip": true,
+    "owned_resources_cleaned": true
+  },
+  "routing_screenshot_visually_inspected": true,
+  "source_after_matches": true
+}

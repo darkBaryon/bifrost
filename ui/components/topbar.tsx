@@ -15,8 +15,9 @@ import { IS_ENTERPRISE } from "@/lib/constants/config";
 import { useDescriptionSlotRef, useMobileFilterSlotRef, useTopbarTitle } from "@/lib/contexts/topbarContext";
 import type { TopbarTitleValue } from "@/lib/contexts/topbarContext.utils";
 import { useBranding } from "@/lib/hooks/useBranding";
-import { useGetCoreConfigQuery, useGetVersionQuery, useLogoutMutation } from "@/lib/store";
+import { useGetVersionQuery, useLogoutMutation } from "@/lib/store";
 import { cn } from "@/lib/utils";
+import { useConsoleAuthEnabled } from "@enterprise/hooks/useConsoleConfig";
 import type { UserInfo } from "@enterprise/lib/store/utils/tokenManager";
 import { getUserInfo } from "@enterprise/lib/store/utils/tokenManager";
 import { BooksIcon, DiscordLogoIcon, GithubLogoIcon } from "@phosphor-icons/react";
@@ -132,7 +133,7 @@ export default function Topbar() {
 	const setMobileFilterSlot = useMobileFilterSlotRef();
 	const navigate = useNavigate();
 	const [logout] = useLogoutMutation();
-	const { data: coreConfig } = useGetCoreConfigQuery({});
+	const isAuthEnabled = useConsoleAuthEnabled();
 	// Shares the sidebar's RTK Query cache entry, so this costs no extra request.
 	const { data: version } = useGetVersionQuery();
 	const { resolvedTheme } = useTheme();
@@ -147,7 +148,6 @@ export default function Topbar() {
 		}
 	}, []);
 
-	const isAuthEnabled = coreConfig?.auth_config?.is_enabled || false;
 	const showUserPill = IS_ENTERPRISE && !!userInfo;
 	const canLogout = showUserPill || isAuthEnabled;
 
