@@ -20,7 +20,7 @@ func TestCursorRejectsAmbiguousIDs(t *testing.T) {
 
 func TestPresetCatalogue(t *testing.T) {
 	codes := Permissions()
-	if len(codes) != 30 {
+	if len(codes) != 32 {
 		t.Fatal(len(codes))
 	}
 	seen := map[Permission]bool{}

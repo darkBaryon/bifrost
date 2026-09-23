@@ -735,6 +735,10 @@ GET /api/version
 GET /health
 
 @ rbac-service - none protocol
+POST /api/usage/list-templates
+POST /api/usage/create-template
+POST /api/usage/update-template
+POST /api/usage/delete-template
 POST /api/accounts/get-roles
 POST /api/accounts/set-roles
 POST /api/permissions/list

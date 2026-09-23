@@ -17,6 +17,7 @@ const (
 	ModuleNotifications    ModuleCode = "Notifications"
 	ModuleUsers            ModuleCode = "Users"
 	ModuleSecurity         ModuleCode = "Security"
+	ModuleUsage            ModuleCode = "Usage"
 )
 
 // Module 表示一个功能模块，包含模块名称和它下面的权限项。
@@ -89,6 +90,10 @@ func Catalogue() []Module {
 		{Code: ModuleSecurity, Name: "安全", Permissions: []PermissionDefinition{
 			{Code: SecurityChangeCredentialDestination, Name: "允许将已有凭据用于新地址", Available: true},
 		}},
+		{Code: ModuleUsage, Name: "个人额度", Permissions: []PermissionDefinition{
+			{Code: UsageView, Name: "查看", Available: true},
+			{Code: UsageManage, Name: "管理", Available: true},
+		}},
 		{Code: ModuleUsers, Name: "账号与角色", Permissions: []PermissionDefinition{
 			{Code: UsersView, Name: "查看", Available: true},
 			{Code: UsersManage, Name: "管理", Available: true},
@@ -99,6 +104,10 @@ func Catalogue() []Module {
 // 下面按模块列出权限标识和用途；哪些接口使用这些权限，由各模块接入时决定。
 // 查看、管理和敏感操作分别授权；有管理权限，不代表能查看或执行敏感操作。
 const (
+	// 个人额度：查看和管理分别授权，当前只提供模板管理。
+	UsageView   Permission = "Usage.View"
+	UsageManage Permission = "Usage.Manage"
+
 	// 模型与厂商：网关连接的模型服务商、模型及厂商密钥。
 	ModelProviderView      Permission = "ModelProvider.View"      // 查看厂商、模型和密钥列表，不含完整密钥。
 	ModelProviderManage    Permission = "ModelProvider.Manage"    // 新增、修改和删除厂商、模型及密钥配置。

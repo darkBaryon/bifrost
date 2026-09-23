@@ -106,7 +106,7 @@ func TestOptionalHandlerRegistrationProfiles(t *testing.T) {
 	}
 }
 
-// 除已批准的metrics修复和新增账号删除路由外，原规则应与固定候选b38493b07一致。
+// 除已批准的metrics修复、新增账号删除路由和Usage模板路由外，原规则应与固定候选b38493b07一致。
 func TestRouteSourceDigest(t *testing.T) {
 	var rows []string
 	for _, r := range manifest() {
@@ -132,7 +132,7 @@ func TestRouteSourceDigest(t *testing.T) {
 	}
 	sort.Strings(rows)
 	digest := fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(rows, "\n")+"\n")))
-	if len(rows) != 820 || digest != "ca9738de0eaa3c8eca2d4d4d6b2b551509b837c8962089aeea5bf73318311475" {
+	if len(rows) != 824 || digest != "11bee4b08cbb1fbda9c266ae3ae3ed56bd7c76b5cd8f2663cf01b13476f1686c" {
 		t.Fatalf("route source drift: count=%d digest=%s", len(rows), digest)
 	}
 }

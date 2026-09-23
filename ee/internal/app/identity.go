@@ -17,6 +17,8 @@ import (
 	rbachost "github.com/darkBaryon/bifrost/ee/internal/rbac/host"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	rbacstore "github.com/darkBaryon/bifrost/ee/internal/rbac/persistence"
+	usagehttp "github.com/darkBaryon/bifrost/ee/internal/usage/http"
+	usagestore "github.com/darkBaryon/bifrost/ee/internal/usage/persistence"
 	"github.com/maximhq/bifrost/core/schemas"
 	bifrostServer "github.com/maximhq/bifrost/transports/bifrost-http/server"
 )
@@ -71,6 +73,9 @@ func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer
 	if err = host.Config.ConfigStore.RunMigration(ctx, rbacstore.MigrateRBAC(log)); err != nil {
 		return nil, nil, errors.New("EE RBAC migration failed")
 	}
+	if err = host.Config.ConfigStore.RunMigration(ctx, usagestore.MigrateTemplates(log)); err != nil {
+		return nil, nil, errors.New("EE usage migration failed")
+	}
 	svc, permissions, err := newConsoleServices(host.Config.ConfigStore.DB(), options, log)
 	if err != nil {
 		return nil, nil, err
@@ -82,7 +87,9 @@ func assembleIdentity(ctx context.Context, host *bifrostServer.BifrostHTTPServer
 	if err != nil {
 		return nil, nil, err
 	}
-	routes := rbachttp.NewHandler(permissions, svc.Session, handler)
+	identityStore := persistence.NewStore(host.Config.ConfigStore.DB(), log)
+	templates := usagestore.NewStore(identityStore.ReadWithin, identityStore.Within)
+	routes := consoleRoutes{rbachttp.NewHandler(permissions, svc.Session, handler), usagehttp.NewHandler(templates, svc.Session, handler)}
 	permissionsAdapter := rbachost.NewAdapter(permissions, host.Config, log)
 	adapter := eehost.NewAuthAdapter(host, svc.Session, handler, eehost.WithAdditionalRoutes(routes), eehost.WithRecoveryAnchor(svc.Account.RecoveryAnchor), eehost.WithConsoleAccess(permissionsAdapter))
 	return adapter, permissionsAdapter, nil
