@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,7 @@ func (testLog) Error(string, ...any) {}
 func testDatabase(t *testing.T) func() *gorm.DB {
 	t.Helper()
 	dsn := filepath.Join(t.TempDir(), "templates.db") + "?_busy_timeout=1000&_journal_mode=WAL"
+	expectedSchema := ""
 	dialect := func() gorm.Dialector { return sqlite.Open(dsn) }
 	switch os.Getenv("USAGE_TEST_DATABASE") {
 	case "", "sqlite":
@@ -49,17 +51,14 @@ func testDatabase(t *testing.T) func() *gorm.DB {
 		admin, e := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 		require.NoError(t, e)
 		schema := fmt.Sprintf("usage_%d", time.Now().UnixNano())
+		expectedSchema = schema
 		require.NoError(t, admin.Exec("CREATE SCHEMA "+schema).Error)
 		t.Cleanup(func() {
 			require.NoError(t, admin.Exec("DROP SCHEMA "+schema+" CASCADE").Error)
 			conn, _ := admin.DB()
 			require.NoError(t, conn.Close())
 		})
-		if strings.Contains(dsn, "?") {
-			dsn += "&search_path=" + schema
-		} else {
-			dsn += " search_path=" + schema
-		}
+		dsn = isolatedDSN(dsn, schema)
 		dialect = func() gorm.Dialector { return postgres.Open(dsn) }
 	default:
 		t.Fatal("unknown database mode")
@@ -67,11 +66,39 @@ func testDatabase(t *testing.T) func() *gorm.DB {
 	return func() *gorm.DB {
 		db, e := gorm.Open(dialect(), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 		require.NoError(t, e)
+		if expectedSchema != "" {
+			var currentSchema string
+			require.NoError(t, db.Raw("SELECT current_schema()").Scan(&currentSchema).Error)
+			require.Equal(t, expectedSchema, currentSchema)
+		}
 		conn, e := db.DB()
 		require.NoError(t, e)
 		t.Cleanup(func() { _ = conn.Close() })
 		return db
 	}
+}
+
+// isolatedDSN 对 URI 覆盖 search_path；keyword DSN 追加同名参数，让 pgx 的后值覆盖旧值。
+// 这样即使运行者传入了公共 search_path，合同测试也只能使用本次新建的 schema。
+func isolatedDSN(raw, schema string) string {
+	if parsed, err := url.Parse(raw); err == nil && parsed.Scheme != "" {
+		query := parsed.Query()
+		query.Set("search_path", schema)
+		parsed.RawQuery = query.Encode()
+		return parsed.String()
+	}
+	return strings.TrimSpace(raw) + " search_path=" + schema
+}
+
+func TestIsolatedDSNReplacesSearchPath(t *testing.T) {
+	uri := isolatedDSN("postgresql://127.0.0.1/db?sslmode=disable&search_path=public", "usage_test")
+	parsed, err := url.Parse(uri)
+	require.NoError(t, err)
+	require.Equal(t, "usage_test", parsed.Query().Get("search_path"))
+	keyword := isolatedDSN("host=127.0.0.1 dbname=db search_path=public", "usage_test")
+	require.Equal(t, "host=127.0.0.1 dbname=db search_path=public search_path=usage_test", keyword)
+	quoted := isolatedDSN(`host=127.0.0.1 password='has spaces' search_path= 'public, pg_temp'`, "usage_test")
+	require.Equal(t, `host=127.0.0.1 password='has spaces' search_path= 'public, pg_temp' search_path=usage_test`, quoted)
 }
 
 func TestTemplatesContract(t *testing.T) {
@@ -176,15 +203,40 @@ func TestTemplatesContract(t *testing.T) {
 	expect("delete-template", remove, admin.Token, 409)
 	// 同一版本并发写入，只能一个成功；相同内容成功写入也递增版本。
 	var wg sync.WaitGroup
-	statuses := make(chan int, 2)
+	type concurrentResult struct {
+		status       int
+		cacheControl string
+		err          error
+	}
+	callConcurrent := func(action, body, token string) concurrentResult {
+		req, err := http.NewRequest("POST", "http://"+listener.Addr().String()+"/api/usage/"+action, strings.NewReader(body))
+		if err != nil {
+			return concurrentResult{err: err}
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Origin", "http://localhost")
+		req.AddCookie(&http.Cookie{Name: authhttp.CookieName, Value: token})
+		resp, err := client.Do(req)
+		if err != nil {
+			return concurrentResult{err: err}
+		}
+		defer resp.Body.Close()
+		_, err = io.ReadAll(resp.Body)
+		return concurrentResult{status: resp.StatusCode, cacheControl: resp.Header.Get("Cache-Control"), err: err}
+	}
+	results := make(chan concurrentResult, 2)
 	for range 2 {
 		wg.Go(func() {
-			status, _ := call("update-template", strings.Replace(update, `"expected_version":1`, `"expected_version":2`, 1), admin.Token)
-			statuses <- status
+			results <- callConcurrent("update-template", strings.Replace(update, `"expected_version":1`, `"expected_version":2`, 1), admin.Token)
 		})
 	}
 	wg.Wait()
-	require.ElementsMatch(t, []int{200, 409}, []int{<-statuses, <-statuses})
+	concurrent := []concurrentResult{<-results, <-results}
+	for _, result := range concurrent {
+		require.NoError(t, result.err)
+		require.Equal(t, "no-store", result.cacheControl)
+	}
+	require.ElementsMatch(t, []int{200, 409}, []int{concurrent[0].status, concurrent[1].status})
 	// 重建连接和Store后读取，不能依赖处理器缓存。
 	rebound := authstore.NewStore(connect(), testLog{})
 	rows, _, e := usagestore.NewStore(rebound.ReadWithin, rebound.Within).List(ctx, admin.Principal, "", 20)
