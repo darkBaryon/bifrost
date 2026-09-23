@@ -1,0 +1,48 @@
+# 一期实施完成后使用；当前未实施，不能声称预飞全绿。
+必过命令:
+- name: docs
+  run: python3 workbench/tools/build_views.py --check
+- name: whitespace
+  run: git diff --check
+- name: format
+  run: gofmt -l ee/internal/usage ee/internal/app/identity.go ee/internal/rbac/permissions.go
+  expect_empty: true
+- name: vet
+  run: cd ee && GOWORK=off go vet ./...
+- name: tests
+  run: cd ee && GOWORK=off go test -p 1 -race -count=1 ./...
+- name: build
+  run: cd ee && GOWORK=off go build -p 1 -o tmp/bifrost-http ./cmd/bifrost-http
+- name: upstream-unchanged
+  run: git diff d93fa8ad2082c716f76c55720b2272e718a7f649 -- core framework plugins transports ui
+  expect_empty: true
+- name: postgres-contract
+  run: 'bash -o pipefail -c ''set -eu
+
+    : "${USAGE_TEST_POSTGRES_DSN:?需要本任务隔离PostgreSQL}"
+
+    test "${USAGE_TEST_POSTGRES_ISOLATED:-}" = 1
+
+    cd ee
+
+    USAGE_TEST_DATABASE=postgres GOWORK=off go test -p 1 -race -count=1 -v ./internal/usage/http -run ''"''"''^TestTemplatesContract$''"''"''
+    | awk ''"''"''/^--- PASS: TestTemplatesContract / {seen=1} {print} END {if (!seen) exit 1}''"''"''
+
+    '''
+必存产物:
+- ee/internal/usage/templates.go
+- ee/internal/usage/persistence/templates.go
+- ee/internal/usage/persistence/migration.go
+- ee/internal/usage/http/templates.go
+- ee/internal/usage/README.md
+必含符号:
+- grep: func TestTemplatesContract(
+  in: ee/internal/usage/http
+禁留标记: []
+收敛评审:
+  风险等级: L3
+  基线: d93fa8ad2082c716f76c55720b2272e718a7f649
+  开发指南:
+  - product/需求/资源治理/方案讨论.md
+  - workbench/cases/按人用量与额度/开发蓝图.md
+  - workbench/cases/按人用量与额度/期1/方案v2.md
