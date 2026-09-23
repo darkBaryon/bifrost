@@ -148,7 +148,7 @@ def check(args):
              "ui/lib/types/console.ts", "ui/app/_fallbacks/enterprise/hooks/useConsoleConfig.ts",
              "ee/ui/app/enterprise/hooks/useConsoleConfig.ts", TEST_CONFIG}
     formats = [source / n for n in source_files(repo) if (n in owned or "console-bootstrap" in n
-               or n.startswith("ee/ui/app/enterprise/hooks/"))
+               or n.startswith("ee/ui/app/enterprise/hooks/") or n.startswith("ee/ui/tests/console/"))
                and Path(n).suffix in {".ts", ".tsx", ".mts", ".json"}]
     if formats:
         run([modules / ".bin/oxfmt", "--check", *formats], source / "ui", root, "format", env)

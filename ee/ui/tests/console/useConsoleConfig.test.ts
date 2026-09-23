@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/utils/port", () => ({ getApiBaseUrl: () => "http://console.test/api" }));
 
 import { bootstrapEndpoint, coreConfigFixture, jsonResponse, renderHookValue, setupConsoleStore } from "./consoleTestHarness";
-import { CONSOLE_ONBOARDING_ENABLED, useConsoleAuthEnabled, useConsoleConfigQuery } from "./useConsoleConfig";
+import { CONSOLE_ONBOARDING_ENABLED, useConsoleAuthEnabled, useConsoleConfigQuery } from "@enterprise/hooks/useConsoleConfig";
 
 const bootstrapData = { is_db_connected: true, is_logs_connected: false, env_label: "EE", restart_required: { required: true } };
 
@@ -94,12 +94,12 @@ describe("EE 基础信息查询", () => {
 		expect(requests).toHaveLength(1);
 	});
 
-	it("EE 退出开关来自会话状态，不读取完整配置；旧向导关闭", async () => {
-		const { store, requests } = setupConsoleStore(() => jsonResponse({ is_auth_enabled: true, has_valid_token: true }));
+	// 服务器渲染不执行 effect，hook 不会自行发请求；“不自动请求完整配置”由浏览器冒烟验证。
+	it("EE 退出开关来自会话状态；旧向导关闭", async () => {
+		const { store } = setupConsoleStore(() => jsonResponse({ is_auth_enabled: true, has_valid_token: true }));
 		expect(renderHookValue(store, useConsoleAuthEnabled)).toBe(false);
 		await store.dispatch(sessionApi.endpoints.isAuthEnabled.initiate()).unwrap();
 		expect(renderHookValue(store, useConsoleAuthEnabled)).toBe(true);
-		expect(requests.map((request) => request.url)).toEqual(["http://console.test/api/session/is-auth-enabled"]);
 		expect(CONSOLE_ONBOARDING_ENABLED).toBe(false);
 	});
 });

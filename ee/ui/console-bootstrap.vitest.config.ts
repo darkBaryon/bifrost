@@ -32,7 +32,7 @@ export default defineConfig({
 	},
 	define: { "process.env.BIFROST_IS_ENTERPRISE": JSON.stringify("true") },
 	test: {
-		include: ["../ee/ui/app/enterprise/hooks/*.test.{ts,tsx}"],
+		include: ["../ee/ui/tests/console/*.test.{ts,tsx}"],
 		environment: "node",
 	},
 });

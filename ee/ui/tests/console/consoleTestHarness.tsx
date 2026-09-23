@@ -7,8 +7,8 @@ import type { ApiEndpointQuery, BaseQueryFn, QueryDefinition } from "@reduxjs/to
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Provider } from "react-redux";
-import { afterEach, vi } from "vitest";
-import "./useConsoleConfig";
+import { onTestFinished, vi } from "vitest";
+import "@enterprise/hooks/useConsoleConfig";
 
 type BootstrapDefinition = QueryDefinition<void, BaseQueryFn, "Config", ConsoleConfig, "api">;
 // 生产 API 保持私有；测试只取得注册后的真实端点，避免额外导出测试专用入口。
@@ -39,7 +39,9 @@ export function setupConsoleStore(respond: (request: Request) => Response | Prom
 		reducer: { [baseApi.reducerPath]: baseApi.reducer },
 		middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(baseApi.middleware),
 	});
-	afterEach(() => store.dispatch(baseApi.util.resetApiState()));
+	onTestFinished(() => {
+		store.dispatch(baseApi.util.resetApiState());
+	});
 	return { store, requests };
 }
 
