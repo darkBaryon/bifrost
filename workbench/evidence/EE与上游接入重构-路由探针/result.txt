@@ -1,0 +1,28 @@
+=== RUN   TestSevenMethodRegistrar
+    registrar_test.go:82: real *router.Router satisfies seven-method interface; GET POST PUT DELETE PATCH HEAD CUSTOM all pass decorator.Handle
+--- PASS: TestSevenMethodRegistrar (0.00s)
+=== RUN   TestDirectHandlersAndOptionalAliases
+    registrar_test.go:101: /api/items: no credential=403 valid credential=200 policy=console.read template=/api/items/{id?}
+    registrar_test.go:101: /api/items/42: no credential=403 valid credential=200 policy=console.read template=/api/items/{id?}
+    registrar_test.go:105: POST /oauth2/token: no console credential=200 policy=protocol-owned (direct handler still bound)
+--- PASS: TestDirectHandlersAndOptionalAliases (0.00s)
+=== RUN   TestUnknownPolicyFailsStartupValidation
+    registrar_test.go:114: startup validation rejected: unclassified route: GET /api/new-capability; unclassified handler not registered
+--- PASS: TestUnknownPolicyFailsStartupValidation (0.00s)
+=== RUN   TestUIWildcardVersusNotFoundFallback
+    registrar_test.go:152: GET  /api/widgets             wildcard=200 fallback=200
+    registrar_test.go:152: POST /api/widgets             wildcard=405 fallback=405
+    registrar_test.go:152: GET  /api/missing             wildcard=200 fallback=404
+    registrar_test.go:152: POST /api/missing             wildcard=405 fallback=404
+    registrar_test.go:152: GET  /workspace/providers     wildcard=200 fallback=200
+    registrar_test.go:152: POST /workspace/providers     wildcard=405 fallback=404
+    registrar_test.go:152: HEAD /api/missing             wildcard=405 fallback=404
+    registrar_test.go:152: GET  /api                     wildcard=200 fallback=404
+    registrar_test.go:152: GET  /apiary                  wildcard=200 fallback=200
+--- PASS: TestUIWildcardVersusNotFoundFallback (0.00s)
+=== RUN   TestLookupIsNotTemplateIdentity
+    registrar_test.go:164: Lookup(GET, /models/{tail:*}) selected sibling /models/{model} handler; Lookup is request-path matching, not pattern identity
+    registrar_test.go:167: Lookup(GET, /numeric/{id:[0-9]+}) returned nil
+--- PASS: TestLookupIsNotTemplateIdentity (0.00s)
+PASS
+ok  	example.com/bifrost-route-registrar-probe	0.609s

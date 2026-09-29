@@ -4,8 +4,8 @@ package persistence
 import (
 	"testing"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth/hasher"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
 	"github.com/maximhq/bifrost/framework/migrator"
@@ -37,7 +37,7 @@ func rejectBindings(t *testing.T, db *gorm.DB) func() {
 func TestFirstBindingDatabaseFailure(t *testing.T) {
 	for _, legacy := range []bool{false, true} {
 		t.Run(map[bool]string{true: "bootstrap-legacy", false: "initialize"}[legacy], func(t *testing.T) {
-			db := database(t)
+			db := testDatabase(t)
 			must(t, MigrateRBAC(testLog{})(ctx, db))
 			f := compose(t, db)
 			hash, e := (hasher.Bcrypt{}).Hash(password)
@@ -64,7 +64,7 @@ func TestFirstBindingDatabaseFailure(t *testing.T) {
 			}
 			clear()
 			must(t, attempt())
-			session, e := f.auth.Session.Login(ctx, "admin", password, "peer")
+			session, e := f.login.Login(ctx, "admin", password, "peer")
 			must(t, e)
 			access, e := f.rb.Snapshot(ctx, policy.Subject(session.Principal))
 			must(t, e)
@@ -93,7 +93,7 @@ func TestRecoveryBindingDatabaseFailure(t *testing.T) {
 	if before.PasswordHash != after.PasswordHash || before.AuthVersion != after.AuthVersion || before.Status != after.Status {
 		t.Fatal("failed recovery changed identity")
 	}
-	_, e = f.auth.Session.Authenticate(ctx, f.admin.Token)
+	_, e = f.login.Authenticate(ctx, f.admin.Token)
 	must(t, e)
 	events, e := f.store.Events(ctx, "", identity.Cursor{}, 100)
 	must(t, e)
@@ -107,19 +107,19 @@ func TestRecoveryBindingDatabaseFailure(t *testing.T) {
 	}
 	clear()
 	must(t, f.auth.Password.RecoverAdmin(ctx, "Recovered-password-2"))
-	session, e := f.auth.Session.Login(ctx, "admin", "Recovered-password-2", "peer")
+	session, e := f.login.Login(ctx, "admin", "Recovered-password-2", "peer")
 	must(t, e)
 	access, e = f.rb.Snapshot(ctx, policy.Subject(session.Principal))
 	must(t, e)
 	if !access.Chief || len(access.RoleIDs) != 2 {
 		t.Fatal("recovery retry lost existing role")
 	}
-	_, e = f.auth.Session.Authenticate(ctx, f.admin.Token)
+	_, e = f.login.Authenticate(ctx, f.admin.Token)
 	want(t, e, identity.ErrUnauthorized)
 }
 
 func TestMigrationInterruptedWriteCanRetry(t *testing.T) {
-	db := database(t)
+	db := testDatabase(t)
 	triggered := false
 	must(t, db.Callback().Create().Before("gorm:create").Register("rbac:interrupt-seed", func(tx *gorm.DB) {
 		if tx.Statement.Table == "ee_rbac_role_permissions" {
@@ -167,7 +167,7 @@ func TestPermissionQueryFailureDoesNotDowngradeOrCommit(t *testing.T) {
 	if len(page.Items) != 0 {
 		t.Fatal("permission query failure downgraded to self events")
 	}
-	_, e = f.auth.Session.IssueTicket(ctx, f.admin.Principal)
+	_, e = f.tickets.IssueTicket(ctx, f.admin.Principal)
 	want(t, e, identity.ErrUnavailable)
 	_, e = f.auth.Password.ResetPassword(ctx, f.admin.Principal, member.Account.ID, "2c6585f2-857c-4c27-a0c0-8ee0ff0f1002")
 	want(t, e, identity.ErrUnavailable)
@@ -181,6 +181,6 @@ func TestPermissionQueryFailureDoesNotDowngradeOrCommit(t *testing.T) {
 	if len(eventsAfter) != len(eventsBefore) {
 		t.Fatal("storage failure committed business failure event")
 	}
-	_, e = f.auth.Session.Authenticate(ctx, member.Token)
+	_, e = f.login.Authenticate(ctx, member.Token)
 	must(t, e)
 }

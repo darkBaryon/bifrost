@@ -5,14 +5,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	authentication "github.com/darkBaryon/bifrost/ee/internal/auth"
+	loginstore "github.com/darkBaryon/bifrost/ee/internal/auth/persistence"
+	"github.com/darkBaryon/bifrost/ee/internal/host"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
+	sessionstore "github.com/darkBaryon/bifrost/ee/internal/session/persistence"
 	"os"
 	"path/filepath"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth/hasher"
 	auth "github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	authstore "github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
@@ -27,18 +32,21 @@ type testLog struct{}
 func (testLog) Error(string, ...any) {}
 
 type fixture struct {
-	db    *gorm.DB
-	auth  *auth.Services
-	rb    *rbac.Service
-	admin auth.IssuedSession
-	store *authstore.Store
+	login    *authentication.Service
+	sessions *session.Service
+	tickets  *host.Tickets
+	db       *gorm.DB
+	auth     *auth.Services
+	rb       *rbac.Service
+	admin    authentication.LoginResult
+	store    *authstore.Store
 }
 
 var ctx = context.Background()
 
 const password = "Admin-password-1"
 
-func database(t *testing.T) *gorm.DB {
+func testDatabase(t *testing.T) *gorm.DB {
 	t.Helper()
 	cfg := &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)}
 	var db *gorm.DB
@@ -75,19 +83,20 @@ func compose(t *testing.T, db *gorm.DB) *fixture {
 		return policy.NewPolicy(rbac.New(Bind(tx, v))), nil
 	}))
 	rb := rbac.New(NewStore(store.ReadWithin, store.Within))
-	svc, e := auth.New(store, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, policy.NewPolicy(rb))
+	login, sessions, passwords := newLogin(t, db)
+	svc, e := auth.New(store, passwords, auth.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, policy.NewPolicy(rb), sessions)
 	must(t, e)
-	return &fixture{db: db, auth: svc, rb: rb, store: store}
+	return &fixture{db: db, auth: svc, rb: rb, store: store, login: login, sessions: sessions, tickets: host.NewTickets(db, login, sessions, rb, testLog{})}
 }
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
-	db := database(t)
+	db := testDatabase(t)
 	must(t, MigrateRBAC(testLog{})(ctx, db))
 	f := compose(t, db)
 	_, e := f.auth.Account.Initialize(ctx, "setup", "admin", password)
 	must(t, e)
-	f.admin, e = f.auth.Session.Login(ctx, "admin", password, "admin")
+	f.admin, e = f.login.Login(ctx, "admin", password, "admin")
 	must(t, e)
 	return f
 }
@@ -101,19 +110,19 @@ func must(t *testing.T, e error) {
 
 func want(t *testing.T, e, expected error) {
 	t.Helper()
-	if !errors.Is(e, expected) {
+	if !errors.Is(e, expected) && !errors.Is(auth.SafeError(e), expected) && !errors.Is(policy.PermissionError(auth.SafeError(e)), expected) {
 		t.Fatalf("got %v, want %v", e, expected)
 	}
 }
 
-func (f *fixture) member(t *testing.T, name string) auth.IssuedSession {
+func (f *fixture) member(t *testing.T, name string) authentication.LoginResult {
 	t.Helper()
 	_, e := f.auth.Account.CreateAccount(ctx, f.admin.Principal, name, "")
 	must(t, e)
-	session, e := f.auth.Session.Login(ctx, name, "123456", name)
+	session, e := f.login.Login(ctx, name, "123456", name)
 	must(t, e)
 	must(t, f.auth.Password.ChangePassword(ctx, session.Principal, "123456", password))
-	session, e = f.auth.Session.Login(ctx, name, password, name)
+	session, e = f.login.Login(ctx, name, password, name)
 	must(t, e)
 	return session
 }
@@ -140,7 +149,7 @@ func TestRolesAndIdentityPolicy(t *testing.T) {
 	must(t, e)
 	_, e = f.auth.Account.CreateAccount(ctx, member.Principal, "denied", "")
 	want(t, e, auth.ErrForbidden)
-	_, e = f.auth.Session.IssueTicket(ctx, member.Principal)
+	_, e = f.tickets.IssueTicket(ctx, member.Principal)
 	want(t, e, auth.ErrForbidden)
 	want(t, f.rb.DeleteRole(ctx, admin, role.ID), rbac.ErrConflict)
 	old := role
@@ -154,11 +163,11 @@ func TestRolesAndIdentityPolicy(t *testing.T) {
 	_, e = f.auth.Account.ListAccounts(ctx, member.Principal, "", 20)
 	want(t, e, auth.ErrForbidden)
 	// 有通知权限的普通账号可以建立连接，票据仍然只能用一次。
-	ticket, e := f.auth.Session.IssueTicket(ctx, member.Principal)
+	ticket, e := f.tickets.IssueTicket(ctx, member.Principal)
 	must(t, e)
-	_, e = f.auth.Session.ConsumeTicket(ctx, ticket)
+	_, e = f.tickets.ConsumeTicket(ctx, ticket)
 	must(t, e)
-	_, e = f.auth.Session.ConsumeTicket(ctx, ticket)
+	_, e = f.tickets.ConsumeTicket(ctx, ticket)
 	want(t, e, auth.ErrUnauthorized)
 	_, e = f.rb.SetAccountRoles(ctx, admin, member.Account.ID, []rbac.RoleID{})
 	must(t, e)
@@ -192,7 +201,7 @@ func TestLastChiefAndRecovery(t *testing.T) {
 	must(t, MigrateRBAC(testLog{})(ctx, f.db))
 	must(t, RequireComplete(ctx, f.db))
 	must(t, f.auth.Password.RecoverAdmin(ctx, "Recovered-password-1"))
-	session, e := f.auth.Session.Login(ctx, "admin", "Recovered-password-1", "recovered")
+	session, e := f.login.Login(ctx, "admin", "Recovered-password-1", "recovered")
 	must(t, e)
 	a, e := f.rb.Snapshot(ctx, policy.Subject(session.Principal))
 	must(t, e)
@@ -204,16 +213,17 @@ func TestLastChiefAndRecovery(t *testing.T) {
 }
 
 func TestUpgradeSeedsOnlyOnce(t *testing.T) {
-	db := database(t)
+	db := testDatabase(t)
 	store := authstore.NewStore(db, testLog{})
-	svc, e := auth.New(store, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
+	login, sessions, passwords := newLogin(t, db)
+	svc, e := auth.New(store, passwords, auth.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil, sessions)
 	must(t, e)
 	_, e = svc.Account.Initialize(ctx, "setup", "admin", password)
 	must(t, e)
 	want(t, RequireComplete(ctx, db), rbac.ErrUnavailable)
 	must(t, MigrateRBAC(testLog{})(ctx, db))
 	f := compose(t, db)
-	session, e := svc.Session.Login(ctx, "admin", password, "admin")
+	session, e := login.Login(ctx, "admin", password, "admin")
 	must(t, e)
 	p := policy.Subject(session.Principal)
 	a, e := f.rb.Snapshot(ctx, p)
@@ -260,4 +270,14 @@ func TestChiefPermissionsRemainDerived(t *testing.T) {
 	if len(effective.Permissions) != len(rbac.Permissions()) {
 		t.Fatal("chief lost effective permissions")
 	}
+}
+
+func newLogin(t *testing.T, db *gorm.DB) (*authentication.Service, *session.Service, *authentication.Passwords) {
+	t.Helper()
+	sessions, e := session.New(sessionstore.NewStore(db), session.DefaultTTL)
+	must(t, e)
+	passwords := authentication.NewPasswords(hasher.Bcrypt{})
+	login, e := authentication.New(db, loginstore.NewStore(db, testLog{}), sessions, passwords, testLog{})
+	must(t, e)
+	return login, sessions, passwords
 }

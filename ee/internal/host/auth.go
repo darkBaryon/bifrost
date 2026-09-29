@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	authhttp "github.com/darkBaryon/bifrost/ee/internal/auth/http"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
-	"github.com/fasthttp/router"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/temptoken"
@@ -24,13 +26,15 @@ import (
 
 type principalKey struct{}
 
-// consoleSessions 列出Bifrost接口所需的登录检查和账号查询，由身份模块的SessionService提供。
-type consoleSessions interface {
-	Authenticate(context.Context, string) (identity.Principal, error)
-	ValidateSession(context.Context, string) (identity.Principal, error)
-	RequireAccountManager(context.Context, identity.Principal) error
-	ConsumeTicket(context.Context, string) (identity.Principal, error)
-	Me(context.Context, identity.Principal) (identity.Account, error)
+// consoleAuthentication 提供宿主所需的认证读取；权限和票据分别通过独立依赖调用。
+type consoleAuthentication interface {
+	Authenticate(context.Context, string) (session.Principal, error)
+	Me(context.Context, session.Principal) (auth.User, error)
+}
+
+// ticketConsumer 在当前业务事务内消费握手票据并复验身份及通知权限。
+type ticketConsumer interface {
+	ConsumeTicket(context.Context, string) (session.Principal, error)
 }
 
 // legacyImporter 先查询系统是否已初始化，再按需导入旧管理员，由身份模块的AccountService提供。
@@ -39,37 +43,19 @@ type legacyImporter interface {
 	BootstrapLegacy(ctx context.Context, username, passwordHash string) error
 }
 
-// identityRoutes 用于注册身份接口，以及查询和检查控制台的访问来源，由身份HTTP处理器提供。
-type identityRoutes interface {
+// consoleOrigin 查询和检查控制台的访问来源，由 auth/http 的浏览器策略提供。
+type consoleOrigin interface {
 	Origin() string
 	SameOrigin(*fasthttp.RequestCtx) bool
-	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
 }
 
 // ConsoleAccess 检查已有管理接口的角色权限，并返回本次请求需要执行的前后处理。
 type ConsoleAccess interface {
-	Prepare(context.Context, *fasthttp.RequestCtx, identity.Principal) (schemas.BifrostHTTPMiddleware, error)
+	Prepare(context.Context, *fasthttp.RequestCtx, session.Principal) (schemas.BifrostHTTPMiddleware, error)
 }
 
-// WithConsoleAccess 接入角色权限组件；已接入接口检查失败时直接拒绝，不回退管理员检查。
-func WithConsoleAccess(access ConsoleAccess) AuthOption {
-	return func(a *AuthAdapter) { a.access = access }
-}
-
-// AdditionalRoutes 让角色等模块注册自己的接口，并告诉Bifrost哪些请求由该模块处理。
-// 匹配到的请求交给模块自己检查登录和权限。
-type AdditionalRoutes interface {
-	RegisterRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
-	OwnsRoute(string, string) bool
-}
-
-// AuthOption 用于创建AuthAdapter时传入额外配置，例如角色接口或管理员查询。
+// AuthOption 用于创建AuthAdapter时传入额外配置，例如管理接口授权或管理员查询。
 type AuthOption func(*AuthAdapter)
-
-// WithAdditionalRoutes 将角色等模块的接口加入同一个Bifrost应用。
-func WithAdditionalRoutes(routes AdditionalRoutes) AuthOption {
-	return func(a *AuthAdapter) { a.additional = routes }
-}
 
 // WithRecoveryAnchor 传入一个查询函数，用来查系统初始化时指定的管理员。
 // 供/api/config返回兼容认证信息；查询不返回密码，也不参与管理接口授权。
@@ -79,18 +65,19 @@ func WithRecoveryAnchor(lookup func(context.Context) (identity.Account, error)) 
 
 // AuthAdapter 将Bifrost的管理请求交给EE检查登录和权限；所需服务由app创建后传入。
 type AuthAdapter struct {
-	service    consoleSessions
-	http       identityRoutes
-	host       *server.BifrostHTTPServer
-	access     ConsoleAccess
-	additional AdditionalRoutes
-	anchor     func(context.Context) (identity.Account, error)
-	consoleLog ConsoleLogger
+	authentication consoleAuthentication
+	tickets        ticketConsumer
+	http           consoleOrigin
+	host           *server.BifrostHTTPServer
+	access         ConsoleAccess
+	anchor         func(context.Context) (identity.Account, error)
+	consoleLog     ConsoleLogger
 }
 
-// NewAuthAdapter 接收身份模块的登录检查、HTTP处理器和可选配置，供Bifrost注册和保护管理接口。
-func NewAuthAdapter(host *server.BifrostHTTPServer, sessions consoleSessions, handler identityRoutes, options ...AuthOption) *AuthAdapter {
-	a := &AuthAdapter{service: sessions, http: handler, host: host}
+// NewAuthAdapter 分别接收认证、票据消费、控制台来源和管理权限；模块接口由app分别注册。
+// 缺少任一必要依赖时，受保护请求返回不可用，不回退旧管理员策略。
+func NewAuthAdapter(host *server.BifrostHTTPServer, authentication consoleAuthentication, tickets ticketConsumer, origin consoleOrigin, access ConsoleAccess, options ...AuthOption) *AuthAdapter {
+	a := &AuthAdapter{authentication: authentication, tickets: tickets, http: origin, host: host, access: access}
 	for _, option := range options {
 		option(a)
 	}
@@ -185,15 +172,6 @@ func validateLegacyFile(appDir string) error {
 	return nil
 }
 
-// RegisterSessionRoutes 注册EE身份和基础状态接口，替换Bifrost旧会话接口；传入角色接口时也一起注册。
-func (a *AuthAdapter) RegisterSessionRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
-	a.http.RegisterRoutes(r, m...)
-	a.registerConsoleRoutes(r, m...)
-	if a.additional != nil {
-		a.additional.RegisterRoutes(r, m...)
-	}
-}
-
 // public 列出无需管理身份的 GET 入口：健康检查、版本、静态资源及各协议自行验证的 OAuth 发现路径。
 func public(method, path string) bool {
 	if method != fasthttp.MethodGet {
@@ -252,8 +230,9 @@ func (a *AuthAdapter) authorizeTemporary(c *fasthttp.RequestCtx) error {
 	return nil
 }
 
-// APIMiddleware 在Bifrost处理管理请求前检查登录；身份、角色和基础状态接口自行检查，公开接口直接放行。
-// 注入角色组件时按接口权限检查；未注入时沿用身份模块的管理员策略。原有临时令牌入口保持原规则。
+// APIMiddleware 在Bifrost处理管理请求前检查登录，公开接口直接放行。
+// 身份、角色和基础状态接口由app单独注册，不接入此中间件。
+// 管理权限由必需的角色组件检查；原有临时令牌入口保持原规则。
 // WebSocket连接会再次检查登录，配置接口还会限制旧认证字段的读写。
 func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 	return func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
@@ -263,91 +242,81 @@ func (a *AuthAdapter) APIMiddleware() schemas.BifrostHTTPMiddleware {
 			c.RemoveUserValue(principalKey{})
 			c.RemoveUserValue(handlers.WebSocketAuthorizeContextKey)
 			method, path := string(c.Method()), string(c.Path())
-			if public(method, path) || ownsConsoleRoute(method, path) || identityhttp.OwnsRoute(method, path) || (a.additional != nil && a.additional.OwnsRoute(method, path)) {
+			if public(method, path) {
 				next(c)
 				return
 			}
-			ctx := identityhttp.OperationContext(c, "console.authenticate")
-			if len(c.Request.Header.Peek("Authorization")) != 0 {
-				identityhttp.Error(c, identity.ErrUnauthorized)
+			if a.authentication == nil || a.tickets == nil || a.access == nil || a.http == nil {
+				writeConsoleError(c, identity.ErrUnavailable)
 				return
 			}
-			var p identity.Principal
+			ctx := httpx.OperationContext(c, "console.authenticate")
+			if len(c.Request.Header.Peek("Authorization")) != 0 {
+				writeConsoleError(c, identity.ErrUnauthorized)
+				return
+			}
+			var p session.Principal
 			var err error
 			if path == "/ws" {
 				// 握手比普通 POST 更严：浏览器发起 WebSocket 必然带 Origin，因此只接受精确 Origin，
 				// 不像 SameOrigin 那样接受同源 Referer 兜底（方案 4.5）。
 				if string(c.Request.Header.Peek("Origin")) != a.http.Origin() {
-					identityhttp.Error(c, identity.ErrForbidden)
+					writeConsoleError(c, identity.ErrForbidden)
 					return
 				}
 				if c.QueryArgs().Has("token") {
-					identityhttp.Error(c, identity.ErrUnauthorized)
+					writeConsoleError(c, identity.ErrUnauthorized)
 					return
 				}
 				if ticket := string(c.QueryArgs().Peek("ticket")); ticket != "" {
-					p, err = a.service.ConsumeTicket(ctx, ticket)
+					p, err = a.tickets.ConsumeTicket(ctx, ticket)
 				} else {
-					p, err = a.service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
+					p, err = a.authentication.Authenticate(ctx, string(c.Request.Header.Cookie(authhttp.CookieName)))
 				}
 			} else {
-				p, err = a.service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName)))
+				p, err = a.authentication.Authenticate(ctx, string(c.Request.Header.Cookie(authhttp.CookieName)))
 			}
 			var wrapper schemas.BifrostHTTPMiddleware
 			if err == nil {
-				if a.access != nil {
-					wrapper, err = a.access.Prepare(ctx, c, p)
-					if err == nil && wrapper == nil {
-						err = identity.ErrUnavailable
-					}
-				} else {
-					err = a.service.RequireAccountManager(ctx, p)
+				wrapper, err = a.access.Prepare(ctx, c, p)
+				if err == nil && wrapper == nil {
+					err = identity.ErrUnavailable
 				}
 			}
 			if err != nil {
-				if (errors.Is(err, identity.ErrUnauthorized) || errors.Is(err, identity.ErrForbidden)) && temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
+				if temporaryFallbackError(err) && temporaryRoute(method, path) && len(c.Request.Header.Peek("X-Bifrost-Temp-Token")) != 0 {
 					if err = a.authorizeTemporary(c); err == nil {
 						next(c)
 						return
 					}
 				}
-				identityhttp.Error(c, err)
+				writeConsoleError(c, err)
 				return
 			}
 			if method != fasthttp.MethodGet && method != fasthttp.MethodHead && method != fasthttp.MethodOptions && !a.http.SameOrigin(c) {
-				identityhttp.Error(c, identity.ErrForbidden)
+				writeConsoleError(c, identity.ErrForbidden)
 				return
 			}
 			c.SetUserValue(principalKey{}, p)
-			if wrapper == nil {
-				c.SetUserValue(schemas.IsLocalAdminContextKey, true)
-			}
-			if path == "/ws" && wrapper == nil {
-				sessionID := p.SessionID // 连接后还会检查登录，只保留会话编号，避免继续引用已结束的HTTP请求。
-				c.SetUserValue(handlers.WebSocketAuthorizeContextKey, func(ctx context.Context) error {
-					ctx = identity.WithDiagnosticOperation(ctx, "identity.websocket")
-					p, err := a.service.ValidateSession(ctx, sessionID)
-					if err != nil {
-						return err
-					}
-					return a.service.RequireAccountManager(ctx, p)
-				})
-			}
 			if path == "/api/config" && (method == fasthttp.MethodGet || method == fasthttp.MethodPut) {
-				configHandler := next
-				if wrapper != nil {
-					configHandler = wrapper(next)
-				}
-				a.serveConfig(ctx, c, p, configHandler)
+				a.serveConfig(ctx, c, p, wrapper(next))
 				return
 			}
-			if wrapper != nil {
-				wrapper(next)(c)
-			} else {
-				next(c)
-			}
+			wrapper(next)(c)
 		}
 	}
 }
 
-var _ server.ConsoleAuthProvider = (*AuthAdapter)(nil)
+func temporaryFallbackError(err error) bool {
+	return errors.Is(err, identity.ErrUnauthorized) || errors.Is(err, identity.ErrForbidden) ||
+		errors.Is(err, auth.ErrUnauthorized) || errors.Is(err, auth.ErrForbidden)
+}
+
+// writeConsoleError 同时接收旧账号接入和新认证服务的错误，保留既有客户端错误码。
+func writeConsoleError(c *fasthttp.RequestCtx, err error) {
+	var accountError identity.Error
+	if errors.As(err, &accountError) {
+		err = auth.Error(accountError)
+	}
+	authhttp.Error(c, err)
+}

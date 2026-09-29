@@ -6,18 +6,22 @@ EE 拥有独立 Go 模块和可执行入口，在同一进程中内嵌完整的 
 
 ## 代码结构
 
-现有后端已按 [EE 后端架构](../product/架构/EE后端架构.md) 迁移：按业务能力分模块，模块内部保留职责分层。
+后端按 [EE 后端架构](../product/架构/EE后端架构.md) 分批重构。auth/session 已独立接入；账号和其它模块继续按批迁移，不能把目标架构当成全部实现。
 
 | 路径 | 职责 |
 |---|---|
 | [cmd/bifrost-http/](cmd/bifrost-http/README.md) | 程序入口与 UI embed |
 | [internal/app/](internal/app/README.md) | 配置、依赖装配与启动接入 |
 | [internal/branding/](internal/branding/README.md) | 品牌业务；http/ 与 persistence/ 分别适配入口和存储 |
-| [internal/identity/](internal/identity/README.md) | 本地账号、会话、密码事件；http/、persistence/、hasher/ 分别适配入口、存储和 bcrypt |
+| [internal/identity/](internal/identity/README.md) | 尚未迁出的账号、密码业务及其 HTTP 入口 |
+| [internal/auth/](internal/auth/README.md) | 登录、身份复验、退出；http/ 认证入口，persistence/ 查询与登录元数据，hasher/ 密码算法 |
+| [internal/httpx/](internal/httpx/README.md) | 各 HTTP 入口共用的严格 JSON、错误响应与请求编号 |
+| [internal/session/](internal/session/README.md) | 会话与一次性票据生命周期，显式复用调用方事务 |
+| [internal/database/](internal/database/README.md) | 共享写事务、控制台写锁和 SQLite 整笔重试 |
 | [internal/pricing/](internal/pricing/README.md) | 国内厂商识别、价格换算与启动同步；persistence/ 适配上游定价覆盖和模型目录 |
 | [internal/guardrails/](internal/guardrails/README.md) | 内容安全：密钥规则检测器、DeepSeek 等模型判官、BF Chat Hook、配置表与 `POST /api/guardrails/*` 接口 |
 | [internal/rbac/](internal/rbac/README.md) | 角色、权限目录、账号角色分配及对应HTTP接口 |
-| [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、会话路由、WebSocket 重验、配置投影 |
+| [internal/host/](internal/host/README.md) | 把 EE 认证接到上游：管理路由鉴权、WebSocket 重验、配置投影 |
 | `ui/` | 自有前端，当前通过覆盖层与根目录 UI 共同构建 |
 | [Makefile](Makefile)、`scripts/` | 开发、构建与验证 |
 

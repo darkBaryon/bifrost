@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/mattn/go-sqlite3"
 	"gorm.io/driver/sqlite"
@@ -32,8 +33,8 @@ func captureDiagnostics(store *Store) *bytes.Buffer {
 func TestSafeDiagnostics(t *testing.T) {
 	s, store, db, admin := fixture(t)
 	output := captureDiagnostics(store)
-	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.change-password")
-	_, id := identity.DiagnosticOperation(ctx)
+	ctx := database.WithOperation(context.Background(), "identity.change-password")
+	_, id := database.Operation(ctx)
 	secret := "credential-that-must-never-be-logged"
 	db.Callback().Create().Before("gorm:create").Register("fail:diagnostics", func(tx *gorm.DB) {
 		if tx.Statement.Table == "ee_identity_password_events" {
@@ -113,7 +114,7 @@ func TestMigrationBusyExhaustionPreservesFailure(t *testing.T) {
 			tx.AddError(sqlite3.Error{Code: sqlite3.ErrBusy, ExtendedCode: sqlite3.ErrBusySnapshot})
 		}
 	})
-	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.bootstrap")
+	ctx := database.WithOperation(context.Background(), "identity.bootstrap")
 	if err = MigrateIdentity(logs)(ctx, db); !sqliteBusy(err) || attempts != 3 {
 		t.Fatalf("failure lost or retries unbounded: attempts=%d", attempts)
 	}

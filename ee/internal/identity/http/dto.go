@@ -1,4 +1,4 @@
-// 本文件定义身份接口的请求与响应结构并做业务类型转换，按 共同/会话/账号/密码 四段排列；业务类型本身不参与序列化。
+// 本文件定义身份接口的请求与响应结构并做业务类型转换，按共同、账号、密码分组；业务类型本身不参与序列化。
 package identityhttp
 
 import (
@@ -7,17 +7,8 @@ import (
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 )
 
-// ---- 共同：错误体、消息体、分页壳与空请求 ----
+// ---- 消息体与分页 ----
 // 请求结构：未知字段一律拒绝；limit 用指针区分省略（取默认）与显式 0（无效）。
-
-type errorDetail struct {
-	Code    string `json:"code"`
-	Message string `json:"message,omitempty"`
-}
-
-type errorResponse struct {
-	Error errorDetail `json:"error"`
-}
 
 type messageResponse struct {
 	Message string `json:"message"`
@@ -36,42 +27,11 @@ func optional(s string) *string {
 	return &s
 }
 
-type emptyRequest struct{}
-
 func pageLimit(v *int) int {
 	if v == nil {
 		return identity.DefaultPageSize
 	}
 	return *v
-}
-
-// ---- 会话线 ----
-
-// statusResponse 同时服务新旧登录页：has_valid_token 与 is_auth_enabled 是旧字段。
-type statusResponse struct {
-	Initialized        bool   `json:"initialized"`
-	AuthType           string `json:"auth_type"`
-	IsAuthEnabled      bool   `json:"is_auth_enabled"`
-	HasValidToken      bool   `json:"has_valid_token"`
-	HasValidSession    bool   `json:"has_valid_session"`
-	MustChangePassword bool   `json:"must_change_password"`
-}
-
-type loginResponse struct {
-	Message            string     `json:"message"`
-	Account            accountDTO `json:"account"`
-	MustChangePassword bool       `json:"must_change_password"`
-	ExpiresAt          time.Time  `json:"expires_at"`
-}
-
-type ticketResponse struct {
-	Ticket    string `json:"ticket"`
-	ExpiresIn int    `json:"expires_in"`
-}
-
-type loginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
 }
 
 // ---- 账号线 ----

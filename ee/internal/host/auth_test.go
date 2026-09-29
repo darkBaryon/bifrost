@@ -1,4 +1,4 @@
-// 本文件验证真实路由链的身份旁路、来源校验与配置回送兼容。
+// 本文件验证独立身份路由、管理接口鉴权、来源校验与配置回送兼容。
 package host
 
 import (
@@ -9,10 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
-	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	authhttp "github.com/darkBaryon/bifrost/ee/internal/auth/http"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/fasthttp/router"
 	core "github.com/maximhq/bifrost/core"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -22,46 +21,19 @@ import (
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/maximhq/bifrost/transports/bifrost-http/server"
 	"github.com/valyala/fasthttp"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-// quietLogger 丢弃存储诊断与导入提示；本文件的用例不断言日志。
-type quietLogger struct{}
-
-func (quietLogger) Error(string, ...any) {}
-func (quietLogger) Info(string, ...any)  {}
-
-func testAdapter(t *testing.T) (*AuthAdapter, identity.IssuedSession, *identity.Services) {
+// registerIdentityRoutes 显式装配EE身份路由和旧session兼容入口，不套管理接口认证。
+func registerIdentityRoutes(t *testing.T, a *AuthAdapter, r *router.Router) {
 	t.Helper()
-	db, e := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "auth.db")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
-	if e != nil {
-		t.Fatal(e)
+	h, ok := a.http.(*testHTTPRoutes)
+	if !ok {
+		t.Fatal("fixture does not provide account and authentication HTTP routes")
 	}
-	sql, _ := db.DB()
-	t.Cleanup(func() { sql.Close() })
-	ctx := context.Background()
-	if e = persistence.MigrateIdentity(quietLogger{})(ctx, db); e != nil {
-		t.Fatal(e)
-	}
-	s, e := identity.New(persistence.NewStore(db, quietLogger{}), hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, nil)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if _, e = s.Account.Initialize(ctx, "setup", "admin", "Admin-password-1"); e != nil {
-		t.Fatal(e)
-	}
-	v, e := s.Session.Login(ctx, "admin", "Admin-password-1", "peer")
-	if e != nil {
-		t.Fatal(e)
-	}
-	h, e := identityhttp.NewHandler(s, "https://app.example.test")
-	if e != nil {
-		t.Fatal(e)
-	}
-	return NewAuthAdapter(nil, s.Session, h), v, s
+	h.register(r)
+	verifyHostRoutes(t, a, r)
 }
+
 func request(r *router.Router, method, path, body, token, origin, auth string) *fasthttp.RequestCtx {
 	req := &fasthttp.Request{}
 	req.SetRequestURI(path)
@@ -69,7 +41,7 @@ func request(r *router.Router, method, path, body, token, origin, auth string) *
 	req.Header.SetContentType("application/json")
 	req.SetBodyString(body)
 	if token != "" {
-		req.Header.SetCookie(identityhttp.CookieName, token)
+		req.Header.SetCookie(authhttp.CookieName, token)
 	}
 	if origin != "" {
 		req.Header.Set("Origin", origin)
@@ -86,18 +58,19 @@ func TestAdminBoundary(t *testing.T) {
 	a, v, svc := testAdapter(t)
 	r := router.New()
 	m := a.APIMiddleware()
-	a.RegisterSessionRoutes(r, m)
-	r.POST("/api/protected", m(func(c *fasthttp.RequestCtx) {
+	registerIdentityRoutes(t, a, r)
+	r.POST("/api/governance/teams", m(func(c *fasthttp.RequestCtx) {
 		if c.UserValue(schemas.IsLocalAdminContextKey) != true {
 			t.Error("chief compatibility context absent")
 		}
 		c.SetStatusCode(204)
 	}))
+	verifyHostRoutes(t, a, r)
 	for _, tt := range []struct {
 		token, origin, auth string
 		code                int
 	}{{"", a.http.Origin(), "", 401}, {v.Token, "", "", 403}, {v.Token, "https://evil.example", "", 403}, {v.Token, a.http.Origin(), "Basic dGVzdA==", 401}, {v.Token, a.http.Origin(), "", 204}} {
-		c := request(r, "POST", "/api/protected", "{}", tt.token, tt.origin, tt.auth)
+		c := request(r, "POST", "/api/governance/teams", "{}", tt.token, tt.origin, tt.auth)
 		if c.Response.StatusCode() != tt.code {
 			t.Fatalf("status=%d expected=%d", c.Response.StatusCode(), tt.code)
 		}
@@ -119,11 +92,11 @@ func TestAdminBoundary(t *testing.T) {
 	if _, e := svc.Account.CreateAccount(context.Background(), v.Principal, "alice", ""); e != nil {
 		t.Fatal(e)
 	}
-	member, e := svc.Session.Login(context.Background(), "alice", "123456", "peer")
+	member, e := svc.Auth.Login(context.Background(), "alice", "123456", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
-	c = request(r, "POST", "/api/protected", "{}", member.Token, a.http.Origin(), "")
+	c = request(r, "POST", "/api/governance/teams", "{}", member.Token, a.http.Origin(), "")
 	if c.Response.StatusCode() != 403 {
 		t.Fatal("member elevated")
 	}
@@ -131,7 +104,7 @@ func TestAdminBoundary(t *testing.T) {
 	if c.Response.StatusCode() != 200 {
 		t.Fatal("legacy empty logout failed")
 	}
-	if _, e = a.service.Authenticate(context.Background(), v.Token); e != identity.ErrUnauthorized {
+	if _, e = a.authentication.Authenticate(context.Background(), v.Token); e != auth.ErrUnauthorized {
 		t.Fatal("logout failed to revoke")
 	}
 }
@@ -141,7 +114,7 @@ func TestConfigurationProjection(t *testing.T) {
 	m := a.APIMiddleware()
 	called := false
 	r.GET("/api/config", m(func(c *fasthttp.RequestCtx) {
-		identityhttp.JSON(c, 200, map[string]any{"auth_config": map[string]any{"is_enabled": false}, "client_config": map[string]any{"whitelisted_routes": []string{"/api/*"}}})
+		httpx.JSON(c, 200, map[string]any{"auth_config": map[string]any{"is_enabled": false}, "client_config": map[string]any{"whitelisted_routes": []string{"/api/*"}}})
 	}))
 	r.PUT("/api/config", m(func(c *fasthttp.RequestCtx) {
 		called = true
@@ -150,8 +123,9 @@ func TestConfigurationProjection(t *testing.T) {
 		if _, ok := q["auth_config"]; ok {
 			t.Error("legacy auth was forwarded")
 		}
-		c.SetStatusCode(200)
+		httpx.JSON(c, 200, map[string]any{})
 	}))
+	verifyHostRoutes(t, a, r)
 	c := request(r, "GET", "/api/config", "", v.Token, "", "")
 	if c.Response.StatusCode() != 200 {
 		t.Fatal("config read")
@@ -172,14 +146,14 @@ func TestConfigurationProjection(t *testing.T) {
 func TestCookieAndStrictJSON(t *testing.T) {
 	a, _, _ := testAdapter(t)
 	r := router.New()
-	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	registerIdentityRoutes(t, a, r)
 	c := request(r, "POST", "/api/identity/login", `{"username":"admin","password":"Admin-password-1"}`, "", a.http.Origin(), "")
 	if c.Response.StatusCode() != 200 {
 		t.Fatal("login failed", c.Response.StatusCode())
 	}
 	cookie := fasthttp.AcquireCookie()
 	defer fasthttp.ReleaseCookie(cookie)
-	cookie.SetKey(identityhttp.CookieName)
+	cookie.SetKey(authhttp.CookieName)
 	if !c.Response.Header.Cookie(cookie) || !cookie.HTTPOnly() || !cookie.Secure() || cookie.SameSite() != fasthttp.CookieSameSiteLaxMode {
 		t.Fatal("unsafe cookie")
 	}
@@ -210,7 +184,8 @@ func TestOriginConflictAndTicketValidation(t *testing.T) {
 	r := router.New()
 	m := a.APIMiddleware()
 	r.GET("/ws", m(func(c *fasthttp.RequestCtx) { c.SetStatusCode(204) }))
-	ticket, e := svc.Session.IssueTicket(context.Background(), v.Principal)
+	verifyHostRoutes(t, a, r)
+	ticket, e := svc.Tickets.IssueTicket(context.Background(), v.Principal)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -245,10 +220,19 @@ func TestTemporaryTokenScopes(t *testing.T) {
 		t.Fatal(e)
 	}
 	a.host = &server.BifrostHTTPServer{Config: &lib.Config{ConfigStore: store}, TempTokens: tokens}
+	// 按真实路由登记后核对，临时令牌仍经过生产 RBAC 路由选择和权限检查。
+	routes := router.New()
+	for _, path := range []string{"/api/oauth/per-user/flows/{id}", "/api/oauth/per-user/flows/{id}/start", "/api/mcp/per-user-headers/flows/{id}", "/api/oauth2/consent/flows/{id}"} {
+		routes.GET(path, func(*fasthttp.RequestCtx) {})
+		if path == "/api/mcp/per-user-headers/flows/{id}" || path == "/api/oauth2/consent/flows/{id}" {
+			routes.PUT(path, func(*fasthttp.RequestCtx) {})
+		}
+	}
+	verifyHostRoutes(t, a, routes)
 	if _, e = svc.Account.CreateAccount(ctx, admin.Principal, "member", ""); e != nil {
 		t.Fatal(e)
 	}
-	member, e := svc.Session.Login(ctx, "member", "123456", "peer")
+	member, e := svc.Auth.Login(ctx, "member", "123456", "peer")
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -271,7 +255,7 @@ func TestTemporaryTokenScopes(t *testing.T) {
 				c.Init(&fasthttp.Request{}, nil, nil)
 				c.Request.SetRequestURI(tc.path)
 				c.Request.Header.SetMethod(method)
-				c.Request.Header.SetCookie(identityhttp.CookieName, cookie)
+				c.Request.Header.SetCookie(authhttp.CookieName, cookie)
 				c.Request.Header.Set("X-Bifrost-Temp-Token", token)
 				a.APIMiddleware()(func(c *fasthttp.RequestCtx) {
 					if c.UserValue(schemas.IsLocalAdminContextKey) == true || c.UserValue(principalKey{}) != nil {
@@ -337,7 +321,7 @@ func TestDefaultDirectoryLegacyValidation(t *testing.T) {
 func TestIdentityRouteContract(t *testing.T) {
 	a, _, _ := testAdapter(t)
 	r := router.New()
-	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	registerIdentityRoutes(t, a, r)
 	for _, tt := range []struct {
 		path, body string
 		status     int
@@ -349,6 +333,7 @@ func TestIdentityRouteContract(t *testing.T) {
 		{"/api/identity/me", "{}", 401},
 		{"/api/identity/change-password", "{}", 401},
 		{"/api/accounts/create", "{}", 401},
+		{"/api/accounts/delete", "{}", 401},
 		{"/api/accounts/list", "{}", 401},
 		{"/api/accounts/set-status", "{}", 401},
 		{"/api/accounts/reset-password", "{}", 401},
@@ -359,8 +344,10 @@ func TestIdentityRouteContract(t *testing.T) {
 		{"/api/session/ws-ticket", "", 401},
 	} {
 		t.Run(tt.path, func(t *testing.T) {
-			if !identityhttp.OwnsRoute(fasthttp.MethodPost, tt.path) || identityhttp.OwnsRoute(fasthttp.MethodGet, tt.path) {
-				t.Fatal("method ownership changed")
+			post, _ := r.Lookup(fasthttp.MethodPost, tt.path, &fasthttp.RequestCtx{})
+			get, _ := r.Lookup(fasthttp.MethodGet, tt.path, &fasthttp.RequestCtx{})
+			if post == nil || get != nil {
+				t.Fatal("registered methods changed")
 			}
 			c := request(r, fasthttp.MethodPost, tt.path, tt.body, "", "https://evil.invalid", "")
 			if c.Response.StatusCode() != 403 {
@@ -373,12 +360,12 @@ func TestIdentityRouteContract(t *testing.T) {
 		})
 	}
 	for _, path := range []string{"/api/identity/status/", "/api/identity/unknown", "/api/session/is-auth-enabled"} {
-		if identityhttp.OwnsRoute(fasthttp.MethodPost, path) {
-			t.Fatal("unknown POST claimed", path)
+		if handler, _ := r.Lookup(fasthttp.MethodPost, path, &fasthttp.RequestCtx{}); handler != nil {
+			t.Fatal("unknown POST registered", path)
 		}
 	}
 	c := request(r, fasthttp.MethodGet, "/api/session/is-auth-enabled", "", "", "", "")
-	if c.Response.StatusCode() != 200 || !identityhttp.OwnsRoute(fasthttp.MethodGet, "/api/session/is-auth-enabled") {
+	if c.Response.StatusCode() != 200 {
 		t.Fatal("legacy public status changed")
 	}
 	c = request(r, fasthttp.MethodPost, "/api/identity/logout", "", "", a.http.Origin(), "")

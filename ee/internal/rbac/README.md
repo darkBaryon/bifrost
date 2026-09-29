@@ -6,7 +6,7 @@
 让管理员将权限组成角色、把角色分配给账号，并判断账号能否执行某项操作、权限来自哪些角色。
 同时保护预置角色和最后一个可用的主管理员，避免误操作后无人能管理系统。
 
-本包包含业务规则、数据库实现和身份协作。应用启动时装配本包，提供角色、权限目录和账号角色接口。已有管理接口通过[host适配层](host/README.md)接入角色授权；日志、Webhook、插件、设置、通知和长连接均使用当前账号的角色权限。
+本包包含业务规则、数据库实现和身份协作。应用启动时直接装配并注册角色、权限目录和账号角色接口；这些接口只接通用中间件，由自己的 HTTP 入口检查来源和 Cookie，再由业务服务判权，不借身份适配器注册或豁免。已有管理接口通过[host适配层](host/README.md)接入角色授权；日志、Webhook、插件、设置、通知和长连接均使用当前账号的角色权限。
 账号、密码和会话由身份模块负责；调用模型使用的虚拟密钥权限也不属于这里。
 
 ## 代码在哪
@@ -26,7 +26,7 @@
 | [persistence/roles.go](persistence/roles.go) | 角色及分配关系的数据库读写 |
 | [persistence/migration.go](persistence/migration.go) | 建表、预置角色及首次绑定，重复执行不覆盖用户修改 |
 | [identity/policy.go](identity/policy.go) | 把账号动作对应到权限检查，将初始化、恢复绑定及删除前检查加入身份事务 |
-| [http/handler.go](http/handler.go) | 九个接口的路由注册，以及共同的来源检查、Cookie认证和响应输出；错误方法由宿主 RootGuard 统一处理 |
+| [http/handler.go](http/handler.go) | 九个接口的路由注册；来源/Cookie 复用 auth/http，通用响应使用 httpx；错误方法由宿主 RootGuard 统一处理 |
 | [http/api.go](http/api.go) | 九个接口按角色管理、账号角色分配和权限查询分组，各组输入和返回字段就近放置 |
 | [http/protocol.go](http/protocol.go) | 公共JSON校验、编号解析，以及HTTP错误状态和响应内容 |
 | [http/matrix.go](http/matrix.go) | 将权限转换为前端使用的功能开关 |

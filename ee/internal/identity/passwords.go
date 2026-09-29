@@ -4,11 +4,12 @@ package identity
 import (
 	"context"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 )
 
 // ChangePassword 校验旧密码后替换本人密码并撤销全部会话，调用方随后须重新登录。
 // 旧密码错误返回 ErrInvalid 且不改变任何状态；比较期间密码被他人重置则返回 ErrConflict。
-func (s *PasswordService) ChangePassword(ctx context.Context, p Principal, oldPassword, newPassword string) error {
+func (s *PasswordService) ChangePassword(ctx context.Context, p session.Principal, oldPassword, newPassword string) error {
 	if !s.validPassword(newPassword) || newPassword == oldPassword {
 		return ErrInvalid
 	}
@@ -35,14 +36,14 @@ func (s *PasswordService) ChangePassword(ctx context.Context, p Principal, oldPa
 		if c.PasswordHash != before.PasswordHash {
 			return ErrConflict
 		}
-		_, err = s.replacePassword(tx, c, hash, false,
+		_, err = s.replacePassword(ctx, tx, c, hash, false,
 			PasswordEvent{ActorID: c.ID, ActorName: c.Username, TargetID: c.ID, TargetName: c.Username, Action: ActionPasswordChange})
 		return err
 	}))
 }
 
 // replacePassword 是三种改密路径共用的事务尾部：写新哈希、升版本、撤销目标全部会话、记录成功事件，返回写入的事件。
-func (s *PasswordService) replacePassword(tx Tx, c AccountRecord, hash string, mustChange bool, event PasswordEvent) (PasswordEvent, error) {
+func (s *PasswordService) replacePassword(ctx context.Context, tx Tx, c AccountRecord, hash string, mustChange bool, event PasswordEvent) (PasswordEvent, error) {
 	c.PasswordHash = hash
 	c.AuthVersion++
 	c.MustChangePassword = mustChange
@@ -50,7 +51,7 @@ func (s *PasswordService) replacePassword(tx Tx, c AccountRecord, hash string, m
 	if err := tx.SaveAccount(c); err != nil {
 		return PasswordEvent{}, err
 	}
-	if err := tx.RevokeSessions(c.ID, now()); err != nil {
+	if err := s.sessions.RevokeAccountSessions(ctx, tx.DB(), c.ID); err != nil {
 		return PasswordEvent{}, err
 	}
 	if event.ID == "" {
@@ -68,7 +69,7 @@ func (s *PasswordService) replacePassword(tx Tx, c AccountRecord, hash string, m
 // 权限、目标或自我重置等业务失败会写入失败事件并提交，随后作为错误返回；存储故障与下述预检冲突才回滚。
 // 同一 actor/target 用同一 operation_id 重试时原样返回首次结果，不再改密。ErrConflict 有两种成因：
 // 同 ID 不同 actor/target（换新 ID 重试）；以及预检拒绝而事务内放行的权限竞态，此时整笔回滚、不写事件，用同一 ID 重试即可。
-func (s *PasswordService) ResetPassword(ctx context.Context, p Principal, targetID, operationID string) (PasswordEvent, error) {
+func (s *PasswordService) ResetPassword(ctx context.Context, p session.Principal, targetID, operationID string) (PasswordEvent, error) {
 	if !uuidPattern.MatchString(operationID) || !uuidPattern.MatchString(targetID) {
 		return PasswordEvent{}, ErrInvalid
 	}
@@ -131,7 +132,7 @@ func (s *PasswordService) ResetPassword(ctx context.Context, p Principal, target
 			// 调用方用同一 operation_id 重试即可（重置本身幂等）。
 			return ErrConflict
 		}
-		event, err = s.replacePassword(tx, target, hash, true, event)
+		event, err = s.replacePassword(ctx, tx, target, hash, true, event)
 		return err
 	})
 	if err != nil {
@@ -159,7 +160,7 @@ func (s *PasswordService) RecoverAdmin(ctx context.Context, password string) err
 			return err
 		}
 		c.Status = StatusActive
-		_, err = s.replacePassword(tx, c, hash, false,
+		_, err = s.replacePassword(ctx, tx, c, hash, false,
 			PasswordEvent{ActorID: OperatorActor, ActorName: OperatorActor, TargetID: c.ID, TargetName: c.Username, Action: ActionAdminRecovery})
 		if err != nil {
 			return err
@@ -169,7 +170,7 @@ func (s *PasswordService) RecoverAdmin(ctx context.Context, password string) err
 }
 
 // ListPasswordEvents 分页读取密码事件：可读全部的调用方按 target 筛选，其他调用方只能查看自己的记录，指定他人返回 ErrForbidden。
-func (s *PasswordService) ListPasswordEvents(ctx context.Context, p Principal, target, cursor string, limit int) (EventPage, error) {
+func (s *PasswordService) ListPasswordEvents(ctx context.Context, p session.Principal, target, cursor string, limit int) (EventPage, error) {
 	out := EventPage{Items: []PasswordEvent{}}
 	actual, _, err := s.current(ctx, p)
 	if err != nil {

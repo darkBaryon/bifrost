@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/valyala/fasthttp"
 )
@@ -14,7 +15,7 @@ type failingConsoleAccess struct {
 	err error
 }
 
-func (p failingConsoleAccess) Prepare(context.Context, *fasthttp.RequestCtx, identity.Principal) (schemas.BifrostHTTPMiddleware, error) {
+func (p failingConsoleAccess) Prepare(context.Context, *fasthttp.RequestCtx, session.Principal) (schemas.BifrostHTTPMiddleware, error) {
 	return nil, p.err
 }
 
@@ -22,12 +23,13 @@ func TestRolePolicyFailureDoesNotFallBack(t *testing.T) {
 	adapter, admin, _ := testAdapter(t)
 	for _, tt := range []struct {
 		name   string
-		policy failingConsoleAccess
+		policy ConsoleAccess
 		status int
 	}{
 		{"unavailable", failingConsoleAccess{identity.ErrUnavailable}, 503},
 		{"forbidden", failingConsoleAccess{identity.ErrForbidden}, 403},
 		{"missing-wrapper", failingConsoleAccess{nil}, 503},
+		{"missing-policy", nil, 503},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			adapter.access = tt.policy

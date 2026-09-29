@@ -1,4 +1,4 @@
-// 本文件钉住账号与状态响应的 JSON 键集合，防止业务类型变化意外改变接口输出。
+// 本文件钉住账号响应的 JSON 键集合，防止业务类型变化意外改变接口输出。
 package identityhttp
 
 import (
@@ -15,7 +15,6 @@ func TestResponseKeys(t *testing.T) {
 		keys  []string
 	}{
 		{"account", toAccountDTO(identity.Account{}), []string{"id", "username", "display_name", "status", "must_change_password", "last_login_at"}},
-		{"status", statusResponse{}, []string{"initialized", "auth_type", "is_auth_enabled", "has_valid_token", "has_valid_session", "must_change_password"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data, err := json.Marshal(tc.value)

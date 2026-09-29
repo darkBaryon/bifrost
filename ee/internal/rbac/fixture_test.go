@@ -3,6 +3,7 @@ package rbac
 
 import (
 	"context"
+	"gorm.io/gorm"
 	"slices"
 	"testing"
 )
@@ -152,4 +153,8 @@ func mustRule(t *testing.T, err error) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func (s *ruleStore) ReadInTransaction(ctx context.Context, _ *gorm.DB, fn func(Queries) error) error {
+	return s.Read(ctx, fn)
 }

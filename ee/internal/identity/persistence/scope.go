@@ -5,6 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	"github.com/darkBaryon/bifrost/ee/internal/database"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"slices"
 	"time"
 
@@ -29,15 +32,16 @@ func (t *transaction) AccessPolicy() identity.AccountPolicy { return t.policy }
 type readView struct{ t *transaction }
 
 func (v readView) State() identity.State { return v.t.State() }
-func (v readView) Revalidate(p identity.Principal) (identity.Principal, error) {
+func (v readView) Revalidate(p session.Principal) (session.Principal, error) {
 	r, e := v.t.AuthByID(p.SessionID)
-	if errors.Is(e, identity.ErrNotFound) {
-		return identity.Principal{}, identity.ErrUnauthorized
+	if errors.Is(e, auth.ErrNotFound) {
+		return session.Principal{}, identity.ErrUnauthorized
 	}
 	if e != nil {
-		return identity.Principal{}, e
+		return session.Principal{}, e
 	}
-	return identity.RevalidateRecord(r, p, time.Now().UTC())
+	actual, e := auth.RevalidateRecord(r, p, time.Now().UTC())
+	return actual, identity.SafeError(e)
 }
 
 func (v readView) LookupAccount(id string) (identity.Account, error) {
@@ -74,12 +78,8 @@ func loadTransaction(db *gorm.DB) (*transaction, error) {
 }
 
 func lockTransaction(db *gorm.DB) (*transaction, error) {
-	result := db.Model(&stateRow{}).Where("id = 1").UpdateColumn("revision", gorm.Expr("revision + 1"))
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	if result.RowsAffected != 1 {
-		return nil, identity.ErrUnavailable
+	if e := database.Lock(db); e != nil {
+		return nil, e
 	}
 	return loadTransaction(db)
 }
@@ -121,3 +121,15 @@ func (s *Store) Read(ctx context.Context, fn func(identity.Queries) error) error
 
 // RetrySQLiteBusy 供共用配置库的迁移复用相同重试规则；attempt 必须可整笔重入。
 func RetrySQLiteBusy(ctx context.Context, attempt func() error) error { return retryBusy(ctx, attempt) }
+
+// View 读取已有事务的身份视图，不另开事务、不再次加锁。
+func View(ctx context.Context, tx *gorm.DB) (identity.Queries, error) {
+	if tx == nil {
+		return nil, identity.ErrInvalid
+	}
+	t, err := loadTransaction(tx.WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+	return readView{t}, nil
+}

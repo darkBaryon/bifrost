@@ -1,7 +1,10 @@
 // 本文件检查账号能做什么，并列出权限来自哪些角色；每次操作都会重新核实身份和读取权限。
 package rbac
 
-import "context"
+import (
+	"context"
+	"gorm.io/gorm"
+)
 
 // Subject 带着本次操作者的账号和登录信息。每次操作都要查库核实，不能只信这些传入值。
 type Subject struct {
@@ -206,4 +209,19 @@ func (s *Service) ValidateNotificationAudience(ctx context.Context, p Subject, i
 		}
 		return nil
 	})
+}
+
+// AuthorizeInTransaction 在调用方已取得写锁的事务中检查权限；保留底层错误供外层重试，
+// 最外层入口在回滚或提交之后转换安全错误。
+func (s *Service) AuthorizeInTransaction(ctx context.Context, tx *gorm.DB, actor Subject, permission Permission) error {
+	if tx == nil {
+		return ErrInvalid
+	}
+	if s == nil || s.repo == nil {
+		return ErrUnavailable
+	}
+	if !KnownPermission(permission) {
+		return ErrForbidden
+	}
+	return s.repo.ReadInTransaction(ctx, tx, func(q Queries) error { return checkPermission(q, actor, permission) })
 }

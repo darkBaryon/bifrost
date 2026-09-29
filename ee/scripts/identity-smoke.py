@@ -172,15 +172,21 @@ def exercise(nodes, dbconfig, dsn):
     a = nodes[0]
     b = nodes[-1]
     a.expect(401, '/api/accounts/list', {})
+    a.expect(401, '/api/console/bootstrap', {}, anonymous=True)
     a.expect(403, '/api/identity/initialize', {'setup_token': 'wrong', 'username': 'admin', 'password': 'Admin-password-1'})
     results = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
         futures = [pool.submit(n.call, '/api/identity/initialize', {'setup_token': n.setup, 'username': 'admin', 'password': 'Admin-password-1'}, anonymous=True) for n in (a, b)]
         results = [f.result()[0] for f in futures]
     assert sorted(results) == [201, 409], 'initialization was not atomic'
+    a.expect(200, '/api/session/login', {'username': 'admin', 'password': 'Admin-password-1'})
+    legacy_admin = next(c.value for c in a.cookies if c.name == 'ee_session')
+    a.expect(200, '/api/identity/me', {}, token=legacy_admin)
     admin = a.login('admin', 'Admin-password-1')
     admin_account, _ = a.expect(200, '/api/identity/me', {}, token=admin)
     admin_id = admin_account['account']['id']
+    bootstrap, headers = b.expect(200, '/api/console/bootstrap', {}, token=admin)
+    assert bootstrap['is_db_connected'] is True and headers.get('Cache-Control') == 'no-store'
     b.expect(200, '/api/accounts/list', {}, token=admin)
     a.expect(401, '/api/accounts/list', {}, anonymous=True, headers={'Authorization': 'Bearer '+admin})
     a.expect(401, '/api/accounts/list', {}, anonymous=True, headers={'Cookie': 'token='+admin})
@@ -192,12 +198,18 @@ def exercise(nodes, dbconfig, dsn):
     alice_id = row['account']['id']
     a.expect(409, '/api/accounts/create', {'username':'alice'}, token=admin)
     alice = a.login('alice', '123456')
+    # 基础状态仅要求有效会话；强制改密与完整设置权限不应阻挡工作台外壳。
+    a.expect(200, '/api/console/bootstrap', {}, token=alice)
+    a.expect(403, '/api/config', method='GET', token=alice)
     a.expect(403, '/api/accounts/list', {}, token=alice)
     a.expect(403, '/api/identity/password-events', {}, token=alice)
     a.expect(400, '/api/identity/change-password', {'old_password':'wrong','new_password':'Alice-password-1'}, token=alice)
     a.expect(200, '/api/identity/change-password', {'old_password':'123456','new_password':'Alice-password-1'}, token=alice)
     b.expect(401, '/api/identity/me', {}, token=alice)
+    b.expect(401, '/api/console/bootstrap', {}, token=alice)
     alice = a.login('alice', 'Alice-password-1')
+    b.expect(200, '/api/console/bootstrap', {}, token=alice)
+    b.expect(403, '/api/config', method='GET', token=alice)
     if dbconfig['type'] == 'sqlite':
         # 真实driver故障须有可关联的安全诊断，同时保持密码/会话/事件原子回滚。
         with sqlite3.connect(dbconfig['config']['path']) as db:
@@ -299,9 +311,9 @@ def exercise(nodes, dbconfig, dsn):
             assert all(len(h)==64 and h not in (admin,alice,recovered) for h in hashes)
     for node in nodes:
         log = (node.root/'server.log').read_bytes()
-        for secret in (admin, admin_new, alice, recovered, ticket['ticket'], node.setup, 'legacy-private-token'):
+        for secret in (legacy_admin, admin, admin_new, alice, recovered, ticket['ticket'], node.setup, 'legacy-private-token'):
             assert secret.encode() not in log, 'application log contains a credential'
-    print('PASS: initialization race, local accounts, mandatory password change, cross-node revoke, idempotent reset, queryable events, configuration compatibility, WS revoke, offline recovery and restart')
+    print('PASS: initialization race, legacy login alias, local accounts, console bootstrap permission boundary, mandatory password change, cross-node revoke, idempotent reset, queryable events, configuration compatibility, WS revoke, offline recovery and restart')
 
 
 def main():

@@ -1,11 +1,13 @@
-// Package identity 管理本地账号、密码、会话和密码操作记录；不处理 HTTP、数据库或宿主对象。
+// Package identity 管理尚未迁出的本地账号、密码和密码操作记录；不处理 HTTP、数据库或宿主对象。
 // 本文件定义业务类型、对外枚举、业务限制、错误以及服务所需的接口。
 package identity
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
+	"gorm.io/gorm"
 	"regexp"
 	"time"
 )
@@ -33,6 +35,14 @@ func SafeError(err error) error {
 	var e Error
 	if errors.As(err, &e) {
 		return e
+	}
+	var a auth.Error
+	if errors.As(err, &a) {
+		return Error(a)
+	}
+	var v session.Error
+	if errors.As(err, &v) {
+		return Error(v)
 	}
 	return ErrUnavailable
 }
@@ -67,36 +77,16 @@ const OperatorActor = "operator"
 
 // 产品规则（方案 4.1、4.3）。
 const (
-	DefaultInitialPassword = "123456"       // 建号与重置使用的初始密码，部署可覆盖
-	MinPasswordRunes       = 8              // 新密码最少字符数
-	MaxPasswordBytes       = 72             // bcrypt 只处理前 72 字节，超出拒绝而不是截断
-	MaxDisplayNameRunes    = 128            // 显示名最多字符数
-	DefaultSessionTTL      = 24 * time.Hour // 会话绝对有效期默认值
-	MinSessionTTL          = time.Hour      // 部署可设的会话有效期下限
-	MaxSessionTTL          = 7 * 24 * time.Hour
-	WSTicketTTL            = 30 * time.Second // WebSocket 一次性票据有效期，HTTP 响应的 expires_in 由此推导
-	DefaultPageSize        = 20               // 分页省略 limit 时的条数
+	DefaultInitialPassword = "123456" // 建号与重置使用的初始密码，部署可覆盖
+	MinPasswordRunes       = 8        // 新密码最少字符数
+	MaxPasswordBytes       = 72       // bcrypt 只处理前 72 字节，超出拒绝而不是截断
+	MaxDisplayNameRunes    = 128      // 显示名最多字符数
+	DefaultPageSize        = 20       // 分页省略 limit 时的条数
 	MaxPageSize            = 100
 )
 
-// 登录限流：服务给出桶与阈值，存储原子执行；HTTP 用同一窗口生成 Retry-After。
-const (
-	LoginRateWindow          = time.Minute
-	LoginAttemptsPerIP       = 30
-	LoginAttemptsPerUsername = 5
-)
-
-// 内部尺寸。
-const (
-	tokenBytes            = 32   // 会话 token 与 WS 票据的随机字节数
-	maxLoginUsernameBytes = 512  // 登录输入超过此长度视为凭据错误，不查库也不计入限流
-	maxLoginPasswordBytes = 1024 // 同上
-	maxConcurrentHashes   = 4    // 每进程并行 bcrypt 上限，超出返回 ErrLimited
-	maxCursorBytes        = 256  // 分页游标解码后的最大字节数
-)
-
-// tokenLength 是 token 经 base64url 无填充编码后的长度，用于在查库前拒绝形状不对的凭据。
-var tokenLength = base64.RawURLEncoding.EncodedLen(tokenBytes)
+// 内部游标尺寸。
+const maxCursorBytes = 256
 
 // usernamePattern 只约束新建账号；迁移的旧用户名原样保留并允许登录。
 var usernamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.@-]{2,63}$`)
@@ -106,14 +96,6 @@ func ValidAccountID(id string) bool { return uuidPattern.MatchString(id) }
 
 // uuidPattern 校验调用方提供的账号 ID 与 operation_id。
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`)
-
-// Principal 是已验证会话的身份句柄；服务端每次操作都按 SessionID 重新核对，不信任调用方构造的字段。
-type Principal struct {
-	AccountID          string
-	SessionID          string
-	AuthVersion        int64
-	MustChangePassword bool
-}
 
 // Account 是允许对外展示的账号信息，不含凭据。
 type Account struct {
@@ -140,31 +122,6 @@ type State struct {
 	ChiefAccountID string
 }
 
-// Session 只保存 token 的摘要；撤销通过 RevokedAt 标记，到期行在下次写入会话时清理。
-type Session struct {
-	ID                string
-	TokenHash         string
-	AccountID         string
-	IssuedAuthVersion int64
-	ExpiresAt         time.Time
-	CreatedAt         time.Time
-	RevokedAt         *time.Time
-}
-
-// AuthRecord 是一次读取得到的会话及其账号，避免分两次查询读到不一致的版本。
-type AuthRecord struct {
-	Session Session
-	Account AccountRecord
-}
-
-// IssuedSession 是登录结果；Token 只在此处返回一次，由 HTTP 适配写入 Cookie。
-type IssuedSession struct {
-	Principal Principal
-	Account   Account
-	Token     string
-	ExpiresAt time.Time
-}
-
 // PasswordEvent 是密码操作记录；账号名是操作时的快照，记录不随账号停用或删除而移除。
 type PasswordEvent struct {
 	ID          string
@@ -177,13 +134,6 @@ type PasswordEvent struct {
 	Result      EventResult
 	ReasonCode  string // 失败时为业务 Error 的值，成功为空
 	OccurredAt  time.Time
-}
-
-// Ticket 是一次性 WebSocket 握手票据；消费状态由存储维护。
-type Ticket struct {
-	Hash      string
-	SessionID string
-	ExpiresAt time.Time
 }
 
 // Cursor 是按时间与 ID 倒序分页的位置。
@@ -203,13 +153,6 @@ type EventPage struct {
 	NextCursor string
 }
 
-// LoginLimit 是一个限流桶：Key 为不可逆摘要，同一窗口内最多 Max 次。
-type LoginLimit struct {
-	Key    string
-	Max    int
-	Window time.Duration
-}
-
 // Repository 提供账号存储；Read让一组查询看到同一份数据，Transaction让一组修改一起提交或回滚。
 // 读取未找到时返回 ErrNotFound，同时返回的值是零值，调用方不得使用；存储故障原样返回，由服务折叠为 ErrUnavailable。
 type Repository interface {
@@ -219,13 +162,10 @@ type Repository interface {
 	State(context.Context) (State, error)
 	// RecordByName 按登录名读取完整账号记录。
 	RecordByName(context.Context, string) (AccountRecord, error)
-	// AuthByHash 按 token 摘要一次读出会话及其账号；AuthByID 按会话 ID 读出同样的记录。
-	AuthByHash(context.Context, string) (AuthRecord, error)
-	AuthByID(context.Context, string) (AuthRecord, error)
+	// AuthByID 复用 auth 模块的联合查询，供尚未迁出的账号操作复验身份。
+	AuthByID(context.Context, string) (auth.Record, error)
 	// Transaction 在锁定 state 的事务中执行 fn；fn 返回错误则整体回滚。
 	Transaction(context.Context, func(Tx) error) error
-	// ReserveLogin 原子地为全部桶各预占一次；任一桶超限返回 ErrLimited 且不预占。
-	ReserveLogin(context.Context, []LoginLimit, time.Time) error
 	// Accounts 从游标之后按创建时间与 ID 倒序读取最多 n 条；游标为零值表示从头开始。
 	Accounts(context.Context, Cursor, int) ([]Account, error)
 	// Events 按目标账号筛选，target 为空表示全部。
@@ -243,41 +183,18 @@ type Tx interface {
 	// InsertAccount 与 InsertEvent 在唯一键冲突时返回 ErrConflict。
 	InsertAccount(AccountRecord) error
 	SaveAccount(AccountRecord) error
-	// DeleteAccount 删除账号及其会话、票据，保留密码事件；不存在返回ErrNotFound。
+	// DeleteAccount 只删除账号；会话和票据由业务层显式调用 session 清理。
 	DeleteAccount(string) error
-	AuthByID(string) (AuthRecord, error)
-	InsertSession(Session) error
-	RevokeSession(string, time.Time) error
-	RevokeSessions(string, time.Time) error
+	AuthByID(string) (auth.Record, error)
+	// DB 供跨模块操作显式复用当前事务，不得由调用方提交。
+	DB() *gorm.DB
 	Event(string) (PasswordEvent, error)
 	InsertEvent(PasswordEvent) error
-	InsertTicket(Ticket) error
-	// ConsumeTicket 只成功一次，返回票据绑定的会话 ID；已消费、过期或不存在返回 ErrUnauthorized。
-	ConsumeTicket(string, time.Time) (string, error)
 }
 
-// PasswordHasher 抽象密码哈希，由装配层注入；bcrypt 实现在 identity/hasher。
+// PasswordHasher 抽象密码哈希，由装配层注入；由 app 与 auth 共用并发受限的哈希器。
 type PasswordHasher interface {
 	Hash(string) (string, error)
 	Compare(string, string) (bool, error)
 	ValidHash(string) bool
-}
-
-// 诊断关联：入口为一次操作分配 ID，存储在失败时连同操作名一起记录，日志不含凭据或 HTTP 对象。
-
-type diagnosticOperationKey struct{}
-
-type diagnosticOperation struct{ Name, ID string }
-
-// WithDiagnosticOperation 为一次入口操作分配关联 ID。
-func WithDiagnosticOperation(ctx context.Context, name string) context.Context {
-	return context.WithValue(ctx, diagnosticOperationKey{}, diagnosticOperation{Name: name, ID: randomID()})
-}
-
-// DiagnosticOperation 返回操作名与关联 ID；没有分配时返回固定占位值。
-func DiagnosticOperation(ctx context.Context) (name, id string) {
-	if v, ok := ctx.Value(diagnosticOperationKey{}).(diagnosticOperation); ok {
-		return v.Name, v.ID
-	}
-	return "identity", "none"
 }

@@ -4,6 +4,7 @@ package persistence
 import (
 	"context"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	authstore "github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
@@ -98,7 +99,7 @@ func (s *BoundStore) Account(id string) (rbac.AccountInfo, error) {
 }
 
 func (s *BoundStore) Revalidate(p rbac.Subject) (rbac.AccountInfo, error) {
-	actual, e := s.identity.Revalidate(identity.Principal{AccountID: p.AccountID, SessionID: p.SessionID, AuthVersion: p.AuthVersion})
+	actual, e := s.identity.Revalidate(session.Principal{AccountID: p.AccountID, SessionID: p.SessionID, AuthVersion: p.AuthVersion})
 	if e != nil {
 		return rbac.AccountInfo{}, translate(e)
 	}
@@ -115,3 +116,21 @@ var (
 	_ rbac.Repository = (*BoundStore)(nil)
 	_ rbac.Tx         = (*BoundStore)(nil)
 )
+
+// ReadInTransaction 将读取绑定到调用方事务，不再次取得写锁。
+func (s *Store) ReadInTransaction(ctx context.Context, tx *gorm.DB, fn func(rbac.Queries) error) error {
+	if tx == nil {
+		return rbac.ErrInvalid
+	}
+	tx = tx.WithContext(ctx)
+	view, err := authstore.View(ctx, tx)
+	if err != nil {
+		return translate(err)
+	}
+	return translate(fn(Bind(tx, view)))
+}
+
+// ReadInTransaction 以显式传入的事务为准，不使用旧的绑定连接。
+func (s *BoundStore) ReadInTransaction(ctx context.Context, tx *gorm.DB, fn func(rbac.Queries) error) error {
+	return (&Store{}).ReadInTransaction(ctx, tx, fn)
+}

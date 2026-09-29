@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	authhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	"github.com/maximhq/bifrost/core/schemas"
@@ -29,7 +29,7 @@ func requirePermissions(access rbac.Access, codes ...rbac.Permission) error {
 
 // strictJSON 拒绝重复JSON字段和安全字段的大小写变体，避免权限检查与业务解析读到不同内容。
 func strictJSON(body []byte) error {
-	if authhttp.ValidateJSONObject(body) != nil {
+	if httpx.ValidateJSONObject(body) != nil {
 		return rbac.ErrInvalid
 	}
 	var value any

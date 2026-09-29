@@ -7,8 +7,9 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -16,15 +17,15 @@ import (
 )
 
 // serveConfig 在读取配置后替换旧认证字段；保存配置前先检查这些字段有没有被修改，再移除auth_config交给Bifrost处理。
-func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p identity.Principal, next fasthttp.RequestHandler) {
+func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p session.Principal, next fasthttp.RequestHandler) {
 	projection, err := a.projection(ctx, p)
 	if err != nil {
-		identityhttp.Error(c, err)
+		writeConsoleError(c, err)
 		return
 	}
 	if c.IsPut() {
 		if err = a.checkConfig(c, projection); err != nil {
-			identityhttp.Error(c, err)
+			writeConsoleError(c, err)
 			return
 		}
 	}
@@ -35,7 +36,7 @@ func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p
 			body, err = sjson.SetBytes(body, "client_config.whitelisted_routes", []string{})
 		}
 		if err != nil {
-			identityhttp.Error(c, identity.ErrUnavailable)
+			writeConsoleError(c, identity.ErrUnavailable)
 			return
 		}
 		c.Response.SetBody(body)
@@ -44,18 +45,22 @@ func (a *AuthAdapter) serveConfig(ctx context.Context, c *fasthttp.RequestCtx, p
 
 // projection 为旧auth_config字段生成只读内容：认证始终启用，返回初始化管理员的名字，密码显示为<redacted>。
 // 未传入管理员查询函数时，使用当前操作者的信息。
-func (a *AuthAdapter) projection(ctx context.Context, p identity.Principal) (map[string]any, error) {
-	var account identity.Account
-	var err error
+func (a *AuthAdapter) projection(ctx context.Context, p session.Principal) (map[string]any, error) {
+	var username string
 	if a.anchor != nil {
-		account, err = a.anchor(ctx)
+		account, err := a.anchor(ctx)
+		if err != nil {
+			return nil, err
+		}
+		username = account.Username
 	} else {
-		account, err = a.service.Me(ctx, p)
+		account, err := a.authentication.Me(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		username = account.Username
 	}
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"is_enabled": true, "admin_username": schemas.NewSecretVar(account.Username), "admin_password": schemas.NewSecretVar("<redacted>")}, nil
+	return map[string]any{"is_enabled": true, "admin_username": schemas.NewSecretVar(username), "admin_password": schemas.NewSecretVar("<redacted>")}, nil
 }
 
 // checkConfig 检查保存的配置：旧认证内容必须与查询结果一致，免登录白名单必须为空，否则整个请求返回409。
@@ -83,7 +88,7 @@ func (a *AuthAdapter) checkConfig(c *fasthttp.RequestCtx, projection map[string]
 			}
 		}
 	}
-	if err := identityhttp.ValidateJSONObject(body); err != nil {
+	if err := httpx.ValidateJSONObject(body); err != nil {
 		return err
 	}
 	if v := gjson.GetBytes(body, "auth_config"); v.Exists() {

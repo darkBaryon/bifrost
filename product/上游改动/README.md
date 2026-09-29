@@ -29,6 +29,20 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
   core/ framework/ transports/ ui/ plugins/
 ```
 
+## EE 后端重构第一、二批（2026-09-29，工作区候选）
+
+用户授权从 `9e78d3bdb` 分批推进；第一批补 BF 独立接入口，第二批迁移 EE 并删除旧工厂，尚未提交、合入或完成正式验收。依据[一期方案 §12](../../workbench/cases/EE与上游接入重构/期1/方案v1.md#12-第一小批bf-独立接入口) 与 [§13](../../workbench/cases/EE与上游接入重构/期1/方案v1.md#13-第二小批迁移-ee-并删除旧工厂)。下方历史清单的增删统计不包含这两批。
+
+| 文件 | 改动与合并检查点 |
+|---|---|
+| `transports/bifrost-http/server/server.go` | 新增 `BeforeAPIRoutes`、`ConsoleMiddlewares`、`RegisterConsoleSessionRoutes`。在原认证工厂时点执行启动回调，独立选择控制台链与 session 注册；API/inference 的 common 切片分别复制。 |
+| `transports/bifrost-http/server/console.go`（新增） | 校验配置、执行启动回调、选择 middleware 与 session 注册者。第二批删除旧 `ConsoleAuthFactory` / `ConsoleAuthProvider` / `consoleAuth`；新字段未配置时保持 OSS 分支。 |
+| `transports/bifrost-http/server/console_test.go`（新增） | 回调时点、错误短路、无效链、OSS 默认行为、两种扩展独立覆盖、真实 Router 上的 session 注册与中间件顺序、切片隔离。 |
+
+必须改宿主的原因：EE 需要在 BF handler 构造前取得已初始化的 BF 资源，并分别替换控制台认证和 session 路由，不再借用认证工厂承担全部装配。没有复制或拆分完整 Bootstrap，也没有更改推理认证规则。
+
+同步时核对回调仍先于 API handler 构造，错误仍走该处原有票据/扫描任务清理分支；直接调用 `RegisterAPIRoutes` 仍由调用方提供完整链。EE 已使用新入口，不应恢复旧工厂。验证在 `ee/` 执行 `GOWORK=off go test -race ./... github.com/maximhq/bifrost/transports/bifrost-http/server`，并执行本批隔离 SQLite HTTP/WS 冒烟。
+
 ## 修改上游已有文件（7 个）
 
 这些是同步上游时**会产生冲突**的文件。
@@ -44,6 +58,8 @@ git diff --numstat $(git merge-base develop upstream/dev) develop -- \
 | [ui/lib/store/apis/brandingApi.ts](../../ui/lib/store/apis/brandingApi.ts) | +10/-16 | 品牌接口改 POST | 品牌定制期 1 |
 
 ### server.go：控制台认证扩展点
+
+本小节保留原补丁背景。当前工作区已由上方“第一、二批”的独立接入口取代下述工厂，合并时以新入口为准。
 
 新增 `ConsoleAuthProvider` 接口和 `BifrostHTTPServer.ConsoleAuthFactory` 可选字段。`Bootstrap` 在认证依赖就绪后、`RegisterAPIRoutes` 之前调用工厂，用返回的 provider 替换管理面鉴权中间件；`RegisterAPIRoutes` 中的会话路由注册也改为优先用 provider。工厂为 nil 时全部走原分支，OSS 行为不变。
 

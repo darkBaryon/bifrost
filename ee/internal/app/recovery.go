@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	rbacstore "github.com/darkBaryon/bifrost/ee/internal/rbac/persistence"
 	"github.com/maximhq/bifrost/core"
@@ -41,7 +42,7 @@ func RecoverAdmin(args []string) error {
 	if e != nil {
 		return e
 	}
-	ctx := identity.WithDiagnosticOperation(context.Background(), "identity.recover-admin")
+	ctx := database.WithOperation(context.Background(), "identity.recover-admin")
 	log := bifrost.NewDefaultLogger(schemas.LogLevelError)
 	store, e := configstore.NewConfigStore(ctx, storeConfig, log)
 	if e != nil {
@@ -56,7 +57,7 @@ func RecoverAdmin(args []string) error {
 	if e = rbacstore.RequireComplete(ctx, store.DB()); e != nil {
 		return errors.New("complete RBAC migration is required for recovery")
 	}
-	svc, _, e := newConsoleServices(store.DB(), options, log)
+	svc, e := newConsoleServices(store.DB(), options, log)
 	if e != nil {
 		return e
 	}
@@ -76,7 +77,7 @@ func RecoverAdmin(args []string) error {
 		}
 		password = strings.TrimSuffix(strings.TrimSuffix(raw, "\n"), "\r")
 	}
-	if e = svc.Password.RecoverAdmin(ctx, password); e != nil {
+	if e = svc.Accounts.Password.RecoverAdmin(ctx, password); e != nil {
 		return identity.SafeError(e)
 	}
 	fmt.Fprintln(os.Stdout, "Administrator password updated; previous sessions revoked.")

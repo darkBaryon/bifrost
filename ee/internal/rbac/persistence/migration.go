@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	authstore "github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	upstream "github.com/maximhq/bifrost/framework/configstore"
@@ -21,7 +22,7 @@ const (
 )
 
 // MigrateRBAC 在身份迁移成功后执行，重启不会覆盖现有角色或重新授予锚点权限。
-func MigrateRBAC(log authstore.Logger) func(context.Context, *gorm.DB) error {
+func MigrateRBAC(log database.Logger) func(context.Context, *gorm.DB) error {
 	return func(ctx context.Context, db *gorm.DB) error {
 		if !supportedRoleIDSize() {
 			return rbac.ErrUnavailable

@@ -1,4 +1,4 @@
-// 本文件实现读取、锁定 state 的事务、限流预占与分页；六张表的行结构见 rows.go。
+// 本文件实现账号读写、锁定 state 的事务和分页；旧认证表结构仅供已有迁移使用。
 //
 // Package persistence 通过共享配置数据库实现身份存储及原子操作。
 package persistence
@@ -6,25 +6,26 @@ package persistence
 import (
 	"context"
 	"errors"
-	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	authstore "github.com/darkBaryon/bifrost/ee/internal/auth/persistence"
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/mattn/go-sqlite3"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"gorm.io/gorm/logger"
 )
 
 // Store 实现 identity.Repository；SQL 日志静默，避免错误查询输出凭据、哈希和身份信息。连接由宿主持有并关闭。
 type Store struct {
 	db            *gorm.DB
-	log           Logger
+	log           database.Logger
 	policyFactory PolicyFactory
 }
 
 // NewStore 复用宿主的数据库连接；存储故障经 log 记录安全诊断。
-func NewStore(db *gorm.DB, log Logger, options ...Option) *Store {
+func NewStore(db *gorm.DB, log database.Logger, options ...Option) *Store {
 	s := &Store{db: db.Session(&gorm.Session{Logger: logger.Default.LogMode(logger.Silent)}), log: log}
 	for _, option := range options {
 		option(s)
@@ -70,46 +71,8 @@ func (s *Store) RecordByName(ctx context.Context, name string) (identity.Account
 	return r.record(), notFound(logDatabaseFailure(s.log, ctx, "account.read", err))
 }
 
-// authRow 是账号与会话联合查询的结果；账号列由 GORM 按导出字段展开，会话列用 session_ 前缀避免同名。
-type authRow struct {
-	Account           accountRow `gorm:"embedded"`
-	SessionID         string
-	TokenHash         string
-	SessionAccountID  string
-	IssuedAuthVersion int64
-	SessionExpiresAt  time.Time
-	SessionCreatedAt  time.Time
-	SessionRevokedAt  *time.Time
-}
-
-// authRecord 在一条 SQL 中读取会话及其账号，避免跨查询读出不一致的版本。
-func authRecord(db *gorm.DB, column, value string) (identity.AuthRecord, error) {
-	var row authRow
-	result := db.Table("ee_identity_accounts a").
-		Select("a.*, s.id AS session_id, s.token_hash, s.account_id AS session_account_id, s.issued_auth_version, "+
-			"s.expires_at AS session_expires_at, s.created_at AS session_created_at, s.revoked_at AS session_revoked_at").
-		Joins("JOIN ee_identity_sessions s ON s.account_id = a.id").Where(column+" = ?", value).Limit(1).Scan(&row)
-	if result.Error != nil {
-		return identity.AuthRecord{}, result.Error
-	}
-	if result.RowsAffected == 0 {
-		return identity.AuthRecord{}, identity.ErrNotFound
-	}
-	return identity.AuthRecord{
-		Account: row.Account.record(),
-		Session: identity.Session{ID: row.SessionID, TokenHash: row.TokenHash, AccountID: row.SessionAccountID,
-			IssuedAuthVersion: row.IssuedAuthVersion, ExpiresAt: row.SessionExpiresAt, CreatedAt: row.SessionCreatedAt, RevokedAt: row.SessionRevokedAt},
-	}, nil
-}
-
-func (s *Store) AuthByHash(ctx context.Context, hash string) (identity.AuthRecord, error) {
-	v, err := authRecord(s.db.WithContext(ctx), "s.token_hash", hash)
-	return v, logDatabaseFailure(s.log, ctx, "session.read", err)
-}
-
-func (s *Store) AuthByID(ctx context.Context, id string) (identity.AuthRecord, error) {
-	v, err := authRecord(s.db.WithContext(ctx), "s.id", id)
-	return v, logDatabaseFailure(s.log, ctx, "session.read", err)
+func (s *Store) AuthByID(ctx context.Context, id string) (auth.Record, error) {
+	return authstore.NewStore(s.db, s.log).AuthByID(ctx, id)
 }
 
 // transaction 实现 identity.Tx；stage 记录最近执行的操作，供失败诊断定位阶段。
@@ -157,16 +120,9 @@ func (t *transaction) SaveAccount(c identity.AccountRecord) error {
 	return t.db.Save(&r).Error
 }
 
-// DeleteAccount 先清理票据和会话，再删账号；调用方事务保证整组操作回滚。
+// DeleteAccount 只删除账号；关联会话由调用方显式清理。
 func (t *transaction) DeleteAccount(id string) error {
 	t.stage = "account.delete"
-	sessions := t.db.Model(&sessionRow{}).Select("id").Where("account_id = ?", id)
-	if err := t.db.Where("session_id IN (?)", sessions).Delete(&ticketRow{}).Error; err != nil {
-		return err
-	}
-	if err := t.db.Where("account_id = ?", id).Delete(&sessionRow{}).Error; err != nil {
-		return err
-	}
 	result := t.db.Where("id = ?", id).Delete(&accountRow{})
 	if result.Error != nil {
 		return result.Error
@@ -177,37 +133,13 @@ func (t *transaction) DeleteAccount(id string) error {
 	return nil
 }
 
-func (t *transaction) AuthByID(id string) (identity.AuthRecord, error) {
+func (t *transaction) AuthByID(id string) (auth.Record, error) {
 	t.stage = "session.read"
-	return authRecord(t.db, "s.id", id)
+	return authstore.NewStore(t.db, nil).AuthByID(t.db.Statement.Context, id)
 }
 
-// sweepExpired 删除已到期的行，写入新会话/票据时顺带执行（FIND-020）：过期即删，含已撤销/已消费的行，
-// 会话与票据表不承担审计；口径与 identity 的过期判定一致，expires_at <= 当前时刻即为过期。无索引全表扫描，行数由本清理封顶。
-func (t *transaction) sweepExpired(model any) error {
-	return t.db.Where("expires_at <= ?", time.Now().UTC()).Delete(model).Error
-}
-
-// InsertSession 先清理到期会话行再写入。
-func (t *transaction) InsertSession(s identity.Session) error {
-	t.stage = "session.sweep"
-	if err := t.sweepExpired(&sessionRow{}); err != nil {
-		return err
-	}
-	t.stage = "session.insert"
-	r := sessionRowOf(s)
-	return t.db.Create(&r).Error
-}
-
-func (t *transaction) RevokeSession(id string, at time.Time) error {
-	t.stage = "session.revoke"
-	return t.db.Model(&sessionRow{}).Where("id = ? AND revoked_at IS NULL", id).Update("revoked_at", at).Error
-}
-
-func (t *transaction) RevokeSessions(accountID string, at time.Time) error {
-	t.stage = "sessions.revoke"
-	return t.db.Model(&sessionRow{}).Where("account_id = ? AND revoked_at IS NULL", accountID).Update("revoked_at", at).Error
-}
+// DB 返回当前调用方拥有的事务，供其他模块在同一事务内执行操作。
+func (t *transaction) DB() *gorm.DB { return t.db }
 
 func (t *transaction) Event(operationID string) (identity.PasswordEvent, error) {
 	t.stage = "password_event.read"
@@ -220,30 +152,6 @@ func (t *transaction) InsertEvent(e identity.PasswordEvent) error {
 	t.stage = "password_event.insert"
 	r := eventRowOf(e)
 	return conflict(t.db.Create(&r).Error)
-}
-
-// InsertTicket 先清理到期票据行再写入；已消费但未到期的行留到到期。
-func (t *transaction) InsertTicket(v identity.Ticket) error {
-	t.stage = "ticket.sweep"
-	if err := t.sweepExpired(&ticketRow{}); err != nil {
-		return err
-	}
-	t.stage = "ticket.insert"
-	return t.db.Create(&ticketRow{Hash: v.Hash, SessionID: v.SessionID, ExpiresAt: v.ExpiresAt}).Error
-}
-
-func (t *transaction) ConsumeTicket(hash string, at time.Time) (string, error) {
-	t.stage = "ticket.consume"
-	result := t.db.Model(&ticketRow{}).Where("hash = ? AND consumed_at IS NULL AND expires_at > ?", hash, at).Update("consumed_at", at)
-	if result.Error != nil {
-		return "", result.Error
-	}
-	if result.RowsAffected != 1 {
-		return "", identity.ErrUnauthorized
-	}
-	var r ticketRow
-	err := t.db.Where("hash = ?", hash).First(&r).Error
-	return r.SessionID, err
 }
 
 // Transaction 先更新 state.revision 取得写锁（SQLite 为库级写锁，PostgreSQL 为行锁），再执行 fn。
@@ -284,36 +192,6 @@ func (s *Store) transaction(ctx context.Context, fn func(*transaction) error) er
 		return identity.ErrUnavailable
 	}
 	return logDatabaseFailure(s.log, ctx, phase, err)
-}
-
-// ReserveLogin 在一个事务里为每个桶预占一次：窗口过期则重开，达到上限返回 ErrLimited 并回滚全部预占。
-func (s *Store) ReserveLogin(ctx context.Context, limits []identity.LoginLimit, at time.Time) error {
-	return s.transaction(ctx, func(t *transaction) error {
-		t.stage = "login_limit.reserve"
-		if e := t.db.Where("window_start < ?", at.Add(-limitRetention)).Delete(&limitRow{}).Error; e != nil {
-			return e
-		}
-		for _, l := range limits {
-			r := limitRow{Key: l.Key, WindowStart: at}
-			if e := t.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&r).Error; e != nil {
-				return e
-			}
-			if e := t.db.Where("key = ?", l.Key).First(&r).Error; e != nil {
-				return e
-			}
-			if !r.WindowStart.Add(l.Window).After(at) {
-				r.WindowStart, r.Count = at, 0
-			}
-			if r.Count >= l.Max {
-				return identity.ErrLimited
-			}
-			r.Count++
-			if e := t.db.Save(&r).Error; e != nil {
-				return e
-			}
-		}
-		return nil
-	})
 }
 
 // beforeCursor 是分页的唯一比较规则：按 (column, id) 严格早于游标；游标为空表示从头开始。

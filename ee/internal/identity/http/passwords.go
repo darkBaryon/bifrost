@@ -14,7 +14,7 @@ func (h *Handler) changePassword(r request) (int, any, error) {
 	if err := h.svc.Password.ChangePassword(r.ctx, r.principal, q.OldPassword, q.NewPassword); err != nil {
 		return 0, nil, err
 	}
-	h.clearCookie(r.c)
+	h.browser.ClearCookie(r.c)
 	return fasthttp.StatusOK, messageResponse{Message: messagePasswordChanged}, nil
 }
 

@@ -1,11 +1,12 @@
-// 本文件是会话线端点：状态查询、登录、登出、本人资料与 WebSocket 票据。
-package identityhttp
+// 本文件处理状态查询、登录、登出、本人资料与 WebSocket 票据请求。
+package authhttp
 
 import (
 	"errors"
 	"time"
 
-	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/valyala/fasthttp"
 )
 
@@ -16,16 +17,16 @@ func (h *Handler) status(r request) (int, any, error) {
 			return 0, nil, err
 		}
 	}
-	state, err := h.svc.Session.State(r.ctx)
+	initialized, err := h.isInitialized(r.ctx)
 	if err != nil {
 		return 0, nil, err
 	}
-	p, err := h.svc.Session.Authenticate(r.ctx, r.cookie())
-	if err != nil && !errors.Is(err, identity.ErrUnauthorized) {
+	p, err := h.authentication.Authenticate(r.ctx, r.cookie())
+	if err != nil && !errors.Is(err, auth.ErrUnauthorized) {
 		return 0, nil, err
 	}
 	valid := err == nil
-	return fasthttp.StatusOK, statusResponse{Initialized: state.Initialized, AuthType: authType, IsAuthEnabled: true,
+	return fasthttp.StatusOK, statusResponse{Initialized: initialized, AuthType: authType, IsAuthEnabled: true,
 		HasValidToken: valid, HasValidSession: valid, MustChangePassword: valid && p.MustChangePassword}, nil
 }
 
@@ -35,24 +36,24 @@ func (h *Handler) login(r request) (int, any, error) {
 	if err := r.decode(&q); err != nil {
 		return 0, nil, err
 	}
-	v, err := h.svc.Session.Login(r.ctx, q.Username, q.Password, r.c.RemoteIP().String())
+	v, err := h.authentication.Login(r.ctx, q.Username, q.Password, r.c.RemoteIP().String())
 	if err != nil {
 		return 0, nil, err
 	}
-	h.setCookie(r.c, v.Token, v.ExpiresAt)
+	h.browser.SetCookie(r.c, v.Token, v.ExpiresAt)
 	return fasthttp.StatusOK, loginResponse{Message: messageLoginSuccessful, Account: toAccountDTO(v.Account),
 		MustChangePassword: v.Principal.MustChangePassword, ExpiresAt: v.ExpiresAt}, nil
 }
 
-// logout 无论 Cookie 是否有效都返回成功并清除 Cookie。
+// logout 无论 Cookie 是否有效都清除 Cookie；存储故障仍返回错误。
 func (h *Handler) logout(r request) (int, any, error) {
 	if err := r.decode(&emptyRequest{}); err != nil {
 		return 0, nil, err
 	}
-	if err := h.svc.Session.Logout(r.ctx, r.cookie()); err != nil {
+	if err := h.authentication.Logout(r.ctx, r.cookie()); err != nil {
 		return 0, nil, err
 	}
-	h.clearCookie(r.c)
+	h.browser.ClearCookie(r.c)
 	return fasthttp.StatusOK, messageResponse{Message: messageLogoutSuccessful}, nil
 }
 
@@ -60,7 +61,7 @@ func (h *Handler) me(r request) (int, any, error) {
 	if err := r.decode(&emptyRequest{}); err != nil {
 		return 0, nil, err
 	}
-	a, err := h.svc.Session.Me(r.ctx, r.principal)
+	a, err := h.authentication.Me(r.ctx, r.principal)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -71,9 +72,9 @@ func (h *Handler) wsTicket(r request) (int, any, error) {
 	if err := r.decode(&emptyRequest{}); err != nil {
 		return 0, nil, err
 	}
-	ticket, err := h.svc.Session.IssueTicket(r.ctx, r.principal)
+	ticket, err := h.tickets.IssueTicket(r.ctx, r.principal)
 	if err != nil {
 		return 0, nil, err
 	}
-	return fasthttp.StatusOK, ticketResponse{Ticket: ticket, ExpiresIn: int(identity.WSTicketTTL / time.Second)}, nil
+	return fasthttp.StatusOK, ticketResponse{Ticket: ticket, ExpiresIn: int(session.TicketTTL / time.Second)}, nil
 }

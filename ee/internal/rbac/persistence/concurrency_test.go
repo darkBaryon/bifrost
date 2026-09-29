@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth/hasher"
 	auth "github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
 	"gorm.io/gorm"
@@ -41,7 +41,7 @@ func TestLastChiefDisableBeforeUnassign(t *testing.T) {
 	_, e = f.rb.SetAccountRoles(ctx, admin, second.Account.ID, []rbac.RoleID{rbac.ChiefRoleID})
 	must(t, e)
 	locked, release := make(chan struct{}), make(chan struct{})
-	services, e := auth.New(pausedTransaction{f.store, locked, release}, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SessionTTL: 24 * time.Hour}, policy.NewPolicy(f.rb))
+	services, e := auth.New(pausedTransaction{f.store, locked, release}, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SessionTTL: 24 * time.Hour}, policy.NewPolicy(f.rb), f.sessions)
 	must(t, e)
 	first, other := make(chan error, 1), make(chan error, 1)
 	go func() {
@@ -83,7 +83,7 @@ func TestLastChiefDisableBeforeUnassign(t *testing.T) {
 	if !access.Chief {
 		t.Fatal("inverse race removed final active chief")
 	}
-	_, e = f.auth.Session.Authenticate(ctx, second.Token)
+	_, e = f.login.Authenticate(ctx, second.Token)
 	want(t, e, auth.ErrUnauthorized)
 }
 

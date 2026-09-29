@@ -47,6 +47,7 @@ type stateRow struct {
 
 func (stateRow) TableName() string { return "ee_identity_state" }
 
+// sessionRow 仅冻结旧迁移定义；运行时读写由 auth/session 包负责。
 type sessionRow struct {
 	ID                string `gorm:"primaryKey"`
 	TokenHash         string
@@ -58,11 +59,6 @@ type sessionRow struct {
 }
 
 func (sessionRow) TableName() string { return "ee_identity_sessions" }
-
-func sessionRowOf(s identity.Session) sessionRow {
-	return sessionRow{ID: s.ID, TokenHash: s.TokenHash, AccountID: s.AccountID, IssuedAuthVersion: s.IssuedAuthVersion,
-		ExpiresAt: s.ExpiresAt, CreatedAt: s.CreatedAt, RevokedAt: s.RevokedAt}
-}
 
 type eventRow struct {
 	ID          string `gorm:"primaryKey"`
@@ -108,6 +104,3 @@ type limitRow struct {
 }
 
 func (limitRow) TableName() string { return "ee_identity_login_limits" }
-
-// limitRetention 是限流桶的保留期，远大于任何登录窗口，只用于顺带清理旧桶。
-const limitRetention = time.Hour

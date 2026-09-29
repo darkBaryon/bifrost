@@ -4,6 +4,7 @@
     - [全量索引](views/all.md)
     - [需求报告](需求报告.md)
 - 需求
+    - [EE后端整体重构（含上游接入）](reports/EE与上游接入重构.md)
     - [EE现有代码架构迁移](reports/EE现有代码架构迁移.md)
     - [Logo 品牌设置](reports/Logo品牌设置.md)
     - [UI 完整中文化](reports/UI完整中文化.md)
@@ -24,6 +25,10 @@
     - [账号认证](reports/账号认证.md)
     - [身份模块整理](reports/身份模块整理.md)
 - 过程文档
+    - EE与上游接入重构
+        - [主页](cases/EE与上游接入重构/index.md)
+        - 期1
+            - [详细设计 v1（当前）](cases/EE与上游接入重构/期1/方案v1.md)
     - EE现有代码架构迁移
         - [主页](cases/EE现有代码架构迁移/index.md)
         - 期1

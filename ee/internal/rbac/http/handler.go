@@ -5,10 +5,11 @@ package rbachttp
 import (
 	"context"
 
-	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	authhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
+	authhttp "github.com/darkBaryon/bifrost/ee/internal/auth/http"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -17,7 +18,7 @@ import (
 
 // Sessions 用Cookie里的登录凭据核实当前登录状态，并查出是谁在操作。
 type Sessions interface {
-	Authenticate(context.Context, string) (identity.Principal, error)
+	Authenticate(context.Context, string) (session.Principal, error)
 }
 
 // OriginChecker 检查请求是否来自配置的控制台地址；具体规则复用身份接口的实现。
@@ -67,7 +68,7 @@ var routes = []route{
 	{"/api/accounts/set-roles", (*Handler).setAccountRoles}, // 替换账号的角色
 }
 
-// RegisterRoutes 把九个接口注册到Bifrost路由中，每个接口都先经过传入的公共中间件。
+// RegisterRoutes 由app独立注册九个接口；只接通用中间件，来源、登录和操作权限由本模块处理。
 func (h *Handler) RegisterRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
 	for _, rt := range routes {
 		r.POST(rt.path, lib.ChainMiddlewares(h.serve(rt), m...))
@@ -91,7 +92,7 @@ func (h *Handler) serve(rt route) fasthttp.RequestHandler {
 			Error(c, rbac.ErrUnauthorized)
 			return
 		}
-		ctx := authhttp.OperationContext(c, "rbac"+rt.path)
+		ctx := httpx.OperationContext(c, "rbac"+rt.path)
 		principal, err := h.sessions.Authenticate(ctx, string(c.Request.Header.Cookie(authhttp.CookieName)))
 		if err != nil {
 			authhttp.Error(c, err)
@@ -102,23 +103,6 @@ func (h *Handler) serve(rt route) fasthttp.RequestHandler {
 			Error(c, err)
 			return
 		}
-		authhttp.JSON(c, status, body)
+		httpx.JSON(c, status, body)
 	}
 }
-
-// OwnsRoute 按请求方法和完整路径判断是不是本包的接口；只认路由表中列出的POST地址。
-func OwnsRoute(method, path string) bool {
-	return method == fasthttp.MethodPost && ownsPath(path)
-}
-
-func ownsPath(path string) bool {
-	for _, r := range routes {
-		if r.path == path {
-			return true
-		}
-	}
-	return false
-}
-
-// OwnsRoute 供Bifrost识别本包的接口；匹配后交给本包检查登录，再由rbac服务检查操作权限。
-func (h *Handler) OwnsRoute(method, path string) bool { return OwnsRoute(method, path) }

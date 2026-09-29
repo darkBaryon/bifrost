@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -204,12 +205,6 @@ type MCPLogRedactionMappingResolverProvider interface {
 	GetMCPLogRedactionMappingResolver() handlers.MCPLogRedactionMappingResolver
 }
 
-// ConsoleAuthProvider allows an embedder to replace console authentication without changing inference.
-type ConsoleAuthProvider interface {
-	APIMiddleware() schemas.BifrostHTTPMiddleware
-	RegisterSessionRoutes(*router.Router, ...schemas.BifrostHTTPMiddleware)
-}
-
 // BifrostHTTPServer represents a HTTP server instance.
 type BifrostHTTPServer struct {
 	Ctx    *schemas.BifrostContext
@@ -246,10 +241,21 @@ type BifrostHTTPServer struct {
 	devPprofHandler     *handlers.DevPprofHandler
 	IntegrationHandler  *handlers.IntegrationHandler
 
-	// ConsoleAuthFactory runs after auth dependencies exist and before routes are registered.
-	// A nil factory preserves the OSS behavior; a configured factory must return a provider.
-	ConsoleAuthFactory   func(context.Context, *BifrostHTTPServer) (ConsoleAuthProvider, error)
-	consoleAuth          ConsoleAuthProvider
+	// BeforeAPIRoutes runs during Bootstrap after Config, Client, Router and available
+	// authentication dependencies are initialized, but before API handlers are constructed.
+	// Sidekiq and tracing are initialized later. An error aborts bootstrap.
+	// The callback may set ConsoleMiddlewares and RegisterConsoleSessionRoutes.
+	BeforeAPIRoutes func(context.Context, *BifrostHTTPServer) error
+	// ConsoleMiddlewares replaces console authentication during Bootstrap, after the
+	// common middleware chain. nil preserves the OSS default; explicit replacements
+	// must be nonempty and contain no nil middleware.
+	// It does not affect inference or routes registered without the API middleware chain.
+	ConsoleMiddlewares []schemas.BifrostHTTPMiddleware
+	// RegisterConsoleSessionRoutes replaces only the session routes in RegisterAPIRoutes.
+	// nil preserves the OSS registration. Configure startup-only fields before Bootstrap
+	// or in BeforeAPIRoutes, never while requests are being served.
+	RegisterConsoleSessionRoutes func(*router.Router, ...schemas.BifrostHTTPMiddleware)
+
 	AuthMiddleware       *handlers.AuthMiddleware
 	CORSMiddleware       *handlers.CorsMiddleware
 	TracingMiddleware    *handlers.TracingMiddleware
@@ -2197,7 +2203,12 @@ func (s *BifrostHTTPServer) RegisterInferenceRoutes(ctx context.Context, middlew
 }
 
 // RegisterAPIRoutes initializes the routes for the Bifrost HTTP server.
+// Direct callers supply the complete middleware chain: only Bootstrap invokes
+// BeforeAPIRoutes and assembles ConsoleMiddlewares. Session overrides apply here.
 func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks ServerCallbacks, middlewares ...schemas.BifrostHTTPMiddleware) error {
+	if err := s.validateConsoleOptions(); err != nil {
+		return err
+	}
 	var err error
 	// Initializing plugin specific handlers
 	var loggingHandler *handlers.LoggingHandler
@@ -2281,7 +2292,6 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	mcpSessionsHandler := handlers.NewMCPSessionsHandler(s.Config, callbacks)
 	configHandler := handlers.NewConfigHandler(callbacks, s.Config)
 	pluginsHandler := handlers.NewPluginsHandler(callbacks, s.Config.ConfigStore)
-	sessionHandler := handlers.NewSessionHandler(s.Config.ConfigStore, s.WSTicketStore)
 	promptsHandler := handlers.NewPromptsHandler(s.Config.ConfigStore, promptsReloader)
 	featureFlagsHandler := handlers.NewFeatureFlagsHandler(s.Config.FeatureFlags, s.Config.ConfigStore)
 	// Going ahead with API handlers
@@ -2305,11 +2315,7 @@ func (s *BifrostHTTPServer) RegisterAPIRoutes(ctx context.Context, callbacks Ser
 	if pluginsHandler != nil {
 		pluginsHandler.RegisterRoutes(s.Router, middlewares...)
 	}
-	if s.consoleAuth != nil {
-		s.consoleAuth.RegisterSessionRoutes(s.Router, middlewares...)
-	} else if sessionHandler != nil {
-		sessionHandler.RegisterRoutes(s.Router, middlewares...)
-	}
+	s.registerConsoleSessionRoutes(middlewares...)
 	if promptsHandler != nil {
 		promptsHandler.RegisterRoutes(s.Router, middlewares...)
 	}
@@ -2691,8 +2697,8 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 	// Initialize CORS middleware
 	s.CORSMiddleware = handlers.NewCorsMiddleware(s.Config)
 	commonMiddlewares := s.PrepareCommonMiddlewares()
-	apiMiddlewares := commonMiddlewares
-	inferenceMiddlewares := commonMiddlewares
+	apiMiddlewares := slices.Clone(commonMiddlewares)
+	inferenceMiddlewares := slices.Clone(commonMiddlewares)
 	if s.Config.ConfigStore == nil {
 		logger.Error("auth middleware requires config store, skipping auth middleware initialization")
 	} else {
@@ -2743,30 +2749,23 @@ func (s *BifrostHTTPServer) Bootstrap(ctx context.Context) error {
 			return fmt.Errorf("failed to initialize auth middleware: %v", err)
 		}
 	}
-	if s.ConsoleAuthFactory != nil {
-		s.consoleAuth, err = s.ConsoleAuthFactory(ctx, s)
-		if err == nil && s.consoleAuth == nil {
-			err = fmt.Errorf("console auth factory returned no provider")
+	consoleMiddlewares, err := s.prepareConsoleRoutes(ctx)
+	if err != nil {
+		if s.WSTicketStore != nil {
+			s.WSTicketStore.Stop()
+			s.WSTicketStore = nil
 		}
-		if err != nil {
-			if s.WSTicketStore != nil {
-				s.WSTicketStore.Stop()
-				s.WSTicketStore = nil
-			}
-			if s.TempTokenSweepWorker != nil {
-				s.TempTokenSweepWorker.Stop()
-				s.TempTokenSweepWorker = nil
-			}
-			if s.OAuth2SweepWorker != nil {
-				s.OAuth2SweepWorker.stop()
-				s.OAuth2SweepWorker = nil
-			}
-			return fmt.Errorf("initialize console authentication: %w", err)
+		if s.TempTokenSweepWorker != nil {
+			s.TempTokenSweepWorker.Stop()
+			s.TempTokenSweepWorker = nil
 		}
-		apiMiddlewares = append(apiMiddlewares, s.consoleAuth.APIMiddleware())
-	} else if ctx.Value(schemas.BifrostContextKeyIsEnterprise) == nil && s.AuthMiddleware != nil {
-		apiMiddlewares = append(apiMiddlewares, s.AuthMiddleware.APIMiddleware())
+		if s.OAuth2SweepWorker != nil {
+			s.OAuth2SweepWorker.stop()
+			s.OAuth2SweepWorker = nil
+		}
+		return fmt.Errorf("prepare console routes: %w", err)
 	}
+	apiMiddlewares = append(apiMiddlewares, consoleMiddlewares...)
 	// Add semantic cache plugin embedding request executor if it exists
 	semanticCachePlugin, err := lib.FindPluginAs[*semanticcache.Plugin](s.Config, semanticcache.PluginName)
 	if err == nil && semanticCachePlugin != nil {

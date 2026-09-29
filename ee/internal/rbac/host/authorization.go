@@ -5,10 +5,12 @@ package host
 import (
 	"context"
 
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	rbachttp "github.com/darkBaryon/bifrost/ee/internal/rbac/http"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -37,7 +39,7 @@ type requestAccess struct {
 
 // Prepare 重新检查登录和本接口所需权限；通过后返回本次请求使用的中间件。
 // 中间件先检查敏感操作，再运行原handler，最后隐藏不能返回的字段。
-func (a *Adapter) Prepare(ctx context.Context, c *fasthttp.RequestCtx, p identity.Principal) (schemas.BifrostHTTPMiddleware, error) {
+func (a *Adapter) Prepare(ctx context.Context, c *fasthttp.RequestCtx, p session.Principal) (schemas.BifrostHTTPMiddleware, error) {
 	if a.service == nil {
 		return nil, identity.ErrUnavailable
 	}
@@ -79,7 +81,7 @@ func (a *Adapter) diagnostic(ctx context.Context, route, reason string) {
 	if a.log == nil {
 		return
 	}
-	operation, id := identity.DiagnosticOperation(ctx)
+	operation, id := database.Operation(ctx)
 	a.log.Warn("EE RBAC rejection operation=%s route=%s reason=%s incident=%s", operation, route, reason, id)
 }
 

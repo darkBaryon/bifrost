@@ -1,7 +1,10 @@
 // Package rbac 管理角色、给账号分配角色，并检查账号能做哪些操作。登录和密码由身份模块负责。
 package rbac
 
-import "context"
+import (
+	"context"
+	"gorm.io/gorm"
+)
 
 // 本文件约定业务代码需要哪些数据读写能力；数据库实现负责满足这些约定。
 
@@ -44,6 +47,8 @@ type Tx interface {
 
 // Repository 负责打开和结束数据库读取或事务。传给 fn 的查询、写入对象，只能在 fn 执行期间使用。
 type Repository interface {
+	// ReadInTransaction 在调用方已开启的事务中读取，不重新组装服务或开启事务。
+	ReadInTransaction(context.Context, *gorm.DB, func(Queries) error) error
 	// Read 从主数据库读取，让 fn 中的查询看到同一时刻的数据；不使用缓存或只读副本，也不修改业务数据。
 	Read(ctx context.Context, fn func(Queries) error) error
 	// Write 取得与身份模块共用的写锁后执行 fn；只有全部成功才提交，任何一步失败都撤销本次事务的修改。

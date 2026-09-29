@@ -4,12 +4,54 @@ package identityhttp
 import (
 	"encoding/json"
 	"errors"
-	"strings"
+	"fmt"
+	"slices"
 	"testing"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
+	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 )
+
+func TestAccountRoutesExcludeAuthentication(t *testing.T) {
+	h := &Handler{}
+	for _, tc := range []struct {
+		name     string
+		register func(*router.Router)
+		post     []string
+		get      []string
+	}{
+		{
+			name:     "identity",
+			register: func(r *router.Router) { h.RegisterRoutes(r) },
+			post: []string{
+				"/api/identity/initialize",
+				"/api/identity/change-password", "/api/identity/password-events",
+				"/api/accounts/create", "/api/accounts/delete", "/api/accounts/list", "/api/accounts/set-status", "/api/accounts/reset-password",
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := router.New()
+			tc.register(r)
+			actual := r.List()
+			for method, want := range map[string][]string{fasthttp.MethodPost: tc.post, fasthttp.MethodGet: tc.get} {
+				got := slices.Clone(actual[method])
+				slices.Sort(got)
+				slices.Sort(want)
+				if !slices.Equal(got, want) {
+					t.Fatalf("%s routes=%v want=%v", method, got, want)
+				}
+				delete(actual, method)
+			}
+			if len(actual) != 0 {
+				t.Fatalf("unexpected route methods: %v", actual)
+			}
+		})
+	}
+}
 
 func TestErrorResponseContract(t *testing.T) {
 	for _, tt := range []struct {
@@ -23,11 +65,19 @@ func TestErrorResponseContract(t *testing.T) {
 		{identity.ErrNotFound, 404, "not_found"},
 		{identity.ErrConflict, 409, "conflict"},
 		{identity.ErrLimited, 429, "rate_limited"},
+		{auth.ErrUnauthorized, 401, "unauthorized"},
+		{auth.ErrLimited, 429, "rate_limited"},
+		{fmt.Errorf("private context: %w", auth.ErrForbidden), 403, "forbidden"},
+		{session.ErrUnauthorized, 401, "unauthorized"},
+		{session.ErrInvalid, 400, "invalid_input"},
+		{session.ErrUnavailable, 503, "unavailable"},
+		{auth.Error("private database details"), 503, "unavailable"},
+		{errors.New("unauthorized"), 503, "unavailable"},
 		{errors.New("private database details"), 503, "unavailable"},
 	} {
 		t.Run(tt.code, func(t *testing.T) {
 			var c fasthttp.RequestCtx
-			Error(&c, tt.err)
+			writeError(&c, tt.err)
 			var body struct {
 				Error struct{ Code, Message string }
 			}
@@ -45,52 +95,5 @@ func TestErrorResponseContract(t *testing.T) {
 				t.Fatal("unexpected retry header")
 			}
 		})
-	}
-}
-
-func TestJSONFailureDoesNotExposeValue(t *testing.T) {
-	var c fasthttp.RequestCtx
-	JSON(&c, fasthttp.StatusOK, func() {})
-	if c.Response.StatusCode() != 503 || string(c.Response.Body()) != `{"error":{"code":"unavailable"}}` {
-		t.Fatal("unsafe serialization fallback", string(c.Response.Body()))
-	}
-}
-
-func TestStrictJSONBoundaries(t *testing.T) {
-	for _, tt := range []struct {
-		name, body        string
-		allowEmpty, valid bool
-	}{
-		{"body at 16KiB", `{"value":"ok"}` + strings.Repeat(" ", 16384-len(`{"value":"ok"}`)), false, true},
-		{"body over 16KiB", `{"value":"ok"}` + strings.Repeat(" ", 16385-len(`{"value":"ok"}`)), false, false},
-		{"legacy empty body", "", true, true},
-		{"new empty body", "", false, false},
-		{"duplicate key", `{"value":"ok","value":"other"}`, false, false},
-		{"unknown field", `{"unknown":true}`, false, false},
-		{"multiple documents", `{} {}`, false, false},
-		{"invalid utf8", "{\"value\":\"\xff\"}", false, false},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			var c fasthttp.RequestCtx
-			c.Request.SetBodyString(tt.body)
-			if tt.body != "" {
-				c.Request.Header.SetContentType("application/json")
-			}
-			var payload struct {
-				Value string `json:"value"`
-			}
-			if err := decode(&c, &payload, tt.allowEmpty); (err == nil) != tt.valid {
-				t.Fatal("unexpected decode result", err)
-			}
-		})
-	}
-	for _, tt := range []struct {
-		arrays int
-		valid  bool
-	}{{63, true}, {64, false}} {
-		body := `{"value":` + strings.Repeat("[", tt.arrays) + "0" + strings.Repeat("]", tt.arrays) + "}"
-		if err := ValidateJSONObject([]byte(body)); (err == nil) != tt.valid {
-			t.Fatal("JSON depth boundary changed", tt.arrays, err)
-		}
 	}
 }

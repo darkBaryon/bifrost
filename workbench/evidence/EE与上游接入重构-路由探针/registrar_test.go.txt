@@ -1,0 +1,168 @@
+package registrarprobe
+
+import (
+ "fmt"
+ "strings"
+ "testing"
+
+ "github.com/fasthttp/router"
+ "github.com/valyala/fasthttp"
+)
+
+type Registrar interface {
+ GET(string, fasthttp.RequestHandler)
+ POST(string, fasthttp.RequestHandler)
+ PUT(string, fasthttp.RequestHandler)
+ DELETE(string, fasthttp.RequestHandler)
+ PATCH(string, fasthttp.RequestHandler)
+ HEAD(string, fasthttp.RequestHandler)
+ Handle(string, string, fasthttp.RequestHandler)
+}
+
+var _ Registrar = (*router.Router)(nil)
+var _ Registrar = (*policyRegistrar)(nil)
+
+type routeKey struct { method, pattern string }
+type policy struct { name string; needsCredential bool }
+type policyRegistrar struct {
+ target Registrar
+ policies map[routeKey]policy
+ bound []routeKey
+ missing []routeKey
+}
+
+func (r *policyRegistrar) GET(p string, h fasthttp.RequestHandler) { r.Handle("GET",p,h) }
+func (r *policyRegistrar) POST(p string, h fasthttp.RequestHandler) { r.Handle("POST",p,h) }
+func (r *policyRegistrar) PUT(p string, h fasthttp.RequestHandler) { r.Handle("PUT",p,h) }
+func (r *policyRegistrar) DELETE(p string, h fasthttp.RequestHandler) { r.Handle("DELETE",p,h) }
+func (r *policyRegistrar) PATCH(p string, h fasthttp.RequestHandler) { r.Handle("PATCH",p,h) }
+func (r *policyRegistrar) HEAD(p string, h fasthttp.RequestHandler) { r.Handle("HEAD",p,h) }
+func (r *policyRegistrar) Handle(m, p string, h fasthttp.RequestHandler) {
+ key := routeKey{m,p}
+ binding, ok := r.policies[key]
+ if !ok { r.missing = append(r.missing,key); return }
+ r.bound = append(r.bound,key)
+ // The policy is captured once at registration, not looked up using request paths.
+ r.target.Handle(m,p,func(ctx *fasthttp.RequestCtx) {
+  ctx.Response.Header.Set("X-Bound-Policy",binding.name)
+  if binding.needsCredential && string(ctx.Request.Header.Peek("X-Probe-Credential")) != "valid" {
+   ctx.Error("forbidden",fasthttp.StatusForbidden); return
+  }
+  h(ctx)
+ })
+}
+func (r *policyRegistrar) Validate() error {
+ if len(r.missing)>0 { return fmt.Errorf("unclassified route: %s %s",r.missing[0].method,r.missing[0].pattern) }
+ return nil
+}
+
+func request(h fasthttp.RequestHandler, method, path string, credential bool) *fasthttp.RequestCtx {
+ ctx := &fasthttp.RequestCtx{}
+ ctx.Request.Header.SetMethod(method)
+ ctx.Request.SetRequestURI(path)
+ if credential { ctx.Request.Header.Set("X-Probe-Credential","valid") }
+ h(ctx)
+ return ctx
+}
+
+func TestSevenMethodRegistrar(t *testing.T) {
+ real := router.New()
+ p := &policyRegistrar{target:real,policies:map[routeKey]policy{}}
+ verbs := []string{"GET","POST","PUT","DELETE","PATCH","HEAD","CUSTOM"}
+ for _,m := range verbs { p.policies[routeKey{m,"/"+m}] = policy{name:m} }
+ h := func(ctx *fasthttp.RequestCtx) { ctx.Response.Header.Set("X-Handler-Ran","yes") }
+ p.GET("/GET",h); p.POST("/POST",h); p.PUT("/PUT",h); p.DELETE("/DELETE",h)
+ p.PATCH("/PATCH",h); p.HEAD("/HEAD",h); p.Handle("CUSTOM","/CUSTOM",h)
+ if err:=p.Validate();err!=nil { t.Fatal(err) }
+ if len(p.bound)!=7 { t.Fatalf("bound %d routes; want 7",len(p.bound)) }
+ for _,m := range verbs {
+  ctx:=request(real.Handler,m,"/"+m,false)
+  if string(ctx.Response.Header.Peek("X-Bound-Policy"))!=m || string(ctx.Response.Header.Peek("X-Handler-Ran"))!="yes" { t.Fatalf("%s bypassed decorator",m) }
+ }
+ t.Log("real *router.Router satisfies seven-method interface; GET POST PUT DELETE PATCH HEAD CUSTOM all pass decorator.Handle")
+}
+
+func TestDirectHandlersAndOptionalAliases(t *testing.T) {
+ real:=router.New();real.SaveMatchedRoutePath=true
+ p:=&policyRegistrar{target:real,policies:map[routeKey]policy{
+  {"GET","/api/items/{id?}"}:{name:"console.read",needsCredential:true},
+  {"POST","/oauth2/token"}:{name:"protocol-owned"},
+ }}
+ // Both handlers are deliberately registered directly, without ChainMiddlewares.
+ p.GET("/api/items/{id?}",func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("items")})
+ p.POST("/oauth2/token",func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("token-protocol")})
+ if err:=p.Validate();err!=nil{t.Fatal(err)}
+ for _,path:=range []string{"/api/items","/api/items/42"} {
+  denied:=request(real.Handler,"GET",path,false)
+  allowed:=request(real.Handler,"GET",path,true)
+  if denied.Response.StatusCode()!=403 || allowed.Response.StatusCode()!=200 {t.Fatalf("optional alias %s: denied=%d allowed=%d",path,denied.Response.StatusCode(),allowed.Response.StatusCode())}
+  if got:=allowed.UserValue(router.MatchedRoutePathParam);got!="/api/items/{id?}"{t.Fatalf("matched template=%v",got)}
+  if got:=string(allowed.Response.Header.Peek("X-Bound-Policy"));got!="console.read"{t.Fatalf("bound policy=%q",got)}
+  t.Logf("%s: no credential=403 valid credential=200 policy=console.read template=/api/items/{id?}",path)
+ }
+ public:=request(real.Handler,"POST","/oauth2/token",false)
+ if public.Response.StatusCode()!=200 || string(public.Response.Header.Peek("X-Bound-Policy"))!="protocol-owned" {t.Fatal("direct protocol handler escaped binding")}
+ t.Log("POST /oauth2/token: no console credential=200 policy=protocol-owned (direct handler still bound)")
+}
+
+func TestUnknownPolicyFailsStartupValidation(t *testing.T) {
+ real:=router.New();p:=&policyRegistrar{target:real,policies:map[routeKey]policy{}}
+ p.GET("/api/new-capability",func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("must not run")})
+ err:=p.Validate()
+ if err==nil{t.Fatal("unclassified route accepted")}
+ if ctx:=request(real.Handler,"GET","/api/new-capability",false);ctx.Response.StatusCode()!=404{t.Fatal("unclassified handler was registered")}
+ t.Logf("startup validation rejected: %v; unclassified handler not registered",err)
+}
+
+func uiRouter(wildcard bool) *router.Router {
+ r:=router.New()
+ r.GET("/api/widgets",func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("widgets")})
+ ui:=func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("SPA")}
+ r.GET("/",ui)
+ if wildcard { r.GET("/{filepath:*}",ui) } else {
+  r.NotFound=func(ctx *fasthttp.RequestCtx) {
+   path:=string(ctx.Path())
+   reserved:=false
+   for _,prefix:=range []string{"/api","/v1","/oauth2","/.well-known"} {
+    if path==prefix || strings.HasPrefix(path,prefix+"/"){reserved=true;break}
+   }
+   if string(ctx.Method())=="GET" && !reserved {ui(ctx);return}
+   ctx.Error("route not found",fasthttp.StatusNotFound)
+  }
+ }
+ return r
+}
+
+func TestUIWildcardVersusNotFoundFallback(t *testing.T) {
+ cases:=[]struct{method,path string;wild,fallback int}{
+  {"GET","/api/widgets",200,200},
+  {"POST","/api/widgets",405,405},
+  {"GET","/api/missing",200,404},
+  {"POST","/api/missing",405,404},
+  {"GET","/workspace/providers",200,200},
+  {"POST","/workspace/providers",405,404},
+  {"HEAD","/api/missing",405,404},
+  {"GET","/api",200,404},
+  {"GET","/apiary",200,200},
+ }
+ wild,fallback:=uiRouter(true),uiRouter(false)
+ for _,tc:=range cases{
+  a:=request(wild.Handler,tc.method,tc.path,false);b:=request(fallback.Handler,tc.method,tc.path,false)
+  if a.Response.StatusCode()!=tc.wild || b.Response.StatusCode()!=tc.fallback {t.Errorf("%s %s: got %d/%d want %d/%d",tc.method,tc.path,a.Response.StatusCode(),b.Response.StatusCode(),tc.wild,tc.fallback)}
+  t.Logf("%-4s %-24s wildcard=%d fallback=%d",tc.method,tc.path,a.Response.StatusCode(),b.Response.StatusCode())
+ }
+}
+
+func TestLookupIsNotTemplateIdentity(t *testing.T) {
+ r:=router.New()
+ r.GET("/models/{model}",func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("parameter")})
+ r.GET("/models/{tail:*}",func(ctx *fasthttp.RequestCtx){ctx.SetBodyString("catchall")})
+ h,_:=r.Lookup("GET","/models/{tail:*}",nil)
+ if h==nil{t.Fatal("lookup returned nil")}
+ ctx:=request(h,"GET","/models/{tail:*}",false)
+ if string(ctx.Response.Body())!="parameter"{t.Fatalf("lookup=%q",ctx.Response.Body())}
+ t.Log("Lookup(GET, /models/{tail:*}) selected sibling /models/{model} handler; Lookup is request-path matching, not pattern identity")
+ r.GET("/numeric/{id:[0-9]+}",func(ctx *fasthttp.RequestCtx){})
+ if h,_:=r.Lookup("GET","/numeric/{id:[0-9]+}",nil);h!=nil{t.Fatal("literal regex template unexpectedly matched")}
+ t.Log("Lookup(GET, /numeric/{id:[0-9]+}) returned nil")
+}

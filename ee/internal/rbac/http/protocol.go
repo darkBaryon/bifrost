@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	authhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	"github.com/valyala/fasthttp"
 )
@@ -19,14 +19,14 @@ import (
 // —— 请求校验与字段解析 ——
 
 // maxBodyBytes 沿用身份接口的正文上限。
-const maxBodyBytes = authhttp.MaxBodyBytes
+const maxBodyBytes = httpx.MaxBodyBytes
 
 // decode 只接受一个JSON对象；allowed列出允许的字段，required列出必须传的字段。
 // 重复字段、未知字段、null、错误的内容类型、无效UTF-8或超大正文都会被拒绝。
 func decode(c *fasthttp.RequestCtx, allowed, required []string) (map[string]json.RawMessage, error) {
 	body := c.PostBody()
 	media, _, e := mime.ParseMediaType(string(c.Request.Header.ContentType()))
-	if e != nil || media != "application/json" || len(body) > maxBodyBytes || !utf8.Valid(body) || authhttp.ValidateJSONObject(body) != nil {
+	if e != nil || media != "application/json" || len(body) > maxBodyBytes || !utf8.Valid(body) || httpx.ValidateJSONObject(body) != nil {
 		return nil, rbac.ErrInvalid
 	}
 	var fields map[string]json.RawMessage
@@ -130,7 +130,7 @@ func classifiedError(err error) (rbac.Error, int) {
 func Error(c *fasthttp.RequestCtx, err error) {
 	var hostStatus statusError
 	if errors.As(err, &hostStatus) {
-		authhttp.JSON(c, hostStatus.status, errorResponse{Error: errorDetail{Code: hostStatus.code, Message: hostStatus.code}})
+		httpx.JSON(c, hostStatus.status, errorResponse{Error: errorDetail{Code: hostStatus.code, Message: hostStatus.code}})
 		return
 	}
 	code, status := classifiedError(err)
@@ -139,7 +139,7 @@ func Error(c *fasthttp.RequestCtx, err error) {
 	if errors.As(err, &conflict) {
 		detail.Details = &conflictDetails{AccountCount: conflict.AccountCount}
 	}
-	authhttp.JSON(c, status, errorResponse{Error: detail})
+	httpx.JSON(c, status, errorResponse{Error: detail})
 }
 
 // FromStatus 把HTTP状态包装成可交给Error输出的错误，例如错误请求方法对应405。

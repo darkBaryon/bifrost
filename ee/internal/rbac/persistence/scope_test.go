@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth/hasher"
 	auth "github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	authstore "github.com/darkBaryon/bifrost/ee/internal/identity/persistence"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
@@ -79,14 +79,15 @@ func (p failingLifecycle) AfterRecover(ctx context.Context, state auth.State) er
 }
 
 func TestLifecycleFailureRollsBackBothFeatures(t *testing.T) {
-	db := database(t)
+	db := testDatabase(t)
 	must(t, MigrateRBAC(testLog{})(ctx, db))
 	failInit, failRecover := true, false
 	store := authstore.NewStore(db, testLog{}, authstore.WithPolicyFactory(func(tx *gorm.DB, v auth.Queries) (auth.AccountPolicy, error) {
 		return failingLifecycle{policy.NewPolicy(rbac.New(Bind(tx, v))), &failInit, &failRecover}, nil
 	}))
 	rb := rbac.New(NewStore(store.ReadWithin, store.Within))
-	svc, e := auth.New(store, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, policy.NewPolicy(rb))
+	login, sessions, passwords := newLogin(t, db)
+	svc, e := auth.New(store, passwords, auth.Options{InitialPassword: "123456", SetupToken: "setup", SessionTTL: 24 * time.Hour}, policy.NewPolicy(rb), sessions)
 	must(t, e)
 	_, e = svc.Account.Initialize(ctx, "setup", "admin", password)
 	want(t, e, auth.ErrUnavailable)
@@ -103,7 +104,7 @@ func TestLifecycleFailureRollsBackBothFeatures(t *testing.T) {
 	failInit = false
 	_, e = svc.Account.Initialize(ctx, "setup", "admin", password)
 	must(t, e)
-	session, e := svc.Session.Login(ctx, "admin", password, "admin")
+	session, e := login.Login(ctx, "admin", password, "admin")
 	must(t, e)
 	before, e := store.RecordByName(ctx, "admin")
 	must(t, e)
@@ -114,7 +115,7 @@ func TestLifecycleFailureRollsBackBothFeatures(t *testing.T) {
 	if after.PasswordHash != before.PasswordHash || after.AuthVersion != before.AuthVersion {
 		t.Fatal("recovery failure changed credential")
 	}
-	_, e = svc.Session.Authenticate(ctx, session.Token)
+	_, e = login.Authenticate(ctx, session.Token)
 	must(t, e)
 	events, e := store.Events(ctx, "", auth.Cursor{}, 100)
 	must(t, e)
@@ -123,7 +124,7 @@ func TestLifecycleFailureRollsBackBothFeatures(t *testing.T) {
 	}
 	failRecover = false
 	must(t, svc.Password.RecoverAdmin(ctx, "New-password-1"))
-	_, e = svc.Session.Authenticate(ctx, session.Token)
+	_, e = login.Authenticate(ctx, session.Token)
 	want(t, e, auth.ErrUnauthorized)
 }
 
@@ -203,7 +204,7 @@ func TestResetRechecksPermissionAfterHash(t *testing.T) {
 	_, e = f.rb.SetAccountRoles(ctx, admin, manager.Account.ID, []rbac.RoleID{role.ID})
 	must(t, e)
 	entered, release := make(chan struct{}), make(chan struct{})
-	service, e := auth.New(f.store, pausedHasher{hasher.Bcrypt{}, entered, release}, auth.Options{InitialPassword: "123456", SessionTTL: 24 * time.Hour}, policy.NewPolicy(f.rb))
+	service, e := auth.New(f.store, pausedHasher{hasher.Bcrypt{}, entered, release}, auth.Options{InitialPassword: "123456", SessionTTL: 24 * time.Hour}, policy.NewPolicy(f.rb), f.sessions)
 	must(t, e)
 	before, e := f.store.RecordByName(ctx, "target")
 	must(t, e)
@@ -223,7 +224,7 @@ func TestResetRechecksPermissionAfterHash(t *testing.T) {
 	if before.PasswordHash != after.PasswordHash || before.AuthVersion != after.AuthVersion {
 		t.Fatal("revoked reset changed target")
 	}
-	_, e = f.auth.Session.Authenticate(ctx, target.Token)
+	_, e = f.login.Authenticate(ctx, target.Token)
 	must(t, e)
 	events, e := f.store.Events(ctx, "", auth.Cursor{}, 100)
 	must(t, e)

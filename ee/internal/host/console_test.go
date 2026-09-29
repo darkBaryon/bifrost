@@ -20,13 +20,16 @@ func TestConsoleBootstrapWithoutSettingsPermission(t *testing.T) {
 	if _, err := services.Account.CreateAccount(ctx, admin.Principal, "viewer", "Viewer"); err != nil {
 		t.Fatal(err)
 	}
-	viewer, err := services.Session.Login(ctx, "viewer", "123456", "peer")
+	viewer, err := services.Auth.Login(ctx, "viewer", "123456", "peer")
 	if err != nil {
 		t.Fatal(err)
 	}
 	routes := router.New()
-	adapter.RegisterSessionRoutes(routes, adapter.APIMiddleware())
+	adapter.RegisterConsoleRoutes(routes)
 	routes.GET("/api/config", adapter.APIMiddleware()(func(c *fasthttp.RequestCtx) { t.Error("full config reached without permission") }))
+	if err := services.Access.VerifyRoutes(routes); err != nil {
+		t.Fatal(err)
+	}
 	c := request(routes, "POST", "/api/console/bootstrap", "{}", viewer.Token, adapter.http.Origin(), "")
 	if c.Response.StatusCode() != 200 {
 		t.Fatalf("session without Settings.View must read bootstrap: got %d, body=%s", c.Response.StatusCode(), c.Response.Body())
@@ -37,9 +40,12 @@ func TestConsoleBootstrapWithoutSettingsPermission(t *testing.T) {
 	}
 }
 
-func TestConsoleBootstrapMiddlewareOwnershipIsExact(t *testing.T) {
+func TestManagementMiddlewareDoesNotBypassModuleRoutes(t *testing.T) {
 	a, _, _ := testAdapter(t)
 	for _, tc := range []struct{ method, path string }{
+		{"POST", "/api/console/bootstrap"},
+		{"POST", "/api/identity/login"},
+		{"POST", "/api/permissions/me"},
 		{"GET", "/api/console/bootstrap"},
 		{"PUT", "/api/console/bootstrap"},
 		{"POST", "/api/console/bootstrap/"},

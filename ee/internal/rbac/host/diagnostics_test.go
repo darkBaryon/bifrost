@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/darkBaryon/bifrost/ee/internal/identity"
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/fasthttp/router"
 	"github.com/valyala/fasthttp"
 )
@@ -29,8 +30,8 @@ func TestProjectionFailureHasSafeDiagnostic(t *testing.T) {
 		t.Fatal(e)
 	}
 	c := requestCtx("GET", "/api/providers", "")
-	ctx := identity.WithDiagnosticOperation(context.Background(), "rbac.response")
-	wrap, e := adapter.Prepare(ctx, c, identity.Principal{AccountID: "member"})
+	ctx := database.WithOperation(context.Background(), "rbac.response")
+	wrap, e := adapter.Prepare(ctx, c, session.Principal{AccountID: "member"})
 	if e != nil {
 		t.Fatal(e)
 	}

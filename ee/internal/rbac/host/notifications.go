@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"slices"
 
-	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	authhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
+	"github.com/darkBaryon/bifrost/ee/internal/database"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/bifrost-http/handlers"
@@ -56,7 +56,7 @@ func (p notificationPolicy) AuthorizePublish(ctx context.Context, input schemas.
 // messageFilter 每次发送前重新读取账号权限；无权接收的通知跳过，登录或权限失效则断开。
 func (a *Adapter) messageFilter(subject rbac.Subject) handlers.WebSocketMessageFilter {
 	return func(ctx context.Context, body []byte) (allowed bool, err error) {
-		ctx = identity.WithDiagnosticOperation(ctx, "rbac.websocket")
+		ctx = database.WithOperation(ctx, "rbac.websocket")
 		defer func() {
 			if err != nil {
 				a.diagnostic(ctx, "/ws", "message_rejected")
@@ -70,7 +70,7 @@ func (a *Adapter) messageFilter(subject rbac.Subject) handlers.WebSocketMessageF
 		if !access.Allows(rbac.NotificationsView) {
 			return false, rbac.ErrForbidden
 		}
-		if authhttp.ValidateJSONObject(body) != nil {
+		if httpx.ValidateJSONObject(body) != nil {
 			return false, rbac.ErrInvalid
 		}
 		var envelope struct {

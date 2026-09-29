@@ -13,7 +13,7 @@ func TestExpiredRowsSweptOnInsert(t *testing.T) {
 	ctx := context.Background()
 	now := time.Now().UTC()
 	past := now.Add(-time.Minute)
-	// 直接写行，绕过 InsertSession/InsertTicket 自带的清理，让下面的登录与签票成为唯一触发者。
+	// 直接写行，绕过 session 存储自带的清理，让下面的登录与签票成为唯一触发者。
 	for _, r := range []sessionRow{
 		{ID: "00000000-0000-4000-8000-00000000e001", TokenHash: "expired", AccountID: admin.Account.ID, IssuedAuthVersion: 1, ExpiresAt: now.Add(-time.Hour), CreatedAt: now.Add(-25 * time.Hour)},
 		{ID: "00000000-0000-4000-8000-00000000e002", TokenHash: "expired-revoked", AccountID: admin.Account.ID, IssuedAuthVersion: 1, ExpiresAt: now.Add(-time.Hour), CreatedAt: now.Add(-25 * time.Hour), RevokedAt: &past},

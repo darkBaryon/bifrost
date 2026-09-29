@@ -4,6 +4,7 @@ package identity
 import (
 	"context"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 
 	auth "github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
@@ -16,7 +17,7 @@ type Policy struct{ service *rbac.Service }
 func NewPolicy(service *rbac.Service) *Policy { return &Policy{service: service} }
 
 // Subject 只转换会话句柄，不把调用方字段当成已重新验证的身份。
-func Subject(p auth.Principal) rbac.Subject {
+func Subject(p session.Principal) rbac.Subject {
 	return rbac.Subject{AccountID: p.AccountID, SessionID: p.SessionID, AuthVersion: p.AuthVersion}
 }
 
@@ -56,7 +57,7 @@ func PermissionError(err error) error {
 }
 
 // Authorize 把身份操作对应到角色权限，并重新核实账号和会话。
-func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Principal, action auth.AccountAction, _ string) error {
+func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor session.Principal, action auth.AccountAction, _ string) error {
 	if p == nil || p.service == nil {
 		return auth.ErrUnavailable
 	}
@@ -66,8 +67,6 @@ func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Princip
 		permission = rbac.UsersView
 	case auth.CreateAccounts, auth.DeleteAccounts, auth.ChangeAccountStatus, auth.ResetAccountPassword, auth.ReadAllPasswordEvents:
 		permission = rbac.UsersManage
-	case auth.OpenConsoleStream:
-		permission = rbac.NotificationsView
 	default:
 		return auth.ErrForbidden
 	}
@@ -75,7 +74,7 @@ func (p *Policy) Authorize(ctx context.Context, _ auth.State, actor auth.Princip
 }
 
 // BeforeStatusChange 停用前保护最后一个启用的主管理员；启用不需要额外保护，调用方已检查ChangeAccountStatus权限。
-func (p *Policy) BeforeStatusChange(ctx context.Context, _ auth.State, actor auth.Principal, target auth.Account, next auth.AccountStatus) error {
+func (p *Policy) BeforeStatusChange(ctx context.Context, _ auth.State, actor session.Principal, target auth.Account, next auth.AccountStatus) error {
 	if next != auth.StatusDisabled {
 		return nil
 	}
@@ -104,7 +103,7 @@ func (p *Policy) AfterRecover(ctx context.Context, state auth.State) error {
 var _ auth.AccountPolicy = (*Policy)(nil)
 
 // BeforeDelete 在删除账号的同一事务中保护最后管理员并移除角色关联。
-func (p *Policy) BeforeDelete(ctx context.Context, _ auth.State, actor auth.Principal, target auth.Account) error {
+func (p *Policy) BeforeDelete(ctx context.Context, _ auth.State, actor session.Principal, target auth.Account) error {
 	if p == nil || p.service == nil {
 		return auth.ErrUnavailable
 	}

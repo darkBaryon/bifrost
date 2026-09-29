@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth/hasher"
 	auth "github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	policy "github.com/darkBaryon/bifrost/ee/internal/rbac/identity"
 	"gorm.io/gorm"
@@ -30,7 +30,7 @@ func TestDeleteAccountLifecycle(t *testing.T) {
 	want(t, f.auth.Account.DeleteAccount(ctx, f.admin.Principal, member.Account.ID), auth.ErrConflict)
 	_, err = f.rb.SetAccountRoles(ctx, policy.Subject(member.Principal), f.admin.Account.ID, []rbac.RoleID{rbac.ChiefRoleID})
 	must(t, err)
-	_, err = f.auth.Session.IssueTicket(ctx, member.Principal)
+	_, err = f.tickets.IssueTicket(ctx, member.Principal)
 	must(t, err)
 	events, err := f.store.Events(ctx, member.Account.ID, auth.Cursor{}, 100)
 	must(t, err)
@@ -39,7 +39,7 @@ func TestDeleteAccountLifecycle(t *testing.T) {
 	}
 	must(t, f.auth.Account.DeleteAccount(ctx, f.admin.Principal, member.Account.ID))
 	want(t, f.auth.Account.DeleteAccount(ctx, f.admin.Principal, member.Account.ID), auth.ErrNotFound)
-	_, err = f.auth.Session.Authenticate(ctx, member.Token)
+	_, err = f.login.Authenticate(ctx, member.Token)
 	want(t, err, auth.ErrUnauthorized)
 	for _, tc := range []struct{ table, column, id string }{
 		{"ee_identity_accounts", "id", member.Account.ID},
@@ -78,7 +78,7 @@ func TestDeleteAccountRollback(t *testing.T) {
 	}))
 	t.Cleanup(func() { f.db.Callback().Delete().Remove("fail_account_delete") })
 	want(t, f.auth.Account.DeleteAccount(ctx, f.admin.Principal, member.Account.ID), auth.ErrUnavailable)
-	_, err = f.auth.Session.Authenticate(ctx, member.Token)
+	_, err = f.login.Authenticate(ctx, member.Token)
 	must(t, err)
 	access, err := f.rb.Snapshot(ctx, policy.Subject(member.Principal))
 	must(t, err)
@@ -95,14 +95,14 @@ func TestLastLoginAtomicity(t *testing.T) {
 	if account.LastLoginAt != nil {
 		t.Fatal("new account already has login time")
 	}
-	_, err = f.auth.Session.Login(ctx, "fresh", "wrong-password", "fresh")
+	_, err = f.login.Login(ctx, "fresh", "wrong-password", "fresh")
 	want(t, err, auth.ErrUnauthorized)
 	before, err := f.store.RecordByName(ctx, "fresh")
 	must(t, err)
 	if before.LastLoginAt != nil {
 		t.Fatal("failed login changed timestamp")
 	}
-	logged, err := f.auth.Session.Login(ctx, "fresh", "123456", "fresh")
+	logged, err := f.login.Login(ctx, "fresh", "123456", "fresh")
 	must(t, err)
 	if logged.Account.LastLoginAt == nil {
 		t.Fatal("successful login missing timestamp")
@@ -120,7 +120,7 @@ func TestLastLoginAtomicity(t *testing.T) {
 		}
 	}))
 	t.Cleanup(func() { f.db.Callback().Update().Remove("fail_login_timestamp") })
-	_, err = f.auth.Session.Login(ctx, "fresh", "123456", "fresh")
+	_, err = f.login.Login(ctx, "fresh", "123456", "fresh")
 	want(t, err, auth.ErrUnavailable)
 	after, err := f.store.RecordByName(ctx, "fresh")
 	must(t, err)
@@ -145,7 +145,7 @@ func TestLastChiefDeleteBeforeDisable(t *testing.T) {
 	_, err = f.rb.SetAccountRoles(ctx, admin, second.Account.ID, []rbac.RoleID{rbac.ChiefRoleID})
 	must(t, err)
 	locked, release := make(chan struct{}), make(chan struct{})
-	services, err := auth.New(pausedTransaction{f.store, locked, release}, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SessionTTL: 24 * time.Hour}, policy.NewPolicy(f.rb))
+	services, err := auth.New(pausedTransaction{f.store, locked, release}, hasher.Bcrypt{}, auth.Options{InitialPassword: "123456", SessionTTL: 24 * time.Hour}, policy.NewPolicy(f.rb), f.sessions)
 	must(t, err)
 	first, other := make(chan error, 1), make(chan error, 1)
 	go func() { first <- services.Account.DeleteAccount(ctx, manager.Principal, second.Account.ID) }()
@@ -157,7 +157,7 @@ func TestLastChiefDeleteBeforeDisable(t *testing.T) {
 	close(release)
 	must(t, <-first)
 	want(t, <-other, auth.ErrConflict)
-	_, err = f.auth.Session.Authenticate(ctx, second.Token)
+	_, err = f.login.Authenticate(ctx, second.Token)
 	want(t, err, auth.ErrUnauthorized)
 	access, err := f.rb.Snapshot(ctx, admin)
 	must(t, err)

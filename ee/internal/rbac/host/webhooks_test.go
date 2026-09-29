@@ -4,10 +4,10 @@ package host
 import (
 	"context"
 	"encoding/json"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"reflect"
 	"testing"
 
-	"github.com/darkBaryon/bifrost/ee/internal/identity"
 	"github.com/darkBaryon/bifrost/ee/internal/rbac"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/framework/configstore"
@@ -55,7 +55,7 @@ func TestWebhookRedeliveryUsesEffectiveEndpoint(t *testing.T) {
 	// 重投只入队；记录真实Handler的队列边界，不启动异步发送器或外部接收方。
 	handlers.NewWebhookHandler(nil, config, nil).RegisterRoutes(routes, func(next fasthttp.RequestHandler) fasthttp.RequestHandler {
 		return func(c *fasthttp.RequestCtx) {
-			wrap, err := adapter.Prepare(context.Background(), c, identity.Principal{AccountID: "member"})
+			wrap, err := adapter.Prepare(context.Background(), c, session.Principal{AccountID: "member"})
 			if err != nil {
 				t.Fatalf("ordinary authorization: %v", err)
 			}

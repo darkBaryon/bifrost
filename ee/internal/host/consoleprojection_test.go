@@ -40,7 +40,8 @@ func (l *consoleWarnings) Warn(message string, args ...any) {
 func TestConsoleBootstrapProjectionAndRestartDegradation(t *testing.T) {
 	a, admin, _ := testAdapter(t)
 	r := router.New()
-	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	a.RegisterConsoleRoutes(r)
+	verifyHostRoutes(t, a, r)
 	for _, tc := range []struct {
 		name, env string
 		config    bool

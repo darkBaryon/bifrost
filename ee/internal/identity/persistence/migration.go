@@ -4,6 +4,7 @@ package persistence
 import (
 	"context"
 
+	"github.com/darkBaryon/bifrost/ee/internal/database"
 	upstream "github.com/maximhq/bifrost/framework/configstore"
 	"github.com/maximhq/bifrost/framework/migrator"
 	"gorm.io/gorm"
@@ -22,7 +23,7 @@ const identityMigrationLock int64 = 8342761902
 
 // MigrateIdentity 返回可交给 ConfigStore.RunMigration 的迁移函数：执行v1建表及v2最近登录列迁移，
 // 表、单例与版本记录在同一事务提交或回滚。SQLite 锁冲突整笔重试，耗尽后返回原始错误，由调用方决定是否拒绝启动。
-func MigrateIdentity(log Logger) func(context.Context, *gorm.DB) error {
+func MigrateIdentity(log database.Logger) func(context.Context, *gorm.DB) error {
 	return func(ctx context.Context, db *gorm.DB) error {
 		return logDatabaseFailure(log, ctx, "migration", retryBusy(ctx, func() error { return migrateIdentityOnce(ctx, db) }))
 	}

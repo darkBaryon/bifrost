@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	authhttp "github.com/darkBaryon/bifrost/ee/internal/auth/http"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
 	"github.com/maximhq/bifrost/transports/bifrost-http/server"
@@ -22,7 +24,7 @@ func consoleRequest(handler fasthttp.RequestHandler, method, path, body, token, 
 	req.Header.SetContentType("application/json")
 	req.SetBodyString(body)
 	if token != "" {
-		req.Header.SetCookie(identityhttp.CookieName, token)
+		req.Header.SetCookie(authhttp.CookieName, token)
 	}
 	if origin != "" {
 		req.Header.Set("Origin", origin)
@@ -60,7 +62,8 @@ func TestConsoleBootstrapProtocol(t *testing.T) {
 	a, admin, _ := testAdapter(t)
 	a.host = &server.BifrostHTTPServer{Config: &lib.Config{}}
 	r := router.New()
-	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	a.RegisterConsoleRoutes(r)
+	verifyHostRoutes(t, a, r)
 	for _, tc := range []struct {
 		name, body, token, origin string
 		headers                   map[string]string
@@ -97,7 +100,7 @@ func TestConsoleBootstrapProtocol(t *testing.T) {
 		{"trailing", `{} junk`, "application/json"},
 		{"malformed", `{`, "application/json"},
 		{"utf8", "{\"" + string([]byte{0xff}) + "\":0}", "application/json"},
-		{"oversized", "{}" + strings.Repeat(" ", identityhttp.MaxBodyBytes-1), "application/json"},
+		{"oversized", "{}" + strings.Repeat(" ", httpx.MaxBodyBytes-1), "application/json"},
 		{"wrong media", `{}`, "text/plain"},
 		{"missing media", `{}`, ""},
 	} {
@@ -106,27 +109,28 @@ func TestConsoleBootstrapProtocol(t *testing.T) {
 			assertConsoleStatus(t, c, 400)
 		})
 	}
-	c := consoleRequest(r.Handler, "POST", "/api/console/bootstrap", "{}"+strings.Repeat(" ", identityhttp.MaxBodyBytes-2), admin.Token, a.http.Origin(), map[string]string{"Content-Type": "application/json; charset=utf-8"})
+	c := consoleRequest(r.Handler, "POST", "/api/console/bootstrap", "{}"+strings.Repeat(" ", httpx.MaxBodyBytes-2), admin.Token, a.http.Origin(), map[string]string{"Content-Type": "application/json; charset=utf-8"})
 	assertConsoleStatus(t, c, 200)
 }
 
-type unavailableConsoleSession struct{ consoleSessions }
+type unavailableConsoleAuthentication struct{ consoleAuthentication }
 
-func (unavailableConsoleSession) Authenticate(context.Context, string) (identity.Principal, error) {
-	return identity.Principal{}, errors.New("database-password-secret")
+func (unavailableConsoleAuthentication) Authenticate(context.Context, string) (session.Principal, error) {
+	return session.Principal{}, errors.New("database-password-secret")
 }
 
 func TestConsoleBootstrapUnavailable(t *testing.T) {
 	a, admin, _ := testAdapter(t)
 	r := router.New()
-	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	a.RegisterConsoleRoutes(r)
+	verifyHostRoutes(t, a, r)
 	for _, h := range []*server.BifrostHTTPServer{nil, {}} {
 		a.host = h
 		c := consoleRequest(r.Handler, "POST", "/api/console/bootstrap", "{}", admin.Token, a.http.Origin(), nil)
 		assertConsoleStatus(t, c, 503)
 	}
 	a.host = &server.BifrostHTTPServer{Config: &lib.Config{}}
-	a.service = unavailableConsoleSession{}
+	a.authentication = unavailableConsoleAuthentication{}
 	c := consoleRequest(r.Handler, "POST", "/api/console/bootstrap", "{}", admin.Token, a.http.Origin(), nil)
 	assertConsoleStatus(t, c, 503)
 	if strings.Contains(string(c.Response.Body()), "secret") {
@@ -138,21 +142,22 @@ func TestConsoleBootstrapRevokedAndDisabledSessions(t *testing.T) {
 	a, admin, svc := testAdapter(t)
 	a.host = &server.BifrostHTTPServer{Config: &lib.Config{}}
 	r := router.New()
-	a.RegisterSessionRoutes(r, a.APIMiddleware())
+	a.RegisterConsoleRoutes(r)
+	verifyHostRoutes(t, a, r)
 	ctx := context.Background()
 	for _, name := range []string{"revoked", "disabled"} {
 		account, err := svc.Account.CreateAccount(ctx, admin.Principal, name, name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		member, err := svc.Session.Login(ctx, name, "123456", "peer")
+		member, err := svc.Auth.Login(ctx, name, "123456", "peer")
 		if err != nil {
 			t.Fatal(err)
 		}
 		c := consoleRequest(r.Handler, "POST", "/api/console/bootstrap", "{}", member.Token, a.http.Origin(), nil)
 		assertConsoleStatus(t, c, 200)
 		if name == "revoked" {
-			err = svc.Session.Logout(ctx, member.Token)
+			err = svc.Auth.Logout(ctx, member.Token)
 		} else {
 			_, err = svc.Account.SetAccountStatus(ctx, admin.Principal, account.ID, identity.StatusDisabled)
 		}

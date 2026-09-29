@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
 	"unicode/utf8"
 )
 
@@ -72,7 +73,7 @@ func (s *AccountService) Initialize(ctx context.Context, setupToken, username, p
 
 // CreateAccount 经 CreateAccounts 策略授权后建号，使用部署初始密码并要求首次登录改密。
 // 用户名重复返回 ErrConflict；哈希在事务外计算，事务内再次核对调用方权限。
-func (s *AccountService) CreateAccount(ctx context.Context, p Principal, username, displayName string) (Account, error) {
+func (s *AccountService) CreateAccount(ctx context.Context, p session.Principal, username, displayName string) (Account, error) {
 	if err := s.RequireAccountManager(ctx, p); err != nil {
 		return Account{}, err
 	}
@@ -106,7 +107,7 @@ func (s *AccountService) CreateAccount(ctx context.Context, p Principal, usernam
 
 // SetAccountStatus 启用或停用账号并撤销其全部会话；同状态幂等，不升版本也不撤销。
 // 操作者不能停用自己；启用不恢复旧会话。
-func (s *AccountService) SetAccountStatus(ctx context.Context, p Principal, id string, status AccountStatus) (Account, error) {
+func (s *AccountService) SetAccountStatus(ctx context.Context, p session.Principal, id string, status AccountStatus) (Account, error) {
 	if status != StatusActive && status != StatusDisabled {
 		return Account{}, ErrInvalid
 	}
@@ -132,7 +133,7 @@ func (s *AccountService) SetAccountStatus(ctx context.Context, p Principal, id s
 			if err = tx.SaveAccount(c); err != nil {
 				return err
 			}
-			if err = tx.RevokeSessions(c.ID, now()); err != nil {
+			if err = s.sessions.RevokeAccountSessions(ctx, tx.DB(), c.ID); err != nil {
 				return err
 			}
 		}
@@ -143,7 +144,7 @@ func (s *AccountService) SetAccountStatus(ctx context.Context, p Principal, id s
 }
 
 // ListAccounts 经 ReadAccounts 策略授权后分页读取账号；多取一条判断是否还有下一页。
-func (s *AccountService) ListAccounts(ctx context.Context, p Principal, cursor string, limit int) (AccountPage, error) {
+func (s *AccountService) ListAccounts(ctx context.Context, p session.Principal, cursor string, limit int) (AccountPage, error) {
 	out := AccountPage{Items: []Account{}}
 	if err := s.requireAction(ctx, p, ReadAccounts, ""); err != nil {
 		return out, err
@@ -166,7 +167,7 @@ func (s *AccountService) ListAccounts(ctx context.Context, p Principal, cursor s
 
 // DeleteAccount 删除账号及其会话和票据；角色策略在同一事务内检查并清理关联。
 // 不允许删除自己或固定恢复账号；历史密码事件保留，重复删除返回ErrNotFound。
-func (s *AccountService) DeleteAccount(ctx context.Context, p Principal, id string) error {
+func (s *AccountService) DeleteAccount(ctx context.Context, p session.Principal, id string) error {
 	if !ValidAccountID(id) {
 		return ErrInvalid
 	}
@@ -182,6 +183,9 @@ func (s *AccountService) DeleteAccount(ctx context.Context, p Principal, id stri
 			return err
 		}
 		if err = s.accessPolicy(tx).BeforeDelete(ctx, tx.State(), p, account.Account); err != nil {
+			return err
+		}
+		if err := s.sessions.DeleteAccountSessions(ctx, tx.DB(), id); err != nil {
 			return err
 		}
 		return tx.DeleteAccount(id)

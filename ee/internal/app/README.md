@@ -2,7 +2,7 @@
 
 ## 解决什么问题
 
-把身份、角色权限、品牌、定价和内容安全接到同一个Bifrost应用，共用服务器、路由和配置数据库。
+把账号、认证、会话、角色权限、品牌、定价和内容安全接到同一个Bifrost应用，共用服务器、路由和配置数据库。
 启动时先迁移身份和角色数据，再构造服务和接口；离线恢复也使用相同的身份/角色协作。
 
 ## 代码在哪
@@ -11,7 +11,7 @@
 |---|---|
 | [bootstrap.go](bootstrap.go) | 准备身份和角色接入，装配内容安全、品牌与定价，监听前核对全部接口规则 |
 | [identity.go](identity.go) | 读取部署配置、执行身份/角色迁移，构造接口与宿主认证适配并注入基础状态诊断logger |
-| [rbac.go](rbac.go) | 把身份事务、角色存储及账号操作策略连接起来 |
+| [rbac.go](rbac.go) | 分别创建 auth/session 和旧账号/RBAC 服务，共享密码哈希器，并构造 WebSocket 票据流程 |
 | [recovery.go](recovery.go) | 离线恢复前按实例启动规则定位配置库（无 config.json 时用目录下的 config.db）、核对迁移完整性，恢复账号并补回主管理员角色 |
 | [recovery_test.go](recovery_test.go) | 恢复命令定位配置库的回归：缺少 config.json、未配置 config_store、库不存在与 config.json 不可读 |
 | [guardrails.go](guardrails.go) | 内容安全装配：建配置表、从库构建检查器（失败拒启）、注册插件与三条管理接口；`EE_GUARDRAILS_FAKE` 下改装假检测器 |
@@ -27,6 +27,10 @@
 - 角色/账号接口自行检查权限；Bifrost管理接口使用注入的角色规则，推理与协议接口保留各自的认证方式。
 - 共享服务器和数据库连接由宿主创建和关闭，不重复创建或释放。
 
-身份工厂在上游装配前设置；内容安全、品牌与定价在上游装配后、开始监听前接入。部署配置错误拒绝启动；价格文件或模型目录不可用时，按定价模块约定记录日志并继续启动。
+启动前设置 BF 的 `BeforeAPIRoutes` 回调：数据库就绪后在其中创建身份和角色服务，各模块直接注册自己的接口；`ConsoleMiddlewares` 只接管 BF 管理接口，四条旧会话兼容路由通过 `RegisterConsoleSessionRoutes` 单独替换。自有接口接通用中间件，并由端点执行来源、认证与业务权限检查。
+
+内容安全、品牌与定价在 BF 装配后、开始监听前接入。部署配置错误拒绝启动；价格文件或模型目录不可用时，按定价模块约定记录日志并继续启动。
 
 内容安全的配置存在 `ee_guardrails` 表，经 `POST /api/guardrails/*` 读写并热更新；库中配置无法构建（如判官 provider 已删）时拒绝启动。`EE_GUARDRAILS_FAKE` 只用于联调，与库中配置互斥；详见[内容安全说明](../guardrails/README.md)。真实 HTTP 冒烟在 `ee/scripts/guardrails-smoke.py`。
+
+第三批开始，`newConsoleServices` 只保存装配结果，不转发业务方法。app 分别注册 auth/http 和 identity/http，四条旧会话路径只由 auth/http 注册。各入口共用显式创建的浏览器 Cookie/同源策略，不从其他 handler 取依赖。登录直接调用 auth，会话写入由 session 负责；账号/RBAC 的旧事务策略暂保留，待对应模块重写。

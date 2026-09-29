@@ -4,6 +4,8 @@ package host
 import (
 	"context"
 	"errors"
+	"github.com/darkBaryon/bifrost/ee/internal/session"
+	"gorm.io/gorm"
 	"regexp"
 	"testing"
 
@@ -58,7 +60,7 @@ func TestEveryManagedRouteAuthorization(t *testing.T) {
 			routes := router.New()
 			called := 0
 			routes.Handle(entry.Method, entry.Pattern, func(c *fasthttp.RequestCtx) {
-				wrap, e := adapter.Prepare(context.Background(), c, identity.Principal{AccountID: "member"})
+				wrap, e := adapter.Prepare(context.Background(), c, session.Principal{AccountID: "member"})
 				if e != nil {
 					if errors.Is(e, identity.ErrForbidden) {
 						c.SetStatusCode(403)
@@ -88,7 +90,7 @@ func TestEveryManagedRouteAuthorization(t *testing.T) {
 			// 普通入口仅授予合同最小集合；敏感操作的附加权限留给包装器测试。
 			repository.codes = append([]rbac.Permission(nil), wanted...)
 			minimal := requestCtx(entry.Method, placeholders.ReplaceAllString(entry.Pattern, "example"), `{}`)
-			wrap, err := adapter.Prepare(context.Background(), minimal, identity.Principal{AccountID: "member"})
+			wrap, err := adapter.Prepare(context.Background(), minimal, session.Principal{AccountID: "member"})
 			if err != nil || wrap == nil {
 				t.Fatalf("minimal ordinary permissions rejected: %v", err)
 			}
@@ -149,7 +151,7 @@ func TestMetricsAuthorizationPreservesText(t *testing.T) {
 	const body = "# HELP rbac_probe test metric\n# TYPE rbac_probe gauge\nrbac_probe 1\n"
 	calls := 0
 	routes.GET("/metrics", func(c *fasthttp.RequestCtx) {
-		wrap, err := adapter.Prepare(context.Background(), c, identity.Principal{AccountID: "member"})
+		wrap, err := adapter.Prepare(context.Background(), c, session.Principal{AccountID: "member"})
 		if err != nil {
 			if !errors.Is(err, identity.ErrForbidden) {
 				t.Fatal(err)
@@ -177,4 +179,8 @@ func TestMetricsAuthorizationPreservesText(t *testing.T) {
 	if c.Response.StatusCode() != 403 || calls != 1 {
 		t.Fatalf("revoked metrics reached handler: status=%d calls=%d", c.Response.StatusCode(), calls)
 	}
+}
+
+func (s *routeRepository) ReadInTransaction(ctx context.Context, _ *gorm.DB, fn func(rbac.Queries) error) error {
+	return s.Read(ctx, fn)
 }

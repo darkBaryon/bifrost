@@ -1,32 +1,17 @@
-# 账号认证
+# 迁移中的账号与密码
 
-## 解决什么问题
-
-管理控制台账号、密码和登录会话：登录后每次核实账号状态和会话版本，账号停用或改密后旧会话失效。
-账号操作的权限和初始化、恢复时的附加检查由调用方注入；没有注入时，管理操作仍限系统初始化时指定的主管理员。
-应用已装配角色权限策略：账号操作分别检查 Users.View 或 Users.Manage；申请通知 WebSocket 票据需要 Notifications.View，且不能处于强制改密状态。
-
-## 代码在哪
+本包暂时保留账号 CRUD、初始化、旧管理员导入、密码变更和密码事件。登录与身份验证已迁到 [auth](../auth/README.md)，会话与票据生命周期已迁到 [session](../session/README.md)，这里不再创建 SessionService 或维护登录状态。
 
 | 文件 | 职责 |
 |---|---|
-| [model.go](model.go) | 账号、会话、错误和存储接口 |
-| [core.go](core.go) | 服务构造、密码计算、会话验证和分页辅助 |
-| [access.go](access.go) | 账号动作授权、初始化/恢复检查、可共享的账号查询能力 |
-| [session.go](session.go) | 登录、登出、会话验证和一次性票据；成功登录时记录时间 |
-| [accounts.go](accounts.go) | 初始化、旧账号导入、创建、启停和删除账号 |
-| [passwords.go](passwords.go) | 本人改密、管理者重置、离线恢复和密码事件 |
-| [persistence/store.go](persistence/store.go) | 数据读写、事务、登录限流和分页 |
-| [persistence/scope.go](persistence/scope.go) | 向角色模块提供同一事务、写锁和账号查询 |
-| [persistence/rows.go](persistence/rows.go)、[migration.go](persistence/migration.go) | 身份表结构与迁移 |
-| [http/handler.go](http/handler.go) | HTTP入口；请求和响应转换在同目录 |
-| [hasher/bcrypt.go](hasher/bcrypt.go) | 密码哈希计算 |
+| [model.go](model.go) | 账号、密码事件、错误与尚未迁出的账号存储接口 |
+| [core.go](core.go) | 账号/密码服务依赖、auth 复验结果转换和分页 |
+| [access.go](access.go) | 旧账号权限策略、初始化/恢复检查和安全账号查询 |
+| [accounts.go](accounts.go) | 初始化、导入、创建、启停和删除账号；显式调用 session 清理 |
+| [passwords.go](passwords.go) | 本人改密、管理员重置、恢复和事件；显式调用 session 撤销 |
+| [persistence/](persistence/README.md) | 账号与事件持久化、旧迁移和旧角色事务协作 |
+| [http/](http/README.md) | 账号与密码 HTTP 入口；认证接口由 auth/http 独立注册 |
 
-## 改之前要知道什么
+账号和密码服务接收与 auth 共享的密码哈希器。跨模块会话撤销、票据清理使用当前事务的 `Tx.DB()`；任何一步失败仍整体回滚。会话验证只复用 auth 的规则，不维护第二套判定。
 
-- 删除账号需要 Users.Manage；不能删除自己、固定恢复账号或最后一个启用的主管理员。角色解绑、会话及票据清理与账号删除共用事务，密码事件保留。
-- 最近登录时间仅在成功登录提交时更新；从未登录或升级前的未知历史值为空，失败登录不更新。
-- 密码或状态变化要更新账号版本并撤销会话；不能只改一个字段。
-- 所有身份写入共用state锁；注入的角色检查、初始化和恢复操作必须加入当前事务，失败一起回滚。
-- 跨模块读取只提供账号安全信息，不暴露密码哈希、令牌或数据库对象。
-- 根包只依赖标准库；数据库、HTTP和密码算法放在适配包中。连接由应用持有和关闭。
+账号/RBAC 旧 AccountPolicy 和共享 core 尚待下一批重写；本批不改变固定恢复账号、自身操作或最后管理员限制。登录 HTTP 入口已迁入 auth/http；公共认证与权限中间件仍待后续批次完成。

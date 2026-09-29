@@ -2,8 +2,10 @@
 package host
 
 import (
+	authhttp "github.com/darkBaryon/bifrost/ee/internal/auth/http"
+	"github.com/darkBaryon/bifrost/ee/internal/database"
+	"github.com/darkBaryon/bifrost/ee/internal/httpx"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	identityhttp "github.com/darkBaryon/bifrost/ee/internal/identity/http"
 	"github.com/fasthttp/router"
 	"github.com/maximhq/bifrost/core/schemas"
 	"github.com/maximhq/bifrost/transports/bifrost-http/lib"
@@ -32,36 +34,37 @@ type consoleRestartRequired struct {
 	Required bool `json:"required"`
 }
 
-func ownsConsoleRoute(method, path string) bool {
-	return method == fasthttp.MethodPost && path == consoleBootstrapPath
-}
-
-func (a *AuthAdapter) registerConsoleRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
+// RegisterConsoleRoutes 注册基础状态接口；传入通用中间件，个人会话和来源由端点自行检查。
+func (a *AuthAdapter) RegisterConsoleRoutes(r *router.Router, m ...schemas.BifrostHTTPMiddleware) {
 	r.POST(consoleBootstrapPath, lib.ChainMiddlewares(a.serveConsoleBootstrap, m...))
 }
 
 func (a *AuthAdapter) serveConsoleBootstrap(c *fasthttp.RequestCtx) {
-	ctx := identityhttp.OperationContext(c, "console.bootstrap")
+	ctx := httpx.OperationContext(c, "console.bootstrap")
 	c.Response.Header.Set("Cache-Control", "no-store")
+	if a.authentication == nil || a.http == nil {
+		writeConsoleError(c, identity.ErrUnavailable)
+		return
+	}
 	if !a.http.SameOrigin(c) {
-		identityhttp.Error(c, identity.ErrForbidden)
+		writeConsoleError(c, identity.ErrForbidden)
 		return
 	}
 	if len(c.Request.Header.Peek("Authorization")) != 0 {
-		identityhttp.Error(c, identity.ErrUnauthorized)
+		writeConsoleError(c, identity.ErrUnauthorized)
 		return
 	}
 	// 只验证个人会话，不执行完整管理权限或强制改密检查。
-	if _, err := a.service.Authenticate(ctx, string(c.Request.Header.Cookie(identityhttp.CookieName))); err != nil {
-		identityhttp.Error(c, err)
+	if _, err := a.authentication.Authenticate(ctx, string(c.Request.Header.Cookie(authhttp.CookieName))); err != nil {
+		writeConsoleError(c, err)
 		return
 	}
-	if err := identityhttp.DecodeJSONObject(c, &struct{}{}); err != nil {
-		identityhttp.Error(c, err)
+	if err := httpx.DecodeJSONObject(c, &struct{}{}); err != nil {
+		writeConsoleError(c, err)
 		return
 	}
 	if a.host == nil || a.host.Config == nil {
-		identityhttp.Error(c, identity.ErrUnavailable)
+		writeConsoleError(c, identity.ErrUnavailable)
 		return
 	}
 	// 连接状态与环境标识对齐 transports/bifrost-http/handlers/config.go 的同名字段语义；合并上游时须同步核对。
@@ -76,12 +79,12 @@ func (a *AuthAdapter) serveConsoleBootstrap(c *fasthttp.RequestCtx) {
 		if err != nil {
 			// 重启标记是附属状态，读取失败时省略，避免阻挡工作台进入。
 			if a.consoleLog != nil {
-				_, requestID := identity.DiagnosticOperation(ctx)
+				_, requestID := database.Operation(ctx)
 				a.consoleLog.Warn("EE console bootstrap reason=restart_read_failed request_id=%s", requestID)
 			}
 		} else if restart != nil {
 			response.RestartRequired = &consoleRestartRequired{Required: restart.Required}
 		}
 	}
-	identityhttp.JSON(c, fasthttp.StatusOK, response)
+	httpx.JSON(c, fasthttp.StatusOK, response)
 }

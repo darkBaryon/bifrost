@@ -5,102 +5,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/darkBaryon/bifrost/ee/internal/auth"
+	"github.com/darkBaryon/bifrost/ee/internal/auth/hasher"
+	authstore "github.com/darkBaryon/bifrost/ee/internal/auth/persistence"
 	"github.com/darkBaryon/bifrost/ee/internal/identity"
-	"github.com/darkBaryon/bifrost/ee/internal/identity/hasher"
-	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
-const adminPassword = "Admin-password-1"
-
-func testStore(t *testing.T) (*Store, *gorm.DB) {
-	t.Helper()
-	var db *gorm.DB
-	var err error
-	cfg := &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)}
-	if dsn := os.Getenv("IDENTITY_TEST_POSTGRES_DSN"); dsn != "" {
-		schema := fmt.Sprintf("identity_%d", time.Now().UnixNano())
-		control, e := gorm.Open(postgres.Open(dsn), cfg)
-		if e != nil {
-			t.Fatal(e)
-		}
-		if e = control.Exec("CREATE SCHEMA " + schema).Error; e != nil {
-			t.Fatal(e)
-		}
-		db, err = gorm.Open(postgres.Open(dsn+" search_path="+schema), cfg)
-		t.Cleanup(func() { control.Exec("DROP SCHEMA " + schema + " CASCADE"); sql, _ := control.DB(); sql.Close() })
-	} else {
-		db, err = gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "identity.db")+"?_busy_timeout=1000&_journal_mode=WAL&_foreign_keys=on"), cfg)
-	}
-	if err != nil {
-		t.Fatal(err)
-	}
-	sql, e := db.DB()
-	if e != nil {
-		t.Fatal(e)
-	}
-	t.Cleanup(func() { sql.Close() })
-	logs := &recordedLogs{}
-	if err = MigrateIdentity(logs)(context.Background(), db); err != nil {
-		t.Fatal(err)
-	}
-	return NewStore(db, logs), db
-}
-
-type services struct {
-	*identity.SessionService
-	*identity.AccountService
-	*identity.PasswordService
-}
-
-func (s services) State(ctx context.Context) (identity.State, error) {
-	return s.SessionService.State(ctx)
-}
-func (s services) RequireAccountManager(ctx context.Context, p identity.Principal) error {
-	return s.SessionService.RequireAccountManager(ctx, p)
-}
-
-func newService(t *testing.T, store *Store) services {
-	t.Helper()
-	s, e := identity.New(store, hasher.Bcrypt{}, identity.Options{InitialPassword: "123456", SetupToken: "test-setup-key", SessionTTL: 24 * time.Hour}, nil)
-	if e != nil {
-		t.Fatal(e)
-	}
-	return services{s.Session, s.Account, s.Password}
-}
-func fixture(t *testing.T) (services, *Store, *gorm.DB, identity.IssuedSession) {
-	t.Helper()
-	store, db := testStore(t)
-	s := newService(t, store)
-	ctx := context.Background()
-	if _, e := s.Initialize(ctx, "test-setup-key", "admin", adminPassword); e != nil {
-		t.Fatal(e)
-	}
-	v, e := s.Login(ctx, "admin", adminPassword, "127.0.0.1")
-	if e != nil {
-		t.Fatal(e)
-	}
-	if _, e = s.Authenticate(ctx, v.Token); e != nil {
-		t.Fatal(e)
-	}
-	return s, store, db, v
-}
-func requireError(t *testing.T, got, want error) {
-	t.Helper()
-	if !errors.Is(got, want) {
-		t.Fatalf("got %v want %v", got, want)
-	}
-}
 func TestAccountLifecycle(t *testing.T) {
 	s, _, db, admin := fixture(t)
 	ctx := context.Background()
@@ -323,11 +239,10 @@ func TestLoginRacingReset(t *testing.T) {
 		t.Fatal(e)
 	}
 	p := pausedPasswords{Bcrypt: hasher.Bcrypt{}, compared: make(chan struct{}), resume: make(chan struct{})}
-	svc, e := identity.New(store, p, identity.Options{InitialPassword: "123456", SessionTTL: time.Hour}, nil)
+	login, e := auth.New(store.db, authstore.NewStore(store.db, store.log), s.sessions, auth.NewPasswords(p), store.log)
 	if e != nil {
 		t.Fatal(e)
 	}
-	login := services{svc.Session, svc.Account, svc.Password}
 	done := make(chan error, 1)
 	go func() { _, e := login.Login(ctx, "alice", "123456", "peer"); done <- e }()
 	<-p.compared

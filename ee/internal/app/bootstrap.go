@@ -19,23 +19,23 @@ import (
 func Bootstrap(ctx context.Context, s *bifrostServer.BifrostHTTPServer, log schemas.Logger) error {
 	var auth *eehost.AuthAdapter
 	var permissions *rbachost.Adapter
-	// Bifrost准备好数据库后、注册管理路由前，会调用这个函数。
-	// 失败时直接返回nil；如果把空指针放进接口，Bifrost就无法用接口是否为nil来识别缺失的实现。
-	s.ConsoleAuthFactory = func(ctx context.Context, host *bifrostServer.BifrostHTTPServer) (bifrostServer.ConsoleAuthProvider, error) {
+	// Bifrost准备好数据库后、注册管理路由前，装配EE模块并接入控制台中间件。
+	s.BeforeAPIRoutes = func(ctx context.Context, host *bifrostServer.BifrostHTTPServer) error {
 		adapter, permissionAdapter, err := assembleIdentity(ctx, host, log)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		auth = adapter
 		permissions = permissionAdapter
-		return adapter, nil
+		host.ConsoleMiddlewares = []schemas.BifrostHTTPMiddleware{auth.APIMiddleware()}
+		return nil
 	}
 	if err := s.Bootstrap(ctx); err != nil {
 		return err
 	}
 	// 如果Bifrost没有调用上面的函数，说明登录检查尚未接好，必须停止启动。
 	if auth == nil || permissions == nil {
-		return errors.New("ee: console auth factory was not invoked by the host")
+		return errors.New("ee: console modules were not assembled before API routes")
 	}
 	if err := attach(ctx, s, auth.APIMiddleware(), log); err != nil {
 		return err
